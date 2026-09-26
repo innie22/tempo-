@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo — Student Wellbeing & Deadline Triage</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sage: {
+                            50: '#F4F7F5',
+                            100: '#E8F0EC',
+                            600: '#357A5B',
+                            700: '#2D6A4F',
+                            800: '#22533C',
+                            900: '#1B4332'
+                        },
+                        amber: {
+                            500: '#F59E0B',
+                            600: '#D97706',
+                            700: '#B45309'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        heading: ['Plus Jakarta Sans', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-[#FBFBFA] text-gray-900 min-h-screen flex flex-col pb-20 md:pb-8">
+
+    <!-- Top Role Banner (When in Advisor Mode) -->
+    <div id="role-indicator-banner" class="hidden bg-emerald-900 text-white text-xs py-2 px-4 shadow-sm"></div>
+
+    <!-- Global App Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3 cursor-pointer" data-nav="today">
+                <div class="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-sm">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-heading font-extrabold text-xl text-gray-900 tracking-tight flex items-center">
+                        Tempo
+                        <span class="ml-2 text-[10px] font-semibold tracking-wide bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Wellbeing</span>
+                    </h1>
+                    <p class="text-[11px] text-gray-500 font-medium">Academic Stress & Deadline Triage</p>
+                </div>
+            </div>
+
+            <!-- Top Desktop Navigation -->
+            <nav class="hidden md:flex items-center space-x-1">
+                <a href="#today" data-nav="today" class="px-3.5 py-2 rounded-lg text-xs font-medium text-emerald-800 bg-emerald-50 transition">Today</a>
+                <a href="#emergency" data-nav="emergency" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition flex items-center">
+                    <span class="mr-1 text-amber-600 font-bold">⚡</span> Triage
+                </a>
+                <a href="#stress-check" data-nav="stress-check" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Self-Check</a>
+                <a href="#routine" data-nav="routine" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Routine</a>
+                <a href="#hub" data-nav="hub" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Learn & Solve</a>
+                <a href="#support" data-nav="support" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Support</a>
+                <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
+            </nav>
+
+            <!-- Actions: Urgent Triage Pill, Helpline & Role Switcher -->
+            <div class="flex items-center space-x-2">
+                <!-- Urgent Emergency Support Button -->
+                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-urgent px-3.5 py-2 rounded-xl text-xs font-bold flex items-center shadow-sm">
+                    <span class="mr-1.5">⚡</span> Emergency Support
+                </button>
+
+                <!-- 24/7 Crisis Help Trigger -->
+                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-open-crisis-helpline p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition" title="24/7 Crisis Helplines & Grounding">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                </button>
+
+                <!-- Role Switcher -->
+                <button id="btn-toggle-role" class="px-3 py-1.5 border border-gray-200 hover:border-gray-300 rounded-xl text-xs font-medium text-gray-700 bg-stone-50 transition flex items-center space-x-1.5" title="Switch User Role">
+                    <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    <span id="current-role-label">Alex Rivera (Student)</span>
+                    <span class="text-gray-400 text-[10px]">⇄</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
+
+        <!-- ===================================================================
+             SCREEN 1: HOME / TODAY DASHBOARD
+             =================================================================== -->
+        <section id="screen-today" class="screen-container space-y-8">
+            <!-- Gentle Welcome Banner -->
+            <div class="space-y-1">
+                <h2 class="font-heading text-2xl md:text-3xl font-bold text-gray-900">Good morning, Alex.</h2>
+                <p class="text-sm text-gray-600">Take a breath. You don't have to finish everything today. Just take one mindful step.</p>
+            </div>
+
+            <!-- Hero Urgent Emergency Card -->
+            <div class="tempo-card p-6 md:p-8 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-200">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="space-y-2">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                            ⚡ Acute Deadline Relief
+                        </span>
+                        <h3 class="font-heading text-xl md:text-2xl font-bold text-gray-900">Feeling overwhelmed by multiple deadlines?</h3>
+                        <p class="text-sm text-gray-600 max-w-xl">
+                            When everything feels urgent at once, your working memory freezes. Dump your deadlines here and let Tempo extract <strong>the ONE next action</strong> to get you started in 90 seconds.
+                        </p>
+                    </div>
+                    <div class="shrink-0 flex flex-col sm:flex-row gap-2">
+                        <button onclick="window.TempoEmergencySupport.openModal()" class="btn-urgent px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
+                            <span>Open Emergency Support</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two-Column Layout: Today's Cadence & Daily Micro-Tip -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left 2 Cols: Today's Gentle Cadence -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="font-heading text-lg font-bold text-gray-900">Today's Gentle Cadence</h3>
+                            <p id="routine-progress-counter" class="text-xs text-gray-500">2 of 5 activities completed</p>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <label class="flex items-center space-x-2 text-xs font-medium text-gray-600 cursor-pointer">
+                                <span>Gentle Day Mode</span>
+                                <input type="checkbox" id="toggle-gentle-day" class="rounded text-emerald-700 focus:ring-emerald-500">
+                            </label>
+                            <button data-nav="routine" class="text-xs text-emerald-700 font-semibold hover:underline">Customize</button>
+                        </div>
+                    </div>
+
+                    <!-- Routine Blocks Container -->
+                    <div id="dashboard-routine-list" class="space-y-3">
+                        <!-- Populated dynamically by routine.js -->
+                    </div>
+                </div>
+
+                <!-- Right 1 Col: Advisor Tip & Quick Checks -->
+                <div class="space-y-6">
+                    <!-- Daily Micro-Tip -->
+                    <div class="tempo-card p-6 space-y-4 border-emerald-200 bg-emerald-50/30">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">💡 Daily Wellbeing Tip</span>
+                            <span class="text-xs text-gray-400 font-medium">Advisor Curated</span>
+                        </div>
+                        <h4 id="dashboard-tip-title" class="font-heading text-base font-bold text-gray-900">The 5-Minute Starter Rule</h4>
+                        <p id="dashboard-tip-content" class="text-xs text-gray-600 leading-relaxed">
+                            When starting feels physically impossible, tell your brain you only have to work for 5 minutes. If you still want to stop after 300 seconds, you have full permission.
+                        </p>
+                        <div class="pt-2 border-t border-emerald-100 flex items-center justify-between text-xs">
+                            <span id="dashboard-tip-author" class="text-gray-500 font-medium">Dr. Elena Vance (2m read)</span>
+                            <button onclick="window.TempoKnowledge.openArticle('art-1')" class="text-emerald-700 font-semibold hover:underline">Read Full Guide</button>
+                        </div>
+                    </div>
+
+                    <!-- Today's Gentle Habits Quick-Glance Widget -->
+                    <div class="tempo-card p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-base">🌱</span>
+                                <h4 class="font-heading text-sm font-bold text-gray-900">Today's Habits</h4>
+                            </div>
+                            <span id="dashboard-habit-count-label" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">2/5 done</span>
+                        </div>
+                        <div id="dashboard-habits-mini-list" class="space-y-1">
+                            <!-- Populated dynamically by routine.js -->
+                        </div>
+                        <div class="pt-1">
+                            <button data-nav="routine" class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold transition text-center">
+                                View & Track All Habits →
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Self-Check Snapshot -->
+                    <div class="tempo-card p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-heading text-sm font-bold text-gray-900">Recent Stress Snapshot</h4>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">Strained</span>
+                        </div>
+                        <p class="text-xs text-gray-500">Your deadline pressure was highest during your last check-in 2 days ago.</p>
+                        <div class="pt-2">
+                            <button data-nav="stress-check" class="w-full py-2.5 bg-stone-100 hover:bg-stone-200 text-gray-800 rounded-xl text-xs font-medium transition text-center">
+                                Retake 6-Dimension Self-Check →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 2: EMERGENCY TRIAGE & ONE NEXT ACTION
+             =================================================================== -->
+        <section id="screen-emergency" class="screen-container hidden space-y-8">
+            <!-- Header -->
+            <div class="max-w-2xl mx-auto text-center space-y-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-wide">Emergency Mode</span>
+                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Regain Control of Your Deadlines</h2>
+                <p class="text-sm text-gray-600">Dump everything here. Don't worry about order, grammar, or formatting. We'll turn it into one doable step.</p>
+            </div>
+
+            <!-- Brain Dump Box -->
+            <div class="max-w-3xl mx-auto tempo-card p-6 md:p-8 space-y-6">
+                <!-- Pre-populated Quick Scenario Chips -->
+                <div class="space-y-2">
+                    <span class="text-xs font-medium text-gray-500">Quick Test Scenarios (Click to test):</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" data-scenario="marketing" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
+                            📋 Marketing Report + Friday Slides (4h tonight)
+                        </button>
+                        <button type="button" data-scenario="exams" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
+                            📚 2 Midterm Exams & 4 Chapters Behind
+                        </button>
+                        <button type="button" data-scenario="coding" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
+                            💻 Coding Lab Failing Test Case (Due tonight)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Textarea -->
+                <div class="space-y-2">
+                    <label for="emergency-brain-dump" class="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        What's on your plate right now?
+                    </label>
+                    <textarea id="emergency-brain-dump" rows="5" 
+                        placeholder="e.g. I have a Marketing report due tomorrow at 9 AM and only finished the intro. I also have slides due Friday and an exam next week. I have about 4 hours tonight and my head is spinning..." 
+                        class="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-gray-800 leading-relaxed"></textarea>
+                </div>
+
+                <!-- Available Time Constraint -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-gray-100">
+                    <div class="flex items-center space-x-3 w-full sm:w-auto">
+                        <label for="emergency-hours-select" class="text-xs font-medium text-gray-600 whitespace-nowrap">Available Time Tonight:</label>
+                        <select id="emergency-hours-select" class="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                            <option value="2">2 Hours</option>
+                            <option value="3">3 Hours</option>
+                            <option value="4" selected>4 Hours</option>
+                            <option value="5">5+ Hours</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-analyze-emergency" class="btn-sage w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center space-x-2">
+                        <span>Analyze & Create Calm Plan</span>
+                        <span>→</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Triage Results & The ONE Action Container (Initially Hidden) -->
+            <div id="emergency-plan-results" class="hidden max-w-3xl mx-auto space-y-6">
+                <!-- THE ONE NEXT ACTION CARD -->
+                <div id="one-action-card" class="tempo-card p-6 md:p-8 action-glow bg-white space-y-6">
+                    <div class="flex items-center justify-between">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+                            ✨ THE ONE NEXT ACTION
+                        </span>
+                        <span id="one-action-context" class="text-xs font-medium text-gray-500">Target: 25 minutes</span>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h3 id="one-action-title" class="font-heading text-2xl font-extrabold text-gray-900 leading-snug">
+                            <!-- Populated dynamically -->
+                        </h3>
+                        <div class="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-1">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Why this first?</span>
+                            <p id="one-action-rationale" class="text-xs text-gray-700 leading-relaxed"></p>
+                        </div>
+                    </div>
+
+                    <!-- Action Controls -->
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                        <button id="btn-start-focus" class="btn-sage w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
+                            <span>▶ Start 25-Min Gentle Focus</span>
+                        </button>
+                        
+                        <div class="flex items-center space-x-3 text-xs">
+                            <button id="btn-smaller-step" class="text-emerald-700 hover:text-emerald-900 font-semibold underline" data-mode="standard">
+                                <span>🤏 Make it even smaller (5 mins)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Structured Roadmap Accordion -->
+                <div class="tempo-card p-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="font-heading text-sm font-bold text-gray-900">Your Prioritized Task Roadmap</h4>
+                            <p id="triage-budget-summary" class="text-xs text-gray-500"></p>
+                        </div>
+                    </div>
+                    <div id="triage-task-list" class="space-y-3">
+                        <!-- Populated by triage.js -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 3: STRESS SELF-ASSESSMENT (6 DIMENSIONS)
+             =================================================================== -->
+        <section id="screen-stress-check" class="screen-container hidden space-y-8">
+            <div class="max-w-2xl mx-auto text-center space-y-2">
+                <h2 class="font-heading text-3xl font-extrabold text-gray-900">6-Dimension Stress Self-Check</h2>
+                <p class="text-sm text-gray-600">A quick self-awareness gauge to locate where your stress is concentrated today.</p>
+                <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 max-w-xl mx-auto">
+                    ℹ️ <strong>Non-Clinical Notice:</strong> This is a self-reflection tool, not a medical or psychological diagnosis. It does not replace professional care.
+                </div>
+            </div>
+
+            <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Left Column: 6 Interactive Sliders -->
+                <div class="tempo-card p-6 md:p-8 space-y-5">
+                    <h3 class="font-heading text-base font-bold text-gray-900 pb-2 border-b border-gray-100">Rate your current state (1-10)</h3>
+
+                    <!-- 1. Perceived Stress -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>1. Perceived Stress (Feeling out of control)</span>
+                            <span id="val-perceivedStress" class="text-emerald-700 font-bold">7</span>
+                        </div>
+                        <input type="range" id="slider-perceivedStress" min="1" max="10" value="7">
+                    </div>
+
+                    <!-- 2. Deadline Pressure -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>2. Deadline Pressure (Upcoming submission density)</span>
+                            <span id="val-deadlinePressure" class="text-emerald-700 font-bold">9</span>
+                        </div>
+                        <input type="range" id="slider-deadlinePressure" min="1" max="10" value="9">
+                    </div>
+
+                    <!-- 3. Sleep Quality -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>3. Sleep Quality (Restlessness & bedtime worry)</span>
+                            <span id="val-sleepQuality" class="text-emerald-700 font-bold">4</span>
+                        </div>
+                        <input type="range" id="slider-sleepQuality" min="1" max="10" value="4">
+                    </div>
+
+                    <!-- 4. Concentration Capacity -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>4. Concentration (Brain fog & staying on task)</span>
+                            <span id="val-concentration" class="text-emerald-700 font-bold">5</span>
+                        </div>
+                        <input type="range" id="slider-concentration" min="1" max="10" value="5">
+                    </div>
+
+                    <!-- 5. Emotional Exhaustion -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>5. Emotional Exhaustion (Drained energy & stamina)</span>
+                            <span id="val-exhaustion" class="text-emerald-700 font-bold">7</span>
+                        </div>
+                        <input type="range" id="slider-exhaustion" min="1" max="10" value="7">
+                    </div>
+
+                    <!-- 6. Burnout Early Signs -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs font-semibold text-gray-700">
+                            <span>6. Burnout Signs (Cynicism, detachment, physical tension)</span>
+                            <span id="val-burnoutSigns" class="text-emerald-700 font-bold">6</span>
+                        </div>
+                        <input type="range" id="slider-burnoutSigns" min="1" max="10" value="6">
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="pt-4 flex items-center justify-between text-xs">
+                        <button id="btn-reset-stress" class="text-gray-500 hover:text-gray-800 underline">Reset to Neutral</button>
+                        <button id="btn-save-stress-result" class="btn-sage px-4 py-2 rounded-lg font-medium">Save to Profile</button>
+                    </div>
+                </div>
+
+                <!-- Right Column: Visual Radar & Tailored Actions -->
+                <div class="space-y-6">
+                    <!-- Radar SVG Card -->
+                    <div class="tempo-card p-6 flex flex-col items-center justify-center text-center space-y-4">
+                        <div class="flex items-center justify-between w-full">
+                            <span class="text-xs font-semibold text-gray-500">Holistic Radar</span>
+                            <span id="stress-status-badge"></span>
+                        </div>
+
+                        <!-- Dynamic SVG Radar Chart -->
+                        <div class="w-full flex justify-center py-2">
+                            <svg id="stress-radar-svg" width="300" height="300" viewBox="0 0 300 300" class="overflow-visible"></svg>
+                        </div>
+
+                        <div class="text-center">
+                            <span class="text-xs text-gray-400">Total Stress Index</span>
+                            <h4 id="stress-total-score" class="font-heading text-3xl font-extrabold text-gray-900">38 / 60</h4>
+                            <p id="stress-advice-text" class="text-xs text-gray-600 mt-1 max-w-sm"></p>
+                        </div>
+                    </div>
+
+                    <!-- Tailored Next Steps Card -->
+                    <div id="stress-tailored-actions" class="space-y-3">
+                        <!-- Populated by stress.js -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 4: PERSONALIZED ROUTINE & HABIT TRACKER (US01)
+             =================================================================== -->
+        <section id="screen-routine" class="screen-container hidden space-y-10">
+            <!-- Header -->
+            <div class="max-w-2xl mx-auto text-center space-y-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                    Supportive Consistency
+                </span>
+                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Personalized Routine & Habit Tracker</h2>
+                <p class="text-sm text-gray-600">
+                    Gradually build and maintain healthy stress-management habits without rigid guilt. Missing a habit is completely normal and carries zero judgment.
+                </p>
+            </div>
+
+            <!-- SECTION A: STRESS-MANAGEMENT HABITS (US01) -->
+            <div class="max-w-3xl mx-auto space-y-6">
+                <!-- Daily Progress & Supportive Status Card -->
+                <div class="tempo-card p-6 md:p-7 space-y-5 bg-gradient-to-br from-emerald-50/40 via-white to-stone-50 border-emerald-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Today's Self-Care Cadence</span>
+                            <h3 id="habit-progress-counter" class="font-heading text-xl font-bold text-gray-900">
+                                2 of 5 gentle habits explored today
+                            </h3>
+                        </div>
+                        <button id="btn-toggle-habit-rest" class="px-3.5 py-1.5 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 transition flex items-center space-x-1 shrink-0">
+                            <span>🧘 Take a Rest Day</span>
+                        </button>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-stone-200/70 rounded-full h-2.5 overflow-hidden">
+                        <div id="habit-progress-bar" class="h-2.5 rounded-full transition-all duration-500 bg-emerald-600" style="width: 40%"></div>
+                    </div>
+
+                    <!-- Encouraging Non-Judgmental Message -->
+                    <div class="p-3.5 bg-white/80 rounded-xl border border-emerald-100/80 flex items-start space-x-3 text-xs text-gray-700">
+                        <span class="text-emerald-700 font-bold text-sm shrink-0">🌱</span>
+                        <p id="habit-encouragement-message" class="leading-relaxed">
+                            No pressure to complete everything. Starting with even one 2-minute micro-habit gives your nervous system a calm anchor.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Habits List Header & Controls -->
+                <div class="flex items-center justify-between pt-2">
+                    <div>
+                        <h3 class="font-heading text-lg font-bold text-gray-900">Today's Habits</h3>
+                        <p class="text-xs text-gray-500">Check off what you practiced today. Rest days are welcomed.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button id="btn-open-add-habit" class="btn-sage px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-sm">
+                            <span>+ Add a Gentle Habit</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Habits List Container (Populated by routine.js) -->
+                <div id="habits-list-container" class="space-y-3">
+                    <!-- Dynamic habit cards -->
+                </div>
+            </div>
+
+            <!-- SECTION B: TIME-BLOCKED SCHEDULE BLUEPRINT -->
+            <div class="max-w-3xl mx-auto space-y-6 pt-6 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Daily Structure</span>
+                        <h3 class="font-heading text-xl font-bold text-gray-900">Today's Schedule Blueprint</h3>
+                    </div>
+                    <button id="btn-add-routine-block" class="text-xs text-emerald-700 font-semibold hover:underline">+ Add Custom Block</button>
+                </div>
+
+                <!-- Schedule Blocks -->
+                <div id="routine-blocks-list" class="space-y-3">
+                    <!-- Populated by routine.js -->
+                </div>
+
+                <!-- Builder Wizard Controls (Collapsible / Expandable) -->
+                <div class="tempo-card p-6 space-y-4 bg-stone-50/60 mt-6">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-heading text-sm font-bold text-gray-900">Tune Your Daily Rhythm</h4>
+                        <span class="text-[11px] text-gray-400">Rebalance focus & recovery</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="select-focus-window" class="block text-xs font-medium text-gray-600 mb-1">Peak Focus Window:</label>
+                            <select id="select-focus-window" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                                <option value="morning">Morning (9:30 - 11:30 AM)</option>
+                                <option value="afternoon">Afternoon (2:00 - 4:00 PM)</option>
+                                <option value="evening">Evening (7:00 - 9:00 PM)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="input-sleep-time" class="block text-xs font-medium text-gray-600 mb-1">Sleep Target:</label>
+                            <input type="text" id="input-sleep-time" value="11:00 PM" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                        </div>
+                        <div>
+                            <label for="select-recovery-choice" class="block text-xs font-medium text-gray-600 mb-1">Recovery Anchor:</label>
+                            <select id="select-recovery-choice" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                                <option value="Outdoor Walk & Hydration">Outdoor Walk & Hydration</option>
+                                <option value="Mindful Coffee & Music">Mindful Coffee & Music</option>
+                                <option value="Light Stretching & Screen Break">Light Stretching & Screen Break</option>
+                                <option value="Power Nap (20 mins)">Power Nap (20 mins)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pt-2 flex justify-end">
+                        <button id="btn-generate-routine" class="btn-sage px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                            Generate Balanced Routine
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 5: LEARN & SOLVE KNOWLEDGE HUB
+             =================================================================== -->
+        <section id="screen-hub" class="screen-container hidden space-y-8">
+            <div class="max-w-2xl mx-auto text-center space-y-2">
+                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Learn & Solve Knowledge Hub</h2>
+                <p class="text-sm text-gray-600">Actionable, 3-minute guides to break cognitive paralysis and restore academic momentum.</p>
+            </div>
+
+            <!-- Filters & Search -->
+            <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+                <!-- Category Pills -->
+                <div class="flex flex-wrap gap-2">
+                    <button data-category="all" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-700 text-white cursor-pointer transition">All</button>
+                    <button data-category="urgent" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Can't Start</button>
+                    <button data-category="communication" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Asking for Help</button>
+                    <button data-category="sleep" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Sleep & Worry</button>
+                    <button data-category="focus" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Brain Fog</button>
+                </div>
+
+                <!-- Search Input -->
+                <div class="w-full md:w-64">
+                    <input type="text" id="hub-search-input" placeholder="Search guides or topics..." 
+                        class="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white">
+                </div>
+            </div>
+
+            <!-- Articles Grid -->
+            <div id="hub-articles-grid" class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Populated dynamically by knowledge.js -->
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 6: TALK TO SOMEONE / ASK FOR SUPPORT
+             =================================================================== -->
+        <section id="screen-support" class="screen-container hidden space-y-8">
+            <div class="max-w-2xl mx-auto text-center space-y-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">Human Connection</span>
+                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Talk to Someone</h2>
+                <p class="text-sm text-gray-600">You don't have to carry this alone. Connect with campus wellbeing coordinators and peer advisors.</p>
+            </div>
+
+            <div class="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left 2 Cols: Submit Support Request Form -->
+                <div class="lg:col-span-2 tempo-card p-6 md:p-8 space-y-6">
+                    <h3 class="font-heading text-base font-bold text-gray-900">Send a Note to Student Wellbeing</h3>
+                    <form id="support-request-form" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="support-category" class="block text-xs font-semibold text-gray-700 mb-1">What are you struggling with?</label>
+                                <select id="support-category" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                                    <option value="Deadline Cluster & Triage">Deadline Cluster & Overwhelm</option>
+                                    <option value="Extension Request Advice">Asking for an Extension</option>
+                                    <option value="Sleep & Burnout">Sleep & Burnout Exhaustion</option>
+                                    <option value="Exam Anxiety">Exam Anxiety & Brain Fog</option>
+                                    <option value="General Check-in">General Check-in</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="support-urgency" class="block text-xs font-semibold text-gray-700 mb-1">Urgency Level:</label>
+                                <select id="support-urgency" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                                    <option value="Need advice in 24h">Need advice in 24h</option>
+                                    <option value="High (Struggling today)" selected>High (Struggling today)</option>
+                                    <option value="Low (General guidance)">Low (General guidance)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="support-subject" class="block text-xs font-semibold text-gray-700 mb-1">Brief Subject:</label>
+                            <input type="text" id="support-subject" placeholder="e.g. Overwhelmed by 3 deadlines and need advice on emailing professor" 
+                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        </div>
+
+                        <div>
+                            <label for="support-message" class="block text-xs font-semibold text-gray-700 mb-1">Your Message:</label>
+                            <textarea id="support-message" rows="4" placeholder="Tell us what is going on. We are here to help you regain your footing without judgment."
+                                class="w-full p-3 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"></textarea>
+                        </div>
+
+                        <div class="pt-2 flex items-center justify-between">
+                            <span class="text-[11px] text-gray-500">Average advisor response time: ~2–4 hours during weekdays.</span>
+                            <button type="submit" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                                Send Message
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right 1 Col: Urgent Helplines & Confidentiality -->
+                <div class="space-y-6">
+                    <div class="tempo-card p-6 space-y-4 border-amber-200 bg-amber-50/30">
+                        <div class="flex items-center space-x-2 text-amber-800">
+                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <h4 class="font-heading text-sm font-bold">24/7 Immediate Crisis Support</h4>
+                        </div>
+                        <p class="text-xs text-gray-700 leading-relaxed">
+                            If you or someone you know is in immediate danger or experiencing overwhelming clinical distress, please reach out to these free, confidential resources:
+                        </p>
+                        <div class="space-y-2 text-xs">
+                            <div class="p-2.5 bg-white rounded-lg border border-amber-200 font-medium">
+                                <div class="text-amber-900 font-bold">National Suicide & Crisis Lifeline</div>
+                                <div class="text-gray-600">Dial or Text <strong>988</strong> (Free 24/7)</div>
+                            </div>
+                            <div class="p-2.5 bg-white rounded-lg border border-amber-200 font-medium">
+                                <div class="text-amber-900 font-bold">Crisis Text Line</div>
+                                <div class="text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Conversations Thread -->
+            <div class="max-w-4xl mx-auto space-y-4">
+                <h3 class="font-heading text-lg font-bold text-gray-900">Your Conversations</h3>
+                <div id="my-support-conversations" class="space-y-4">
+                    <!-- Populated by support.js -->
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN 7: ADVISOR / ADMIN PORTAL (DR. ELENA VANCE)
+             =================================================================== -->
+        <section id="screen-admin" class="screen-container hidden space-y-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
+                <div>
+                    <h2 class="font-heading text-2xl font-extrabold text-gray-900">Campus Wellbeing Advisor Portal</h2>
+                    <p class="text-xs text-gray-600">Review student inquiries, deploy empathetic response templates, and publish student tips.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Advisor: Dr. Elena Vance</span>
+                </div>
+            </div>
+
+            <!-- Support Inbox Master-Detail -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 tempo-card overflow-hidden">
+                <!-- Left: Ticket Queue List -->
+                <div class="border-r border-gray-200 bg-white">
+                    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                        <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-gray-700">Student Inquiries</h3>
+                        <div class="flex space-x-1">
+                            <button data-filter="all" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-700 text-white">All</button>
+                            <button data-filter="awaiting" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-700">Needs Reply</button>
+                        </div>
+                    </div>
+                    <div id="admin-tickets-table" class="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
+                        <!-- Populated by admin.js -->
+                    </div>
+                </div>
+
+                <!-- Right: Ticket Detail & Empathetic Response Desk -->
+                <div id="admin-ticket-detail-pane" class="lg:col-span-2 p-6 flex flex-col justify-between space-y-6 bg-stone-50/30">
+                    <div class="space-y-4">
+                        <div class="flex items-start justify-between pb-3 border-b border-gray-200">
+                            <div>
+                                <h4 id="admin-detail-student-name" class="font-heading text-lg font-bold text-gray-900">Alex Rivera</h4>
+                                <p id="admin-detail-student-email" class="text-xs text-gray-500">a.rivera@university.edu</p>
+                                <p id="admin-detail-category" class="text-xs text-emerald-800 font-semibold mt-1">Deadline Cluster</p>
+                            </div>
+                            <button id="btn-admin-resolve-ticket" class="px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition">
+                                Mark as Resolved
+                            </button>
+                        </div>
+
+                        <div>
+                            <h5 id="admin-detail-subject" class="text-sm font-bold text-gray-800 mb-2">Subject Title</h5>
+                            <div id="admin-detail-messages-thread" class="space-y-3 max-h-64 overflow-y-auto p-1">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Empathetic Quick Response Controls -->
+                    <div class="space-y-3 pt-4 border-t border-gray-200">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs font-semibold text-gray-500">Insert Empathetic Template:</span>
+                            <button data-template="extension" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Extension Strategy</button>
+                            <button data-template="deescalate" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">De-escalation</button>
+                            <button data-template="dropin" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Drop-in Offer</button>
+                        </div>
+
+                        <textarea id="admin-reply-textarea" rows="4" placeholder="Write an encouraging response to the student..." 
+                            class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"></textarea>
+
+                        <div class="flex justify-end">
+                            <button id="btn-admin-send-reply" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                                Send Response to Student
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tips Publisher Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Create Tip Form -->
+                <div class="tempo-card p-6 space-y-4">
+                    <h3 class="font-heading text-base font-bold text-gray-900">Publish New Student Micro-Tip</h3>
+                    <form id="form-create-tip" class="space-y-3">
+                        <div>
+                            <label for="input-tip-title" class="block text-xs font-medium text-gray-700 mb-1">Tip Headline:</label>
+                            <input type="text" id="input-tip-title" placeholder="e.g. The 10-Minute Morning Dump" 
+                                class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label for="select-tip-category" class="block text-xs font-medium text-gray-700 mb-1">Category:</label>
+                                <select id="select-tip-category" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                                    <option value="Prioritization">Prioritization</option>
+                                    <option value="Stress Relief">Stress Relief</option>
+                                    <option value="Study Habits">Study Habits</option>
+                                    <option value="Sleep">Sleep</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="input-tip-readtime" class="block text-xs font-medium text-gray-700 mb-1">Read Time (Mins):</label>
+                                <input type="number" id="input-tip-readtime" value="2" min="1" max="10" 
+                                    class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="textarea-tip-content" class="block text-xs font-medium text-gray-700 mb-1">Practical Content:</label>
+                            <textarea id="textarea-tip-content" rows="4" placeholder="Give students 1 concrete, shame-free action they can take immediately..." 
+                                class="w-full p-2.5 border border-gray-200 rounded-lg text-xs bg-white"></textarea>
+                        </div>
+                        <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs">
+                            Publish Tip to Student App
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Tips List -->
+                <div class="lg:col-span-2 tempo-card p-6 space-y-4">
+                    <h3 class="font-heading text-base font-bold text-gray-900">Curated Micro-Tips</h3>
+                    <div id="admin-tips-table" class="space-y-3">
+                        <!-- Populated by admin.js -->
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+    <!-- ===================================================================
+         MODALS & OVERLAYS
+         =================================================================== -->
+
+    <!-- 1. FULL-SCREEN GENTLE FOCUS TIMER MODAL -->
+    <div id="focus-session-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/95 text-white p-6 hidden">
+        <div class="max-w-xl w-full text-center space-y-8">
+            <!-- Top Controls -->
+            <div class="flex items-center justify-between text-xs text-stone-400">
+                <button id="btn-exit-focus" class="hover:text-white transition">✕ Exit Session</button>
+                
+                <!-- Ambient Audio Selector -->
+                <div class="flex items-center space-x-2">
+                    <button id="btn-toggle-ambient" class="flex items-center space-x-1 px-3 py-1 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs">
+                        <span id="sound-waves-indicator" class="hidden items-end space-x-0.5 h-3 mr-1">
+                            <span class="w-0.5 bg-emerald-400 sound-bar-1"></span>
+                            <span class="w-0.5 bg-emerald-400 sound-bar-2"></span>
+                            <span class="w-0.5 bg-emerald-400 sound-bar-3"></span>
+                        </span>
+                        <span id="sound-toggle-label">Sound: Off</span>
+                    </button>
+                    <select id="select-ambient-sound" class="bg-stone-800 border-none text-[11px] rounded px-2 py-1 text-stone-300">
+                        <option value="rain">Gentle Rain</option>
+                        <option value="forest">Forest Breeze</option>
+                        <option value="white">Deep White Noise</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Task Display -->
+            <div class="space-y-2">
+                <span class="text-xs uppercase tracking-widest text-emerald-400 font-semibold">Single Focus Objective</span>
+                <h3 id="focus-task-name" class="font-heading text-2xl md:text-3xl font-bold text-stone-100 max-w-lg mx-auto leading-snug">
+                    Draft 3 core section headings
+                </h3>
+            </div>
+
+            <!-- Timer Clock -->
+            <div class="py-6">
+                <div id="focus-timer-clock" class="font-mono text-7xl md:text-8xl font-extrabold tracking-tight text-white">
+                    25:00
+                </div>
+                <p class="text-xs text-stone-400 mt-2">Just this one step. The rest of the world can wait.</p>
+            </div>
+
+            <!-- Controls -->
+            <div class="flex items-center justify-center space-x-4">
+                <button id="btn-timer-toggle" class="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-sm shadow-lg transition flex items-center">
+                    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg> Pause
+                </button>
+                <button id="btn-timer-done-early" class="px-6 py-3.5 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-2xl font-medium text-sm transition">
+                    ✓ Done Early
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 2. POST-SESSION EMOTIONAL PULSE CHECK MODAL -->
+    <div id="pulse-check-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
+        <div class="tempo-card max-w-md w-full p-8 text-center space-y-6">
+            <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-xl">
+                🌱
+            </div>
+            <div class="space-y-1">
+                <h3 class="font-heading text-xl font-bold text-gray-900">How are you feeling right now?</h3>
+                <p class="text-xs text-gray-500">Checking your state helps us adapt the next recommendation.</p>
+            </div>
+
+            <div class="space-y-2.5">
+                <button data-feel="lighter" class="pulse-option-btn w-full p-4 rounded-xl border border-emerald-200 hover:border-emerald-500 bg-emerald-50/50 hover:bg-emerald-50 text-left transition flex items-center justify-between">
+                    <div>
+                        <h4 class="text-sm font-bold text-emerald-900">🟢 Lighter / Making Progress</h4>
+                        <p class="text-xs text-emerald-700">I broke through the starting freeze.</p>
+                    </div>
+                    <span>→</span>
+                </button>
+
+                <button data-feel="same" class="pulse-option-btn w-full p-4 rounded-xl border border-gray-200 hover:border-gray-400 bg-white hover:bg-stone-50 text-left transition flex items-center justify-between">
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-800">🟡 About the Same</h4>
+                        <p class="text-xs text-gray-500">Did some work, but still have tension.</p>
+                    </div>
+                    <span>→</span>
+                </button>
+
+                <button data-feel="overwhelmed" class="pulse-option-btn w-full p-4 rounded-xl border border-amber-200 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50 text-left transition flex items-center justify-between">
+                    <div>
+                        <h4 class="text-sm font-bold text-amber-900">🔴 Still Overwhelmed / Panicked</h4>
+                        <p class="text-xs text-amber-700">Need immediate breathing reset or human advice.</p>
+                    </div>
+                    <span>→</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 3. GUIDED 4-4-4-4 BOX BREATHING MODAL (DE-ESCALATION) -->
+    <div id="box-breathing-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
+        <div class="tempo-card max-w-sm w-full p-8 text-center space-y-6">
+            <div class="space-y-1">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Physical Reset</span>
+                <h3 class="font-heading text-lg font-bold text-gray-900">Box Breathing Reset</h3>
+                <p class="text-xs text-gray-500">Follow the expanding circle to lower your heart rate.</p>
+            </div>
+
+            <!-- Breathing Circle -->
+            <div class="h-44 flex items-center justify-center">
+                <div id="breathing-animated-circle" class="w-28 h-28 rounded-full bg-emerald-700/20 border-2 border-emerald-600 flex flex-col items-center justify-center">
+                    <span id="breathing-phase-text" class="text-xs font-semibold text-emerald-900 px-3 text-center">Inhale</span>
+                    <span id="breathing-count-text" class="text-xs font-bold text-emerald-700 mt-1">4s</span>
+                </div>
+            </div>
+
+            <div class="space-y-2 pt-2">
+                <button id="btn-breathing-ask-support" class="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-xs font-bold hover:bg-emerald-800 transition">
+                    Ask an Advisor for Support
+                </button>
+                <button id="btn-close-breathing" class="w-full py-2 text-xs text-gray-500 hover:text-gray-800 underline">
+                    I feel grounded now, close
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 4. KNOWLEDGE ARTICLE DETAIL MODAL -->
+    <div id="article-detail-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
+        <div class="tempo-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 space-y-6">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div class="flex items-center space-x-2">
+                    <span id="article-modal-category" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Category</span>
+                    <span id="article-modal-time" class="text-xs text-gray-400">3 min read</span>
+                </div>
+                <button id="btn-close-article-modal" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+
+            <div class="space-y-3">
+                <h3 id="article-modal-title" class="font-heading text-2xl font-bold text-gray-900 leading-snug">Article Title</h3>
+                <p id="article-modal-summary" class="text-xs text-gray-600 leading-relaxed italic"></p>
+            </div>
+
+            <!-- Key Takeaways -->
+            <div class="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+                <h4 class="text-xs font-bold text-emerald-900 uppercase tracking-wider">Key Takeaways</h4>
+                <ul id="article-modal-takeaways" class="text-xs text-gray-700 space-y-1.5"></ul>
+            </div>
+
+            <!-- Action Steps -->
+            <div class="space-y-2">
+                <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">What to do in the next 10 minutes:</h4>
+                <div id="article-modal-steps" class="space-y-2"></div>
+            </div>
+
+            <!-- Optional Template (Extension Email) -->
+            <div id="article-modal-template-section" class="space-y-2 hidden">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Copyable Email Template:</h4>
+                    <button id="btn-copy-template" class="text-xs text-emerald-700 font-semibold hover:underline">Copy to Clipboard</button>
+                </div>
+                <pre id="article-modal-template-code" class="p-4 bg-stone-900 text-stone-200 rounded-xl text-xs overflow-x-auto font-mono whitespace-pre-wrap leading-relaxed"></pre>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100 text-center">
+                <p id="article-modal-quote" class="text-xs font-medium text-emerald-800 italic"></p>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 5. PROGRESSIVE EMERGENCY & CRISIS SUPPORT MODAL (REDESIGNED) -->
+    <div id="progressive-emergency-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden">
+        <div class="tempo-card max-w-2xl w-full max-h-[92vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-6 relative shadow-2xl">
+            
+            <!-- Persistent Top Bar: Safety Mode Indicator, Human Support Pill, & Close -->
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100 gap-2">
+                <!-- Left: Emergency Title & Safety Badge -->
+                <div class="flex items-center space-x-2">
+                    <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-sm">⚡</span>
+                    <div>
+                        <h3 class="font-heading text-base font-bold text-gray-900 leading-tight">Emergency Support</h3>
+                        <p class="text-[11px] text-gray-500">Progressive Grounding & Human Care</p>
+                    </div>
+                </div>
+
+                <!-- Right: Persistent Human Support Trigger & Close -->
+                <div class="flex items-center space-x-2">
+                    <button id="btn-toggle-human-drawer" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 transition flex items-center space-x-1.5 shadow-sm">
+                        <span>📞</span>
+                        <span>Get Human Support</span>
+                    </button>
+                    <button id="btn-close-emergency-flow" type="button" class="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg text-lg transition">✕</button>
+                </div>
+            </div>
+
+            <!-- Safety Mode Persistent Alert Banner (Visible when B, C, or danger selected) -->
+            <div id="emergency-safety-banner" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-3 text-xs text-amber-900">
+                <span class="text-base shrink-0">🛡️</span>
+                <div class="flex-1 space-y-0.5">
+                    <p class="font-bold">Safety Mode Active — Immediate human support is right here.</p>
+                    <p class="text-[11px] text-amber-800">You don't need to finish any AI exercises to speak with someone. You can tap "Get Human Support" at any second.</p>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 1: INITIAL CHECK-IN
+                 =============================================================== -->
+            <div id="emergency-step-checkin" class="emergency-flow-step space-y-6">
+                <div class="text-center space-y-1.5 max-w-lg mx-auto">
+                    <h4 class="font-heading text-2xl font-extrabold text-gray-900">What kind of support do you need right now?</h4>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        You don't need to have everything figured out. Choose what feels closest to your situation.
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Option A -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('overwhelmed')" 
+                        class="w-full p-4 rounded-2xl border border-gray-200 hover:border-emerald-600 hover:bg-emerald-50/30 text-left transition group">
+                        <div class="flex items-start justify-between">
+                            <div class="space-y-1">
+                                <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Option A</span>
+                                <h5 class="text-base font-bold text-gray-900 group-hover:text-emerald-800">I'm overwhelmed or panicking</h5>
+                                <p class="text-xs text-gray-600">I feel stressed, overwhelmed, or unable to think clearly.</p>
+                            </div>
+                            <span class="text-gray-400 group-hover:text-emerald-700 text-lg font-bold">→</span>
+                        </div>
+                    </button>
+
+                    <!-- Option B -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('crisis')" 
+                        class="w-full p-4 rounded-2xl border border-gray-200 hover:border-amber-600 hover:bg-amber-50/40 text-left transition group">
+                        <div class="flex items-start justify-between">
+                            <div class="space-y-1">
+                                <span class="text-xs font-bold text-amber-800 uppercase tracking-wider">Option B • Immediate Support</span>
+                                <h5 class="text-base font-bold text-gray-900 group-hover:text-amber-900">I'm in an emotional crisis or don't feel safe</h5>
+                                <p class="text-xs text-gray-600">I'm experiencing intense emotional distress and need immediate support.</p>
+                            </div>
+                            <span class="text-gray-400 group-hover:text-amber-700 text-lg font-bold">→</span>
+                        </div>
+                    </button>
+
+                    <!-- Option C -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('selfharm')" 
+                        class="w-full p-4 rounded-2xl border border-amber-300 bg-amber-50/30 hover:border-amber-600 hover:bg-amber-50/60 text-left transition group">
+                        <div class="flex items-start justify-between">
+                            <div class="space-y-1">
+                                <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Option C • Urgent Care</span>
+                                <h5 class="text-base font-bold text-amber-950 group-hover:text-amber-900">I'm thinking about hurting myself or suicide</h5>
+                                <p class="text-xs text-amber-900">I'm having thoughts about harming myself or ending my life.</p>
+                            </div>
+                            <span class="text-amber-700 text-lg font-bold">→</span>
+                        </div>
+                    </button>
+
+                    <!-- Option D: I'm not sure -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('notsure')" 
+                        class="w-full p-3.5 rounded-2xl border border-gray-200 hover:bg-stone-50 text-left transition text-center text-xs font-semibold text-gray-600 hover:text-gray-900">
+                        I'm not sure — my mind is racing and I just need help slowing down
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 3: AI GROUNDING SUPPORT (ONE ACTIVITY AT A TIME)
+                 =============================================================== -->
+            <div id="emergency-step-grounding" class="emergency-flow-step hidden space-y-6">
+                <div class="text-center space-y-1 max-w-lg mx-auto">
+                    <h4 class="font-heading text-xl font-bold text-gray-900">"You don't need to solve everything right now."</h4>
+                    <p class="text-xs text-gray-500">Let's focus only on the next few minutes together.</p>
+                </div>
+
+                <!-- Grounding Activity Container (Rendered dynamically by emergencySupport.js) -->
+                <div id="grounding-activity-content"></div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 4: QUICK SAFETY CHECK-IN
+                 =============================================================== -->
+            <div id="emergency-step-safety_checkin" class="emergency-flow-step hidden space-y-6">
+                <div class="text-center space-y-1 max-w-lg mx-auto">
+                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 4 • Safety Check-in</span>
+                    <h4 class="font-heading text-2xl font-extrabold text-gray-900">How are you feeling right now?</h4>
+                    <p class="text-xs text-gray-500">Checking your state helps us guide you with care and without judgment.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Option 1: Unsafe -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleSafetyCheckin('unsafe')" 
+                        class="w-full p-4 rounded-2xl border border-amber-300 bg-amber-50/50 hover:bg-amber-100/60 text-left transition group">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h5 class="text-sm font-bold text-amber-950">🔴 I still don't feel safe</h5>
+                                <p class="text-xs text-amber-800">I need immediate human connection and safety support.</p>
+                            </div>
+                            <span class="text-amber-700 font-bold">→</span>
+                        </div>
+                    </button>
+
+                    <!-- Option 2: Distressed but calmer -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleSafetyCheckin('distressed_calmer')" 
+                        class="w-full p-4 rounded-2xl border border-gray-200 hover:bg-stone-50 text-left transition group">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h5 class="text-sm font-bold text-gray-900">🟡 I'm still distressed, but a little calmer</h5>
+                                <p class="text-xs text-gray-500">The intensity dropped slightly, but things still feel heavy.</p>
+                            </div>
+                            <span class="text-gray-400 font-bold">→</span>
+                        </div>
+                    </button>
+
+                    <!-- Option 3: Calmer now -->
+                    <button type="button" onclick="window.TempoEmergencySupport.handleSafetyCheckin('calmer')" 
+                        class="w-full p-4 rounded-2xl border border-emerald-200 hover:bg-emerald-50/60 text-left transition group">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h5 class="text-sm font-bold text-emerald-950">🟢 I feel calmer now</h5>
+                                <p class="text-xs text-emerald-700">My breathing slowed down and I can think a bit more clearly.</p>
+                            </div>
+                            <span class="text-emerald-700 font-bold">→</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 5A: IF USER STILL DOES NOT FEEL SAFE
+                 =============================================================== -->
+            <div id="emergency-step-still_unsafe" class="emergency-flow-step hidden space-y-6">
+                <div class="text-center space-y-1.5 max-w-lg mx-auto">
+                    <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Human Support First</span>
+                    <h4 class="font-heading text-2xl font-extrabold text-gray-900">You don't have to handle this alone.</h4>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        Please connect with these immediate human resources right now. You deserve support.
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- 988 Lifeline -->
+                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
+                        <div class="space-y-0.5">
+                            <div class="flex items-center space-x-2">
+                                <h5 class="text-sm font-bold text-emerald-950">988 Suicide & Crisis Lifeline</h5>
+                                <span class="px-2 py-0.5 bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded-full">24/7 • Free</span>
+                            </div>
+                            <p class="text-xs text-emerald-800">Call or Text <strong>988</strong> anytime.</p>
+                        </div>
+                        <a href="tel:988" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition">Call 988</a>
+                    </div>
+
+                    <!-- Crisis Text Line -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl flex items-center justify-between">
+                        <div class="space-y-0.5">
+                            <h5 class="text-sm font-bold text-gray-900">Crisis Text Line</h5>
+                            <p class="text-xs text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong> to message with a counselor.</p>
+                        </div>
+                        <span class="px-3 py-1 bg-stone-200 text-gray-800 rounded-lg text-xs font-semibold">SMS 741741</span>
+                    </div>
+
+                    <!-- Campus Support (With Offline Notice) -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h5 class="text-sm font-bold text-gray-900">Campus Urgent Health Center</h5>
+                            <span class="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Team Offline</span>
+                        </div>
+                        <p class="text-xs text-amber-900 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
+                            Notice: The campus support team is currently offline (Operating hours: Mon–Fri 9am–5pm). For urgent safety situations, please call <strong>988</strong> or text <strong>741741</strong>.
+                        </p>
+                    </div>
+
+                    <!-- Contact a Trusted Person -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
+                        <h5 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Contact Someone You Trust</h5>
+                        <p class="text-xs text-gray-600">Copy this simple text to reach out to a friend or family member without having to find the words:</p>
+                        <div class="p-3 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 italic">
+                            "Hey, I'm having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?"
+                        </div>
+                        <button id="btn-copy-trusted-msg" type="button" class="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold transition">
+                            📋 Copy Message to Clipboard
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-2">
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('grounding')" class="text-xs text-emerald-700 hover:underline font-semibold">
+                        ← Continue gentle breathing exercises
+                    </button>
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('checkin')" class="text-xs text-gray-400 hover:text-gray-700">
+                        Back to Start
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 5B: IF USER FEELS CALMER (GENTLE TRANSITION)
+                 =============================================================== -->
+            <div id="emergency-step-calmer_options" class="emergency-flow-step hidden space-y-6">
+                <div class="text-center space-y-1.5 max-w-lg mx-auto">
+                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Gentle Next Steps</span>
+                    <h4 class="font-heading text-xl font-bold text-gray-900">
+                        "We can look at what has been making things feel this difficult."
+                    </h4>
+                    <p class="text-xs text-gray-500">You only need to share what you're comfortable sharing.</p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('understand_problem')" 
+                        class="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 text-left transition group space-y-1">
+                        <span class="text-lg">💬</span>
+                        <h5 class="text-sm font-bold text-emerald-950 group-hover:text-emerald-800">Talk about what's happening</h5>
+                        <p class="text-xs text-emerald-800 leading-relaxed">Describe what's stressing you out and let AI identify practical steps.</p>
+                    </button>
+
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('grounding')" 
+                        class="p-5 rounded-2xl border border-gray-200 hover:bg-stone-50 text-left transition group space-y-1">
+                        <span class="text-lg">🌿</span>
+                        <h5 class="text-sm font-bold text-gray-900">Continue grounding</h5>
+                        <p class="text-xs text-gray-500 leading-relaxed">Spend a few more quiet minutes with visual breathing or sensory reset.</p>
+                    </button>
+
+                    <button type="button" onclick="window.TempoEmergencySupport.openHumanDrawer()" 
+                        class="p-5 rounded-2xl border border-gray-200 hover:bg-stone-50 text-left transition group space-y-1">
+                        <span class="text-lg">📞</span>
+                        <h5 class="text-sm font-bold text-gray-900">Talk to someone</h5>
+                        <p class="text-xs text-gray-500 leading-relaxed">Reach out to a trusted contact, campus support, or crisis counselors.</p>
+                    </button>
+
+                    <button type="button" onclick="window.TempoEmergencySupport.closeModal()" 
+                        class="p-5 rounded-2xl border border-gray-200 hover:bg-stone-50 text-left transition group space-y-1">
+                        <span class="text-lg">☕</span>
+                        <h5 class="text-sm font-bold text-gray-900">Stop for now</h5>
+                        <p class="text-xs text-gray-500 leading-relaxed">Take a break from the screen. Rest without academic pressure.</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 6: UNDERSTAND THE PROBLEM (NATURAL LANGUAGE)
+                 =============================================================== -->
+            <div id="emergency-step-understand_problem" class="emergency-flow-step hidden space-y-5">
+                <div class="space-y-1">
+                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 6 • Deconstructing Stressors</span>
+                    <h4 class="font-heading text-xl font-bold text-gray-900">What has been feeling the most difficult?</h4>
+                    <p class="text-xs text-gray-500">
+                        Dump what is on your plate in plain language. AI will identify practical, solvable parts without medical diagnosis.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <textarea id="emergency-problem-text" rows="4" 
+                        placeholder="e.g. I have several deadlines this week, I'm exhausted, and I feel like I can't start or finish anything..." 
+                        class="w-full p-4 text-xs border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50/50 leading-relaxed"></textarea>
+                    
+                    <div class="flex flex-wrap gap-1.5 pt-1 text-[11px] text-gray-500">
+                        <span>Quick tags:</span>
+                        <button type="button" onclick="document.getElementById('emergency-problem-text').value += ' Too many overlapping deadlines this week.'" class="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 rounded-full">📋 Clustered Deadlines</button>
+                        <button type="button" onclick="document.getElementById('emergency-problem-text').value += ' Haven\'t slept and brain feels completely fried.'" class="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 rounded-full">😴 Sleep Exhaustion</button>
+                        <button type="button" onclick="document.getElementById('emergency-problem-text').value += ' Frozen on opening my Marketing report.'" class="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 rounded-full">🧱 Stuck on Starting</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('calmer_options')" class="text-xs text-gray-500 hover:underline">
+                        ← Back
+                    </button>
+                    <button type="button" onclick="window.TempoEmergencySupport.handleAnalyzeProblem()" class="btn-sage px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                        Analyze & Decompose Problem →
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===============================================================
+                 STEP 7: MOVE INTO PROBLEM SOLVING (ONE NEXT ACTION)
+                 =============================================================== -->
+            <div id="emergency-step-problem_solving" class="emergency-flow-step hidden space-y-6">
+                <div class="space-y-1">
+                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 7 • Actionable Triage</span>
+                    <h4 class="font-heading text-2xl font-extrabold text-gray-900">Let's handle tonight first.</h4>
+                    <p class="text-xs text-gray-500">
+                        You do not need to finish everything tonight. Here is the single controllable micro-step to unlock forward momentum.
+                    </p>
+                </div>
+
+                <!-- Practical Factor Analysis -->
+                <div class="space-y-2">
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Identified Practical Challenges:</span>
+                    <div id="problem-factors-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                </div>
+
+                <!-- THE ONE NEXT ACTION -->
+                <div class="p-6 bg-emerald-50/70 border-2 border-emerald-300 rounded-3xl space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
+                            ONE NEXT ACTION
+                        </span>
+                        <span id="emergency-solved-time" class="text-xs font-semibold text-emerald-800">Estimated time: 5 minutes</span>
+                    </div>
+
+                    <h3 id="emergency-solved-action" class="font-heading text-lg md:text-xl font-bold text-gray-900 leading-snug">
+                        Open your Marketing report and list the three sections you still need to complete.
+                    </h3>
+
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        Notice that this does not require writing full paragraphs. Overcoming the initiation hurdle is 80% of breaking academic paralysis.
+                    </p>
+
+                    <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                        <button type="button" onclick="window.TempoEmergencySupport.launchImmediateMicroAction()" 
+                            class="btn-sage w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5">
+                            <span>▶ Start 5-Minute Micro Focus</span>
+                        </button>
+                        <button type="button" onclick="window.TempoEmergencySupport.closeModal(); window.TempoApp.navigateTo('emergency');" 
+                            class="w-full sm:w-auto px-4 py-3 bg-white border border-gray-300 hover:bg-stone-50 rounded-xl text-xs font-semibold text-gray-700 transition">
+                            View Full 4-Hour Roadmap
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ===================================================================
+             PARALLEL HUMAN SUPPORT DRAWER (ALWAYS ACCESSIBLE)
+             =================================================================== -->
+        <div id="human-support-drawer" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-white shadow-2xl z-50 p-6 flex flex-col justify-between overflow-y-auto hidden border-l border-gray-200">
+            <div class="space-y-6">
+                <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                    <div class="flex items-center space-x-2 text-amber-800">
+                        <span class="text-lg">🛡️</span>
+                        <h4 class="font-heading text-base font-bold text-gray-900">Immediate Human Support</h4>
+                    </div>
+                    <button id="btn-close-human-drawer" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                </div>
+
+                <p class="text-xs text-gray-600 leading-relaxed">
+                    You never have to carry intense stress or emotional distress in isolation. These confidential resources are ready for you right now:
+                </p>
+
+                <div class="space-y-3">
+                    <!-- 988 Lifeline -->
+                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-emerald-950">National Crisis Lifeline</span>
+                            <span class="px-2 py-0.5 bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded">24/7 • Free</span>
+                        </div>
+                        <p class="text-xs text-gray-600">Call or Text <strong>988</strong> anytime.</p>
+                        <a href="tel:988" class="inline-block mt-2 px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-bold">Call 988 Now</a>
+                    </div>
+
+                    <!-- Crisis Text Line -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-900">Crisis Text Line</span>
+                            <span class="px-2 py-0.5 bg-stone-200 text-gray-800 text-[10px] font-bold rounded">Free SMS</span>
+                        </div>
+                        <p class="text-xs text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong>.</p>
+                    </div>
+
+                    <!-- Campus Support Offline Notice -->
+                    <div class="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-amber-950">Campus Student Health</span>
+                            <span class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Offline Now</span>
+                        </div>
+                        <p class="text-xs text-amber-900 leading-relaxed">
+                            "The support team is currently offline (Mon–Fri 9am–5pm). For urgent safety situations, please use <strong>988</strong> or text <strong>741741</strong> rather than waiting for campus email."
+                        </p>
+                    </div>
+
+                    <!-- Trusted Person Helper -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
+                        <span class="text-xs font-bold text-gray-900">Reach Out to a Friend or Family:</span>
+                        <div class="p-3 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 italic">
+                            "Hey, I'm having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?"
+                        </div>
+                        <button onclick="navigator.clipboard.writeText('Hey, I\'m having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?'); window.TempoApp.showToast('Copied to clipboard!');" 
+                            class="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold transition">
+                            📋 Copy Message
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-100">
+                <button onclick="window.TempoEmergencySupport.closeHumanDrawer()" class="w-full py-2.5 bg-stone-900 text-white rounded-xl text-xs font-bold">
+                    Close Support Drawer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. ADD GENTLE HABIT / HABIT PRESETS MODAL -->
+    <div id="add-habit-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
+        <div class="tempo-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 space-y-6">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl">🌱</span>
+                    <div>
+                        <h3 class="font-heading text-lg font-bold text-gray-900">Add a Gentle Stress-Relief Habit</h3>
+                        <p class="text-xs text-gray-500">Choose a research-backed micro-habit or define your own calm ritual.</p>
+                    </div>
+                </div>
+                <button id="btn-close-add-habit-modal" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+
+            <!-- Pre-curated Library Presets -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Recommended Stress-Relief Habits (1-Click Add):</h4>
+                    <span class="text-[11px] text-emerald-700 font-medium">Science-Backed</span>
+                </div>
+                <div id="habit-presets-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Populated by routine.js -->
+                </div>
+            </div>
+
+            <!-- Custom Habit Creator -->
+            <div class="pt-4 border-t border-gray-100 space-y-3">
+                <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Or Create a Custom Habit:</h4>
+                <form id="form-add-habit" class="space-y-3">
+                    <div>
+                        <label for="input-habit-title" class="block text-xs font-semibold text-gray-700 mb-1">Habit Name:</label>
+                        <input type="text" id="input-habit-title" placeholder="e.g. 5-Minute Shoulder & Neck Stretch" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="input-habit-why" class="block text-xs font-semibold text-gray-700 mb-1">Why it helps you (Encouraging reminder):</label>
+                        <input type="text" id="input-habit-why" placeholder="e.g. Releases physical tension stored from typing all day" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="select-habit-category" class="block text-xs font-semibold text-gray-700 mb-1">Category:</label>
+                            <select id="select-habit-category" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800">
+                                <option value="Physical">Physical (Movement & Body)</option>
+                                <option value="Mental / Calm" selected>Mental / Calm (Breathing & Grounding)</option>
+                                <option value="Focus">Focus (Deep Work & Anti-Distraction)</option>
+                                <option value="Recovery">Recovery (Rest & Decompression)</option>
+                                <option value="Sleep">Sleep (Wind-down & Circadian)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="select-habit-time" class="block text-xs font-semibold text-gray-700 mb-1">Preferred Time:</label>
+                            <select id="select-habit-time" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800">
+                                <option value="Morning">Morning</option>
+                                <option value="Afternoon">Afternoon</option>
+                                <option value="Evening">Evening</option>
+                                <option value="Anytime" selected>Anytime</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pt-2 flex justify-end">
+                        <button type="submit" class="btn-sage px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                            + Add Habit to Routine
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Floating Toast Notification -->
+    <div id="app-toast" class="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-5 py-3 rounded-xl shadow-xl text-xs font-medium opacity-0 translate-y-4 pointer-events-none transition-all duration-300"></div>
+
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex items-center justify-around z-40 px-2">
+        <a href="#today" data-nav="today" class="flex flex-col items-center text-[10px] text-emerald-800 font-semibold">
+            <span class="text-base">🏠</span>
+            <span>Today</span>
+        </a>
+        <button onclick="window.TempoEmergencySupport.openModal()" class="flex flex-col items-center text-[10px] text-amber-700 font-bold">
+            <span class="text-base">⚡</span>
+            <span>Support</span>
+        </button>
+        <a href="#stress-check" data-nav="stress-check" class="flex flex-col items-center text-[10px] text-gray-500">
+            <span class="text-base">📊</span>
+            <span>Check</span>
+        </a>
+        <a href="#routine" data-nav="routine" class="flex flex-col items-center text-[10px] text-gray-500">
+            <span class="text-base">📅</span>
+            <span>Routine</span>
+        </a>
+        <a href="#hub" data-nav="hub" class="flex flex-col items-center text-[10px] text-gray-500">
+            <span class="text-base">📚</span>
+            <span>Hub</span>
+        </a>
+        <a href="#support" data-nav="support" class="flex flex-col items-center text-[10px] text-gray-500">
+            <span class="text-base">💬</span>
+            <span>Help</span>
+        </a>
+    </nav>
+
+    <!-- Application Scripts -->
+    <script src="data.js"></script>
+    <script src="triage.js"></script>
+    <script src="stress.js"></script>
+    <script src="routine.js"></script>
+    <script src="knowledge.js"></script>
+    <script src="support.js"></script>
+    <script src="admin.js"></script>
+    <script src="emergencySupport.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "tempo-wellbeing",
+  "version": "1.0.0",
+  "description": "Interactive university student stress triage, grounding, and wellbeing application.",
+  "main": "index.html",
+  "scripts": {
+    "start": "python server.py"
+  },
+  "keywords": [
+    "student-wellbeing",
+    "academic-stress",
+    "deadline-triage",
+    "mental-health",
+    "grounding",
+    "habit-tracker"
+  ],
+  "author": "Tempo Team",
+  "license": "MIT"
+}

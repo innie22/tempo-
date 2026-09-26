@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/health.js" },
+    { "source": "/api/ai/parse-triage", "destination": "/api/ai/parse-triage.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
