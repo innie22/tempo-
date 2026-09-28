@@ -107,15 +107,15 @@ window.TempoSupport = (function() {
         container.innerHTML = tickets.map(t => {
             const statusClass = t.status === 'Resolved' 
                 ? 'bg-gray-100 text-gray-700' 
-                : (t.status === 'Advisor Replied' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800');
+                : (t.status === 'Advisor Replied' ? 'bg-[#FFE9DC] text-[#B83D08]' : 'bg-amber-100 text-amber-800');
 
             return `
                 <div class="tempo-card p-5 space-y-4">
                     <div class="flex items-start justify-between">
                         <div>
                             <span class="text-xs font-mono text-gray-400 font-semibold">${t.id}</span>
-                            <h4 class="text-base font-bold text-gray-900 mt-0.5">${t.subject}</h4>
-                            <p class="text-xs text-gray-500 mt-0.5">${t.category} • Submitted ${t.createdAt}</p>
+                            <h4 class="text-base font-bold text-[#202124] mt-0.5">${t.subject}</h4>
+                            <p class="text-xs text-[#6F6B68] mt-0.5">${t.category} • Submitted ${t.createdAt}</p>
                         </div>
                         <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${statusClass}">${t.status}</span>
                     </div>
@@ -123,9 +123,9 @@ window.TempoSupport = (function() {
                     <!-- Conversation Thread -->
                     <div class="space-y-3 pt-3 border-t border-gray-100">
                         ${t.messages.map(m => `
-                            <div class="p-3.5 rounded-xl ${m.sender === 'student' ? 'bg-stone-50 border border-stone-200 ml-4' : 'bg-emerald-50 border border-emerald-200 mr-4'}">
+                            <div class="p-3.5 rounded-xl ${m.sender === 'student' ? 'bg-stone-50 border border-stone-200 ml-4' : 'bg-[#FFF9F4] border border-[#FFD2BA] mr-4'}">
                                 <div class="flex items-center justify-between mb-1.5">
-                                    <span class="text-xs font-bold ${m.sender === 'student' ? 'text-gray-700' : 'text-emerald-900'}">${m.senderName}</span>
+                                    <span class="text-xs font-bold ${m.sender === 'student' ? 'text-gray-700' : 'text-[#FF6B2C]'}">${m.senderName}</span>
                                     <span class="text-[10px] text-gray-400">${m.timestamp}</span>
                                 </div>
                                 <p class="text-xs text-gray-800 leading-relaxed whitespace-pre-line">${m.text}</p>
@@ -136,9 +136,9 @@ window.TempoSupport = (function() {
                     <!-- Student Follow-up Reply Input -->
                     <div class="pt-2 flex items-center space-x-2">
                         <input type="text" id="reply-input-${t.id}" placeholder="Type a follow-up response to the advisor..." 
-                            class="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-600">
+                            class="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-[#FF6B2C]">
                         <button onclick="window.TempoSupport.sendFollowUp('${t.id}')" 
-                            class="px-4 py-2 bg-emerald-700 text-white rounded-lg text-xs font-medium hover:bg-emerald-800 transition">
+                            class="btn-primary px-4 py-2 rounded-lg text-xs font-semibold shadow-sm">
                             Reply
                         </button>
                     </div>

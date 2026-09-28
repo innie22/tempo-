@@ -11,22 +11,29 @@
             theme: {
                 extend: {
                     colors: {
-                        sage: {
-                            50: '#F4F7F5',
-                            100: '#E8F0EC',
-                            600: '#357A5B',
-                            700: '#2D6A4F',
-                            800: '#22533C',
-                            900: '#1B4332'
+                        tempo: {
+                            orange: '#FF6B2C',
+                            'orange-hover': '#E8591C',
+                            ink: '#202124',
+                            cream: '#FFF9F4',
+                            'orange-soft': '#FFE9DC',
+                            'orange-text': '#B83D08',
+                            gray: '#F3F1EF',
+                            muted: '#6F6B68',
+                            danger: '#D92D20',
+                            border: '#E8E4E1'
                         },
-                        amber: {
-                            500: '#F59E0B',
-                            600: '#D97706',
-                            700: '#B45309'
+                        sage: {
+                            50: '#FFE9DC',
+                            100: '#FFE9DC',
+                            600: '#FF6B2C',
+                            700: '#FF6B2C',
+                            800: '#B83D08',
+                            900: '#202124'
                         }
                     },
                     fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
                         heading: ['Plus Jakarta Sans', 'system-ui', 'sans-serif']
                     }
                 }
@@ -36,43 +43,40 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="assets/tempo-logo.png">
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-[#FBFBFA] text-gray-900 min-h-screen flex flex-col pb-20 md:pb-8">
+<body class="bg-[#FFF9F4] text-[#202124] min-h-screen flex flex-col pb-20 md:pb-8">
 
     <!-- Top Role Banner (When in Advisor Mode) -->
-    <div id="role-indicator-banner" class="hidden bg-emerald-900 text-white text-xs py-2 px-4 shadow-sm"></div>
+    <div id="role-indicator-banner" class="hidden bg-[#202124] text-white text-xs py-2 px-4 shadow-sm"></div>
 
     <!-- Global App Header -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <header class="bg-white border-b border-[#E8E4E1] sticky top-0 z-40">
         <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
             <!-- Brand Logo -->
-            <div class="flex items-center space-x-3 cursor-pointer" data-nav="today">
-                <div class="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-sm">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                </div>
+            <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center space-x-3 cursor-pointer bg-white" title="Tempo Home">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-10 w-auto object-contain">
                 <div>
-                    <h1 class="font-heading font-extrabold text-xl text-gray-900 tracking-tight flex items-center">
+                    <h1 class="font-heading font-extrabold text-xl text-[#202124] tracking-tight flex items-center">
                         Tempo
-                        <span class="ml-2 text-[10px] font-semibold tracking-wide bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase">Wellbeing</span>
+                        <span class="ml-2 text-[10px] font-bold tracking-wider text-[#B83D08] bg-white border border-[#FFD2BA] px-2 py-0.5 rounded-full uppercase">Wellbeing</span>
                     </h1>
-                    <p class="text-[11px] text-gray-500 font-medium">Academic Stress & Deadline Triage</p>
+                    <p class="text-[11px] text-[#6F6B68] font-medium">Academic Stress & Deadline Triage</p>
                 </div>
             </div>
 
             <!-- Top Desktop Navigation -->
             <nav class="hidden md:flex items-center space-x-1">
-                <a href="#today" data-nav="today" class="px-3.5 py-2 rounded-lg text-xs font-medium text-emerald-800 bg-emerald-50 transition">Today</a>
-                <a href="#emergency" data-nav="emergency" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition flex items-center">
-                    <span class="mr-1 text-amber-600 font-bold">⚡</span> Triage
+                <a href="#today" data-nav="today" class="px-3.5 py-2 rounded-lg text-xs font-semibold text-[#FF6B2C] bg-[#FFE9DC] transition">Today</a>
+                <a href="#emergency" data-nav="emergency" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition flex items-center">
+                    <span class="mr-1 text-[#FF6B2C] font-bold">⚡</span> Triage
                 </a>
-                <a href="#stress-check" data-nav="stress-check" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Self-Check</a>
-                <a href="#routine" data-nav="routine" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Routine</a>
-                <a href="#hub" data-nav="hub" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Learn & Solve</a>
-                <a href="#support" data-nav="support" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Support</a>
+                <a href="#stress-check" data-nav="stress-check" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Self-Check</a>
+                <a href="#routine" data-nav="routine" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Routine</a>
+                <a href="#hub" data-nav="hub" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Learn & Solve</a>
+                <a href="#support" data-nav="support" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Support</a>
                 <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
                 <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
             </nav>
@@ -85,7 +89,7 @@
                 </button>
 
                 <!-- 24/7 Crisis Help Trigger -->
-                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-open-crisis-helpline p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition" title="24/7 Crisis Helplines & Grounding">
+                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-open-crisis-helpline p-2 text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100 rounded-xl transition" title="24/7 Crisis Helplines & Grounding">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
@@ -96,7 +100,7 @@
                     <button id="btn-header-signin" class="px-3 py-1.5 rounded-xl border border-gray-200 hover:border-gray-300 text-xs font-medium text-gray-700 bg-white hover:bg-stone-50 transition">
                         Sign In
                     </button>
-                    <button id="btn-header-register" class="btn-sage px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">
+                    <button id="btn-header-register" class="btn-primary px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">
                         Register
                     </button>
                 </div>
@@ -104,9 +108,9 @@
                 <!-- 2. Authenticated Header State -->
                 <div id="header-authenticated-box" class="hidden flex items-center space-x-2">
                     <div class="flex items-center space-x-2 px-3 py-1.5 bg-stone-100/90 rounded-xl border border-stone-200">
-                        <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                         <span id="header-user-name" class="text-xs font-bold text-gray-800">User</span>
-                        <span id="header-user-role-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Student</span>
+                        <span id="header-user-role-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">Student</span>
                     </div>
                     <button id="btn-header-signout" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-transparent hover:border-rose-100">
                         Sign Out
@@ -162,9 +166,9 @@
                         <div class="flex items-center space-x-3">
                             <label class="flex items-center space-x-2 text-xs font-medium text-gray-600 cursor-pointer">
                                 <span>Gentle Day Mode</span>
-                                <input type="checkbox" id="toggle-gentle-day" class="rounded text-emerald-700 focus:ring-emerald-500">
+                                <input type="checkbox" id="toggle-gentle-day" class="rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
                             </label>
-                            <button data-nav="routine" class="text-xs text-emerald-700 font-semibold hover:underline">Customize</button>
+                            <button data-nav="routine" class="text-xs text-[#FF6B2C] font-semibold hover:underline">Customize</button>
                         </div>
                     </div>
 
@@ -177,18 +181,18 @@
                 <!-- Right 1 Col: Advisor Tip & Quick Checks -->
                 <div class="space-y-6">
                     <!-- Daily Micro-Tip -->
-                    <div class="tempo-card p-6 space-y-4 border-emerald-200 bg-emerald-50/30">
+                    <div class="tempo-card p-6 space-y-4 border-[#FFD2BA] bg-[#FFF9F4]">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">💡 Daily Wellbeing Tip</span>
+                            <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">💡 Daily Wellbeing Tip</span>
                             <span class="text-xs text-gray-400 font-medium">Advisor Curated</span>
                         </div>
                         <h4 id="dashboard-tip-title" class="font-heading text-base font-bold text-gray-900">The 5-Minute Starter Rule</h4>
                         <p id="dashboard-tip-content" class="text-xs text-gray-600 leading-relaxed">
                             When starting feels physically impossible, tell your brain you only have to work for 5 minutes. If you still want to stop after 300 seconds, you have full permission.
                         </p>
-                        <div class="pt-2 border-t border-emerald-100 flex items-center justify-between text-xs">
+                        <div class="pt-2 border-t border-[#FFD2BA] flex items-center justify-between text-xs">
                             <span id="dashboard-tip-author" class="text-gray-500 font-medium">Dr. Elena Vance (2m read)</span>
-                            <button onclick="window.TempoKnowledge.openArticle('art-1')" class="text-emerald-700 font-semibold hover:underline">Read Full Guide</button>
+                            <button onclick="window.TempoKnowledge.openArticle('art-1')" class="text-[#FF6B2C] font-semibold hover:underline">Read Full Guide</button>
                         </div>
                     </div>
 
@@ -199,13 +203,13 @@
                                 <span class="text-base">🌱</span>
                                 <h4 class="font-heading text-sm font-bold text-gray-900">Today's Habits</h4>
                             </div>
-                            <span id="dashboard-habit-count-label" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">2/5 done</span>
+                            <span id="dashboard-habit-count-label" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#FFE9DC] text-[#B83D08]">2/5 done</span>
                         </div>
                         <div id="dashboard-habits-mini-list" class="space-y-1">
                             <!-- Populated dynamically by routine.js -->
                         </div>
                         <div class="pt-1">
-                            <button data-nav="routine" class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold transition text-center">
+                            <button data-nav="routine" class="w-full py-2 bg-[#FFE9DC] hover:bg-[#FFE9DC]/80 text-[#B83D08] rounded-xl text-xs font-semibold transition text-center">
                                 View & Track All Habits →
                             </button>
                         </div>
@@ -265,14 +269,14 @@
                     </label>
                     <textarea id="emergency-brain-dump" rows="5" 
                         placeholder="e.g. I have a Marketing report due tomorrow at 9 AM and only finished the intro. I also have slides due Friday and an exam next week. I have about 4 hours tonight and my head is spinning..." 
-                        class="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm text-gray-800 leading-relaxed"></textarea>
+                        class="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] text-sm text-gray-800 leading-relaxed"></textarea>
                 </div>
 
                 <!-- Available Time Constraint -->
                 <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-gray-100">
                     <div class="flex items-center space-x-3 w-full sm:w-auto">
                         <label for="emergency-hours-select" class="text-xs font-medium text-gray-600 whitespace-nowrap">Available Time Tonight:</label>
-                        <select id="emergency-hours-select" class="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <select id="emergency-hours-select" class="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                             <option value="2">2 Hours</option>
                             <option value="3">3 Hours</option>
                             <option value="4" selected>4 Hours</option>
@@ -280,7 +284,7 @@
                         </select>
                     </div>
 
-                    <button id="btn-analyze-emergency" class="btn-sage w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center space-x-2">
+                    <button id="btn-analyze-emergency" class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center space-x-2">
                         <span>Analyze & Create Calm Plan</span>
                         <span>→</span>
                     </button>
@@ -292,7 +296,7 @@
                 <!-- THE ONE NEXT ACTION CARD -->
                 <div id="one-action-card" class="tempo-card p-6 md:p-8 action-glow bg-white space-y-6">
                     <div class="flex items-center justify-between">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFE9DC] text-[#B83D08] tracking-wide uppercase">
                             ✨ THE ONE NEXT ACTION
                         </span>
                         <span id="one-action-context" class="text-xs font-medium text-gray-500">Target: 25 minutes</span>
@@ -303,19 +307,19 @@
                             <!-- Populated dynamically -->
                         </h3>
                         <div class="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-1">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Why this first?</span>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Why this first?</span>
                             <p id="one-action-rationale" class="text-xs text-gray-700 leading-relaxed"></p>
                         </div>
                     </div>
 
                     <!-- Action Controls -->
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                        <button id="btn-start-focus" class="btn-sage w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
+                        <button id="btn-start-focus" class="btn-primary w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
                             <span>▶ Start 25-Min Gentle Focus</span>
                         </button>
                         
                         <div class="flex items-center space-x-3 text-xs">
-                            <button id="btn-smaller-step" class="text-emerald-700 hover:text-emerald-900 font-semibold underline" data-mode="standard">
+                            <button id="btn-smaller-step" class="text-[#FF6B2C] hover:text-[#E8591C] font-semibold underline" data-mode="standard">
                                 <span>🤏 Make it even smaller (5 mins)</span>
                             </button>
                         </div>
@@ -359,7 +363,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>1. Perceived Stress (Feeling out of control)</span>
-                            <span id="val-perceivedStress" class="text-emerald-700 font-bold">7</span>
+                            <span id="val-perceivedStress" class="text-[#FF6B2C] font-bold">7</span>
                         </div>
                         <input type="range" id="slider-perceivedStress" min="1" max="10" value="7">
                     </div>
@@ -368,7 +372,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>2. Deadline Pressure (Upcoming submission density)</span>
-                            <span id="val-deadlinePressure" class="text-emerald-700 font-bold">9</span>
+                            <span id="val-deadlinePressure" class="text-[#FF6B2C] font-bold">9</span>
                         </div>
                         <input type="range" id="slider-deadlinePressure" min="1" max="10" value="9">
                     </div>
@@ -377,7 +381,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>3. Sleep Quality (Restlessness & bedtime worry)</span>
-                            <span id="val-sleepQuality" class="text-emerald-700 font-bold">4</span>
+                            <span id="val-sleepQuality" class="text-[#FF6B2C] font-bold">4</span>
                         </div>
                         <input type="range" id="slider-sleepQuality" min="1" max="10" value="4">
                     </div>
@@ -386,7 +390,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>4. Concentration (Brain fog & staying on task)</span>
-                            <span id="val-concentration" class="text-emerald-700 font-bold">5</span>
+                            <span id="val-concentration" class="text-[#FF6B2C] font-bold">5</span>
                         </div>
                         <input type="range" id="slider-concentration" min="1" max="10" value="5">
                     </div>
@@ -395,7 +399,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>5. Emotional Exhaustion (Drained energy & stamina)</span>
-                            <span id="val-exhaustion" class="text-emerald-700 font-bold">7</span>
+                            <span id="val-exhaustion" class="text-[#FF6B2C] font-bold">7</span>
                         </div>
                         <input type="range" id="slider-exhaustion" min="1" max="10" value="7">
                     </div>
@@ -404,7 +408,7 @@
                     <div class="space-y-1.5">
                         <div class="flex justify-between text-xs font-semibold text-gray-700">
                             <span>6. Burnout Signs (Cynicism, detachment, physical tension)</span>
-                            <span id="val-burnoutSigns" class="text-emerald-700 font-bold">6</span>
+                            <span id="val-burnoutSigns" class="text-[#FF6B2C] font-bold">6</span>
                         </div>
                         <input type="range" id="slider-burnoutSigns" min="1" max="10" value="6">
                     </div>
@@ -412,7 +416,7 @@
                     <!-- Buttons -->
                     <div class="pt-4 flex items-center justify-between text-xs">
                         <button id="btn-reset-stress" class="text-gray-500 hover:text-gray-800 underline">Reset to Neutral</button>
-                        <button id="btn-save-stress-result" class="btn-sage px-4 py-2 rounded-lg font-medium">Save to Profile</button>
+                        <button id="btn-save-stress-result" class="btn-primary px-4 py-2 rounded-lg font-medium">Save to Profile</button>
                     </div>
                 </div>
 
@@ -452,7 +456,7 @@
         <section id="screen-routine" class="screen-container hidden space-y-10">
             <!-- Header -->
             <div class="max-w-2xl mx-auto text-center space-y-2">
-                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wide">
                     Supportive Consistency
                 </span>
                 <h2 class="font-heading text-3xl font-extrabold text-gray-900">Personalized Routine & Habit Tracker</h2>
@@ -464,10 +468,10 @@
             <!-- SECTION A: STRESS-MANAGEMENT HABITS (US01) -->
             <div class="max-w-3xl mx-auto space-y-6">
                 <!-- Daily Progress & Supportive Status Card -->
-                <div class="tempo-card p-6 md:p-7 space-y-5 bg-gradient-to-br from-emerald-50/40 via-white to-stone-50 border-emerald-200">
+                <div class="tempo-card p-6 md:p-7 space-y-5 bg-gradient-to-br from-[#FFE9DC]/30 via-white to-[#FFF9F4] border-[#FFD2BA]">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div class="space-y-1">
-                            <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Today's Self-Care Cadence</span>
+                            <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Today's Self-Care Cadence</span>
                             <h3 id="habit-progress-counter" class="font-heading text-xl font-bold text-gray-900">
                                 2 of 5 gentle habits explored today
                             </h3>
@@ -479,12 +483,12 @@
 
                     <!-- Progress Bar -->
                     <div class="w-full bg-stone-200/70 rounded-full h-2.5 overflow-hidden">
-                        <div id="habit-progress-bar" class="h-2.5 rounded-full transition-all duration-500 bg-emerald-600" style="width: 40%"></div>
+                        <div id="habit-progress-bar" class="h-2.5 rounded-full transition-all duration-500 bg-[#FF6B2C]" style="width: 40%"></div>
                     </div>
 
                     <!-- Encouraging Non-Judgmental Message -->
-                    <div class="p-3.5 bg-white/80 rounded-xl border border-emerald-100/80 flex items-start space-x-3 text-xs text-gray-700">
-                        <span class="text-emerald-700 font-bold text-sm shrink-0">🌱</span>
+                    <div class="p-3.5 bg-white/80 rounded-xl border border-[#FFD2BA] flex items-start space-x-3 text-xs text-gray-700">
+                        <span class="text-[#FF6B2C] font-bold text-sm shrink-0">🌱</span>
                         <p id="habit-encouragement-message" class="leading-relaxed">
                             No pressure to complete everything. Starting with even one 2-minute micro-habit gives your nervous system a calm anchor.
                         </p>
@@ -498,7 +502,7 @@
                         <p class="text-xs text-gray-500">Check off what you practiced today. Rest days are welcomed.</p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button id="btn-open-add-habit" class="btn-sage px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-sm">
+                        <button id="btn-open-add-habit" class="btn-primary px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-sm">
                             <span>+ Add a Gentle Habit</span>
                         </button>
                     </div>
@@ -517,7 +521,7 @@
                         <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Daily Structure</span>
                         <h3 class="font-heading text-xl font-bold text-gray-900">Today's Schedule Blueprint</h3>
                     </div>
-                    <button id="btn-add-routine-block" class="text-xs text-emerald-700 font-semibold hover:underline">+ Add Custom Block</button>
+                    <button id="btn-add-routine-block" class="text-xs text-[#FF6B2C] font-semibold hover:underline">+ Add Custom Block</button>
                 </div>
 
                 <!-- Schedule Blocks -->
@@ -555,7 +559,7 @@
                         </div>
                     </div>
                     <div class="pt-2 flex justify-end">
-                        <button id="btn-generate-routine" class="btn-sage px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                        <button id="btn-generate-routine" class="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
                             Generate Balanced Routine
                         </button>
                     </div>
@@ -577,7 +581,7 @@
             <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
                 <!-- Category Pills -->
                 <div class="flex flex-wrap gap-2">
-                    <button data-category="all" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-700 text-white cursor-pointer transition">All</button>
+                    <button data-category="all" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#FF6B2C] text-white cursor-pointer transition">All</button>
                     <button data-category="urgent" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Can't Start</button>
                     <button data-category="communication" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Asking for Help</button>
                     <button data-category="sleep" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Sleep & Worry</button>
@@ -587,7 +591,7 @@
                 <!-- Search Input -->
                 <div class="w-full md:w-64">
                     <input type="text" id="hub-search-input" placeholder="Search guides or topics..." 
-                        class="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white">
+                        class="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] bg-white">
                 </div>
             </div>
 
@@ -603,7 +607,7 @@
              =================================================================== -->
         <section id="screen-support" class="screen-container hidden space-y-8">
             <div class="max-w-2xl mx-auto text-center space-y-2">
-                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wide">Human Connection</span>
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wide">Human Connection</span>
                 <h2 class="font-heading text-3xl font-extrabold text-gray-900">Talk to Someone</h2>
                 <p class="text-sm text-gray-600">You don't have to carry this alone. Connect with campus wellbeing coordinators and peer advisors.</p>
             </div>
@@ -616,7 +620,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label for="support-category" class="block text-xs font-semibold text-gray-700 mb-1">What are you struggling with?</label>
-                                <select id="support-category" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                                <select id="support-category" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                                     <option value="Deadline Cluster & Triage">Deadline Cluster & Overwhelm</option>
                                     <option value="Extension Request Advice">Asking for an Extension</option>
                                     <option value="Sleep & Burnout">Sleep & Burnout Exhaustion</option>
@@ -626,7 +630,7 @@
                             </div>
                             <div>
                                 <label for="support-urgency" class="block text-xs font-semibold text-gray-700 mb-1">Urgency Level:</label>
-                                <select id="support-urgency" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                                <select id="support-urgency" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                                     <option value="Need advice in 24h">Need advice in 24h</option>
                                     <option value="High (Struggling today)" selected>High (Struggling today)</option>
                                     <option value="Low (General guidance)">Low (General guidance)</option>
@@ -637,18 +641,18 @@
                         <div>
                             <label for="support-subject" class="block text-xs font-semibold text-gray-700 mb-1">Brief Subject:</label>
                             <input type="text" id="support-subject" placeholder="e.g. Overwhelmed by 3 deadlines and need advice on emailing professor" 
-                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                         </div>
 
                         <div>
                             <label for="support-message" class="block text-xs font-semibold text-gray-700 mb-1">Your Message:</label>
                             <textarea id="support-message" rows="4" placeholder="Tell us what is going on. We are here to help you regain your footing without judgment."
-                                class="w-full p-3 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"></textarea>
+                                class="w-full p-3 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]"></textarea>
                         </div>
 
                         <div class="pt-2 flex items-center justify-between">
                             <span class="text-[11px] text-gray-500">Average advisor response time: ~2–4 hours during weekdays.</span>
-                            <button type="submit" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                            <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
                                 Send Message
                             </button>
                         </div>
@@ -701,13 +705,13 @@
                     <p class="text-xs text-gray-600">Review student inquiries, vet peer volunteer candidates, and publish student tips.</p>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Advisor Desk: Dr. Elena Vance</span>
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-[#FFE9DC] text-[#B83D08]">Advisor Desk: Dr. Elena Vance</span>
                 </div>
             </div>
 
             <!-- Admin Navigation Tabs -->
             <div class="flex items-center space-x-2 border-b border-gray-200 pb-2">
-                <button id="btn-admin-tab-tickets" onclick="window.TempoAdmin.switchTab('tickets')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white transition shadow-sm">
+                <button id="btn-admin-tab-tickets" onclick="window.TempoAdmin.switchTab('tickets')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-[#FF6B2C] text-white transition shadow-sm">
                     💬 Student Inquiries
                 </button>
                 <button id="btn-admin-tab-volunteers" onclick="window.TempoAdmin.switchTab('volunteers')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-semibold bg-stone-100 text-gray-700 hover:bg-stone-200 transition flex items-center space-x-1.5">
@@ -727,7 +731,7 @@
                         <div class="p-4 border-b border-gray-200 flex items-center justify-between">
                             <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-gray-700">Student Inquiries</h3>
                             <div class="flex space-x-1">
-                                <button data-filter="all" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-700 text-white">All</button>
+                                <button data-filter="all" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-semibold bg-[#FF6B2C] text-white">All</button>
                                 <button data-filter="awaiting" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-700">Needs Reply</button>
                             </div>
                         </div>
@@ -743,7 +747,7 @@
                                 <div>
                                     <h4 id="admin-detail-student-name" class="font-heading text-lg font-bold text-gray-900">Student Inquiry</h4>
                                     <p id="admin-detail-student-email" class="text-xs text-gray-500">Select an inquiry to view details</p>
-                                    <p id="admin-detail-category" class="text-xs text-emerald-800 font-semibold mt-1">Deadline Cluster</p>
+                                    <p id="admin-detail-category" class="text-xs text-[#B83D08] font-semibold mt-1">Deadline Cluster</p>
                                 </div>
                                 <button id="btn-admin-resolve-ticket" class="px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition">
                                     Mark as Resolved
@@ -768,10 +772,10 @@
                             </div>
 
                             <textarea id="admin-reply-textarea" rows="4" placeholder="Write an encouraging response to the student..." 
-                                class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"></textarea>
+                                class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]"></textarea>
 
                             <div class="flex justify-end">
-                                <button id="btn-admin-send-reply" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                                <button id="btn-admin-send-reply" class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
                                     Send Response to Student
                                 </button>
                             </div>
@@ -788,7 +792,7 @@
                         <p class="text-xs text-gray-500">Strict vetting of peer volunteers before granting access to student inquiries.</p>
                     </div>
                     <div class="flex items-center space-x-1.5 flex-wrap">
-                        <button id="btn-vol-filter-all" onclick="window.TempoAdmin.filterVolunteerApplications('all')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700 text-white transition">All</button>
+                        <button id="btn-vol-filter-all" onclick="window.TempoAdmin.filterVolunteerApplications('all')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FF6B2C] text-white transition">All</button>
                         <button id="btn-vol-filter-pending" onclick="window.TempoAdmin.filterVolunteerApplications('PENDING')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Pending Review</button>
                         <button id="btn-vol-filter-approved" onclick="window.TempoAdmin.filterVolunteerApplications('APPROVED')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Approved</button>
                         <button id="btn-vol-filter-rejected" onclick="window.TempoAdmin.filterVolunteerApplications('REJECTED')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Rejected</button>
@@ -834,7 +838,7 @@
                                 <textarea id="textarea-tip-content" rows="4" placeholder="Give students 1 concrete, shame-free action they can take immediately..." 
                                     class="w-full p-2.5 border border-gray-200 rounded-lg text-xs bg-white"></textarea>
                             </div>
-                            <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs">
+                            <button type="submit" class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs">
                                 Publish Tip to Student App
                             </button>
                         </form>
@@ -900,7 +904,7 @@
                     </div>
 
                     <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <button onclick="window.TempoApp.navigateTo('hub')" class="btn-sage px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                        <button onclick="window.TempoApp.navigateTo('hub')" class="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
                             Browse Knowledge Hub & Guides →
                         </button>
                         <button onclick="window.TempoAuth.checkSession()" class="px-4 py-2.5 bg-white border border-gray-300 hover:bg-stone-50 rounded-xl text-xs font-medium text-gray-700 transition">
@@ -928,7 +932,7 @@
                                 <h3 class="font-heading text-base font-bold text-gray-900">Open Student Inquiries</h3>
                                 <p class="text-xs text-gray-500">Students seeking empathetic peer support</p>
                             </div>
-                            <button onclick="window.TempoVolunteer.loadVolunteerData()" class="text-xs text-emerald-700 font-semibold hover:underline">
+                            <button onclick="window.TempoVolunteer.loadVolunteerData()" class="text-xs text-[#FF6B2C] font-semibold hover:underline">
                                 Refresh
                             </button>
                         </div>
@@ -988,9 +992,9 @@
                 <div class="flex items-center space-x-2">
                     <button id="btn-toggle-ambient" class="flex items-center space-x-1 px-3 py-1 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs">
                         <span id="sound-waves-indicator" class="hidden items-end space-x-0.5 h-3 mr-1">
-                            <span class="w-0.5 bg-emerald-400 sound-bar-1"></span>
-                            <span class="w-0.5 bg-emerald-400 sound-bar-2"></span>
-                            <span class="w-0.5 bg-emerald-400 sound-bar-3"></span>
+                            <span class="w-0.5 bg-[#FF6B2C] sound-bar-1"></span>
+                            <span class="w-0.5 bg-[#FF6B2C] sound-bar-2"></span>
+                            <span class="w-0.5 bg-[#FF6B2C] sound-bar-3"></span>
                         </span>
                         <span id="sound-toggle-label">Sound: Off</span>
                     </button>
@@ -1004,7 +1008,7 @@
 
             <!-- Task Display -->
             <div class="space-y-2">
-                <span class="text-xs uppercase tracking-widest text-emerald-400 font-semibold">Single Focus Objective</span>
+                <span class="text-xs uppercase tracking-widest text-[#FF6B2C] font-semibold">Single Focus Objective</span>
                 <h3 id="focus-task-name" class="font-heading text-2xl md:text-3xl font-bold text-stone-100 max-w-lg mx-auto leading-snug">
                     Draft 3 core section headings
                 </h3>
@@ -1020,7 +1024,7 @@
 
             <!-- Controls -->
             <div class="flex items-center justify-center space-x-4">
-                <button id="btn-timer-toggle" class="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold text-sm shadow-lg transition flex items-center">
+                <button id="btn-timer-toggle" class="px-8 py-3.5 bg-[#FF6B2C] hover:bg-[#E8591C] text-white rounded-2xl font-bold text-sm shadow-lg transition flex items-center">
                     <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg> Pause
@@ -1077,21 +1081,21 @@
     <div id="box-breathing-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
         <div class="tempo-card max-w-sm w-full p-8 text-center space-y-6">
             <div class="space-y-1">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Physical Reset</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Physical Reset</span>
                 <h3 class="font-heading text-lg font-bold text-gray-900">Box Breathing Reset</h3>
                 <p class="text-xs text-gray-500">Follow the expanding circle to lower your heart rate.</p>
             </div>
 
             <!-- Breathing Circle -->
             <div class="h-44 flex items-center justify-center">
-                <div id="breathing-animated-circle" class="w-28 h-28 rounded-full bg-emerald-700/20 border-2 border-emerald-600 flex flex-col items-center justify-center">
-                    <span id="breathing-phase-text" class="text-xs font-semibold text-emerald-900 px-3 text-center">Inhale</span>
-                    <span id="breathing-count-text" class="text-xs font-bold text-emerald-700 mt-1">4s</span>
+                <div id="breathing-animated-circle" class="w-28 h-28 rounded-full bg-[#FFE9DC]/60 border-2 border-[#FF6B2C]/50 flex flex-col items-center justify-center">
+                    <span id="breathing-phase-text" class="text-xs font-semibold text-[#202124] px-3 text-center">Inhale</span>
+                    <span id="breathing-count-text" class="text-xs font-bold text-[#FF6B2C] mt-1">4s</span>
                 </div>
             </div>
 
             <div class="space-y-2 pt-2">
-                <button id="btn-breathing-ask-support" class="w-full py-2.5 bg-emerald-700 text-white rounded-xl text-xs font-bold hover:bg-emerald-800 transition">
+                <button id="btn-breathing-ask-support" class="btn-primary w-full py-2.5 rounded-xl text-xs font-bold">
                     Ask an Advisor for Support
                 </button>
                 <button id="btn-close-breathing" class="w-full py-2 text-xs text-gray-500 hover:text-gray-800 underline">
@@ -1107,7 +1111,7 @@
         <div class="tempo-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 space-y-6">
             <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                 <div class="flex items-center space-x-2">
-                    <span id="article-modal-category" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Category</span>
+                    <span id="article-modal-category" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FFE9DC] text-[#B83D08]">Category</span>
                     <span id="article-modal-time" class="text-xs text-gray-400">3 min read</span>
                 </div>
                 <button id="btn-close-article-modal" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
@@ -1119,8 +1123,8 @@
             </div>
 
             <!-- Key Takeaways -->
-            <div class="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
-                <h4 class="text-xs font-bold text-emerald-900 uppercase tracking-wider">Key Takeaways</h4>
+            <div class="p-4 bg-[#FFF9F4] border border-[#FFD2BA] rounded-xl space-y-2">
+                <h4 class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Key Takeaways</h4>
                 <ul id="article-modal-takeaways" class="text-xs text-gray-700 space-y-1.5"></ul>
             </div>
 
@@ -1134,14 +1138,16 @@
             <div id="article-modal-template-section" class="space-y-2 hidden">
                 <div class="flex items-center justify-between">
                     <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Copyable Email Template:</h4>
-                    <button id="btn-copy-template" class="text-xs text-emerald-700 font-semibold hover:underline">Copy to Clipboard</button>
+                    <button id="btn-copy-template" class="text-xs text-[#FF6B2C] font-semibold hover:underline">Copy to Clipboard</button>
                 </div>
                 <pre id="article-modal-template-code" class="p-4 bg-stone-900 text-stone-200 rounded-xl text-xs overflow-x-auto font-mono whitespace-pre-wrap leading-relaxed"></pre>
             </div>
 
             <div class="pt-4 border-t border-gray-100 text-center">
-                <p id="article-modal-quote" class="text-xs font-medium text-emerald-800 italic"></p>
+                <p id="article-modal-quote" class="text-xs font-medium text-[#B83D08] italic"></p>
             </div>
+        </div>
+    </div>
         </div>
     </div>
 
@@ -1194,14 +1200,14 @@
                 <div class="space-y-3">
                     <!-- Option A -->
                     <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('overwhelmed')" 
-                        class="w-full p-4 rounded-2xl border border-gray-200 hover:border-emerald-600 hover:bg-emerald-50/30 text-left transition group">
+                        class="w-full p-4 rounded-2xl border border-gray-200 hover:border-[#FF6B2C] hover:bg-[#FFE9DC]/30 text-left transition group">
                         <div class="flex items-start justify-between">
                             <div class="space-y-1">
-                                <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Option A</span>
-                                <h5 class="text-base font-bold text-gray-900 group-hover:text-emerald-800">I'm overwhelmed or panicking</h5>
+                                <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Option A</span>
+                                <h5 class="text-base font-bold text-gray-900 group-hover:text-[#B83D08]">I'm overwhelmed or panicking</h5>
                                 <p class="text-xs text-gray-600">I feel stressed, overwhelmed, or unable to think clearly.</p>
                             </div>
-                            <span class="text-gray-400 group-hover:text-emerald-700 text-lg font-bold">→</span>
+                            <span class="text-gray-400 group-hover:text-[#FF6B2C] text-lg font-bold">→</span>
                         </div>
                     </button>
 
@@ -1218,16 +1224,16 @@
                         </div>
                     </button>
 
-                    <!-- Option C -->
+                    <!-- Option C: Self Harm / Suicide Risk (Semantic Danger #D92D20) -->
                     <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('selfharm')" 
-                        class="w-full p-4 rounded-2xl border border-amber-300 bg-amber-50/30 hover:border-amber-600 hover:bg-amber-50/60 text-left transition group">
+                        class="w-full p-4 rounded-2xl border border-[#D92D20]/40 bg-rose-50/40 hover:border-[#D92D20] hover:bg-rose-50/70 text-left transition group">
                         <div class="flex items-start justify-between">
                             <div class="space-y-1">
-                                <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Option C • Urgent Care</span>
-                                <h5 class="text-base font-bold text-amber-950 group-hover:text-amber-900">I'm thinking about hurting myself or suicide</h5>
-                                <p class="text-xs text-amber-900">I'm having thoughts about harming myself or ending my life.</p>
+                                <span class="text-xs font-bold text-[#D92D20] uppercase tracking-wider">Option C • Urgent Care</span>
+                                <h5 class="text-base font-bold text-[#D92D20]">I'm thinking about hurting myself or suicide</h5>
+                                <p class="text-xs text-[#D92D20]/90">I'm having thoughts about harming myself or ending my life.</p>
                             </div>
-                            <span class="text-amber-700 text-lg font-bold">→</span>
+                            <span class="text-[#D92D20] text-lg font-bold">→</span>
                         </div>
                     </button>
 
@@ -1240,8 +1246,8 @@
             </div>
 
             <!-- ===============================================================
-                 STEP 3: AI GROUNDING SUPPORT (ONE ACTIVITY AT A TIME)
-                 =============================================================== -->
+                  STEP 3: AI GROUNDING SUPPORT (ONE ACTIVITY AT A TIME)
+                  =============================================================== -->
             <div id="emergency-step-grounding" class="emergency-flow-step hidden space-y-6">
                 <div class="text-center space-y-1 max-w-lg mx-auto">
                     <h4 class="font-heading text-xl font-bold text-gray-900">"You don't need to solve everything right now."</h4>
@@ -1253,11 +1259,11 @@
             </div>
 
             <!-- ===============================================================
-                 STEP 4: QUICK SAFETY CHECK-IN
-                 =============================================================== -->
+                  STEP 4: QUICK SAFETY CHECK-IN
+                  =============================================================== -->
             <div id="emergency-step-safety_checkin" class="emergency-flow-step hidden space-y-6">
                 <div class="text-center space-y-1 max-w-lg mx-auto">
-                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 4 • Safety Check-in</span>
+                    <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Step 4 • Safety Check-in</span>
                     <h4 class="font-heading text-2xl font-extrabold text-gray-900">How are you feeling right now?</h4>
                     <p class="text-xs text-gray-500">Checking your state helps us guide you with care and without judgment.</p>
                 </div>
@@ -1302,8 +1308,8 @@
             </div>
 
             <!-- ===============================================================
-                 STEP 5A: IF USER STILL DOES NOT FEEL SAFE
-                 =============================================================== -->
+                  STEP 5A: IF USER STILL DOES NOT FEEL SAFE
+                  =============================================================== -->
             <div id="emergency-step-still_unsafe" class="emergency-flow-step hidden space-y-6">
                 <div class="text-center space-y-1.5 max-w-lg mx-auto">
                     <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Human Support First</span>
@@ -1314,16 +1320,16 @@
                 </div>
 
                 <div class="space-y-3">
-                    <!-- 988 Lifeline -->
-                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
+                    <!-- 988 Lifeline (Semantic Danger #D92D20) -->
+                    <div class="p-4 bg-rose-50/60 border border-[#D92D20]/30 rounded-2xl flex items-center justify-between">
                         <div class="space-y-0.5">
                             <div class="flex items-center space-x-2">
-                                <h5 class="text-sm font-bold text-emerald-950">988 Suicide & Crisis Lifeline</h5>
-                                <span class="px-2 py-0.5 bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded-full">24/7 • Free</span>
+                                <h5 class="text-sm font-bold text-gray-900">988 Suicide & Crisis Lifeline</h5>
+                                <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded-full">24/7 • Free</span>
                             </div>
-                            <p class="text-xs text-emerald-800">Call or Text <strong>988</strong> anytime.</p>
+                            <p class="text-xs text-gray-600">Call or Text <strong>988</strong> anytime.</p>
                         </div>
-                        <a href="tel:988" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition">Call 988</a>
+                        <a href="tel:988" class="px-4 py-2 bg-[#D92D20] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-sm">Call 988</a>
                     </div>
 
                     <!-- Crisis Text Line -->
@@ -1360,7 +1366,7 @@
                 </div>
 
                 <div class="flex justify-between items-center pt-2">
-                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('grounding')" class="text-xs text-emerald-700 hover:underline font-semibold">
+                    <button type="button" onclick="window.TempoEmergencySupport.goToStep('grounding')" class="text-xs text-[#FF6B2C] hover:underline font-semibold">
                         ← Continue gentle breathing exercises
                     </button>
                     <button type="button" onclick="window.TempoEmergencySupport.goToStep('checkin')" class="text-xs text-gray-400 hover:text-gray-700">
@@ -1370,11 +1376,11 @@
             </div>
 
             <!-- ===============================================================
-                 STEP 5B: IF USER FEELS CALMER (GENTLE TRANSITION)
-                 =============================================================== -->
+                  STEP 5B: IF USER FEELS CALMER (GENTLE TRANSITION)
+                  =============================================================== -->
             <div id="emergency-step-calmer_options" class="emergency-flow-step hidden space-y-6">
                 <div class="text-center space-y-1.5 max-w-lg mx-auto">
-                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Gentle Next Steps</span>
+                    <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Gentle Next Steps</span>
                     <h4 class="font-heading text-xl font-bold text-gray-900">
                         "We can look at what has been making things feel this difficult."
                     </h4>
@@ -1383,10 +1389,10 @@
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button type="button" onclick="window.TempoEmergencySupport.goToStep('understand_problem')" 
-                        class="p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50 text-left transition group space-y-1">
+                        class="p-5 rounded-2xl border border-[#FFD2BA] bg-[#FFF9F4] hover:bg-[#FFE9DC]/50 text-left transition group space-y-1">
                         <span class="text-lg">💬</span>
-                        <h5 class="text-sm font-bold text-emerald-950 group-hover:text-emerald-800">Talk about what's happening</h5>
-                        <p class="text-xs text-emerald-800 leading-relaxed">Describe what's stressing you out and let AI identify practical steps.</p>
+                        <h5 class="text-sm font-bold text-gray-900 group-hover:text-[#B83D08]">Talk about what's happening</h5>
+                        <p class="text-xs text-[#6F6B68] leading-relaxed">Describe what's stressing you out and let AI identify practical steps.</p>
                     </button>
 
                     <button type="button" onclick="window.TempoEmergencySupport.goToStep('grounding')" 
@@ -1413,11 +1419,11 @@
             </div>
 
             <!-- ===============================================================
-                 STEP 6: UNDERSTAND THE PROBLEM (NATURAL LANGUAGE)
-                 =============================================================== -->
+                  STEP 6: UNDERSTAND THE PROBLEM (NATURAL LANGUAGE)
+                  =============================================================== -->
             <div id="emergency-step-understand_problem" class="emergency-flow-step hidden space-y-5">
                 <div class="space-y-1">
-                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 6 • Deconstructing Stressors</span>
+                    <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Step 6 • Deconstructing Stressors</span>
                     <h4 class="font-heading text-xl font-bold text-gray-900">What has been feeling the most difficult?</h4>
                     <p class="text-xs text-gray-500">
                         Dump what is on your plate in plain language. AI will identify practical, solvable parts without medical diagnosis.
@@ -1427,7 +1433,7 @@
                 <div class="space-y-2">
                     <textarea id="emergency-problem-text" rows="4" 
                         placeholder="e.g. I have several deadlines this week, I'm exhausted, and I feel like I can't start or finish anything..." 
-                        class="w-full p-4 text-xs border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50/50 leading-relaxed"></textarea>
+                        class="w-full p-4 text-xs border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] bg-stone-50/50 leading-relaxed"></textarea>
                     
                     <div class="flex flex-wrap gap-1.5 pt-1 text-[11px] text-gray-500">
                         <span>Quick tags:</span>
@@ -1441,18 +1447,18 @@
                     <button type="button" onclick="window.TempoEmergencySupport.goToStep('calmer_options')" class="text-xs text-gray-500 hover:underline">
                         ← Back
                     </button>
-                    <button type="button" onclick="window.TempoEmergencySupport.handleAnalyzeProblem()" class="btn-sage px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                    <button type="button" onclick="window.TempoEmergencySupport.handleAnalyzeProblem()" class="btn-primary px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
                         Analyze & Decompose Problem →
                     </button>
                 </div>
             </div>
 
             <!-- ===============================================================
-                 STEP 7: MOVE INTO PROBLEM SOLVING (ONE NEXT ACTION)
-                 =============================================================== -->
+                  STEP 7: MOVE INTO PROBLEM SOLVING (ONE NEXT ACTION)
+                  =============================================================== -->
             <div id="emergency-step-problem_solving" class="emergency-flow-step hidden space-y-6">
                 <div class="space-y-1">
-                    <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Step 7 • Actionable Triage</span>
+                    <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Step 7 • Actionable Triage</span>
                     <h4 class="font-heading text-2xl font-extrabold text-gray-900">Let's handle tonight first.</h4>
                     <p class="text-xs text-gray-500">
                         You do not need to finish everything tonight. Here is the single controllable micro-step to unlock forward momentum.
@@ -1466,12 +1472,12 @@
                 </div>
 
                 <!-- THE ONE NEXT ACTION -->
-                <div class="p-6 bg-emerald-50/70 border-2 border-emerald-300 rounded-3xl space-y-4">
+                <div class="p-6 bg-[#FFF9F4] border-2 border-[#FFD2BA] rounded-3xl space-y-4">
                     <div class="flex items-center justify-between">
-                        <span class="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
+                        <span class="px-3 py-1 bg-[#FF6B2C] text-white text-[10px] font-bold rounded-full uppercase tracking-wider">
                             ONE NEXT ACTION
                         </span>
-                        <span id="emergency-solved-time" class="text-xs font-semibold text-emerald-800">Estimated time: 5 minutes</span>
+                        <span id="emergency-solved-time" class="text-xs font-semibold text-[#B83D08]">Estimated time: 5 minutes</span>
                     </div>
 
                     <h3 id="emergency-solved-action" class="font-heading text-lg md:text-xl font-bold text-gray-900 leading-snug">
@@ -1484,7 +1490,7 @@
 
                     <div class="flex flex-col sm:flex-row items-center gap-3 pt-2">
                         <button type="button" onclick="window.TempoEmergencySupport.launchImmediateMicroAction()" 
-                            class="btn-sage w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5">
+                            class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-bold shadow-md flex items-center justify-center space-x-1.5">
                             <span>▶ Start 5-Minute Micro Focus</span>
                         </button>
                         <button type="button" onclick="window.TempoEmergencySupport.closeModal(); window.TempoApp.navigateTo('emergency');" 
@@ -1498,8 +1504,8 @@
         </div>
 
         <!-- ===================================================================
-             PARALLEL HUMAN SUPPORT DRAWER (ALWAYS ACCESSIBLE)
-             =================================================================== -->
+              PARALLEL HUMAN SUPPORT DRAWER (ALWAYS ACCESSIBLE)
+              =================================================================== -->
         <div id="human-support-drawer" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-white shadow-2xl z-50 p-6 flex flex-col justify-between overflow-y-auto hidden border-l border-gray-200">
             <div class="space-y-6">
                 <div class="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -1515,14 +1521,14 @@
                 </p>
 
                 <div class="space-y-3">
-                    <!-- 988 Lifeline -->
-                    <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1">
+                    <!-- 988 Lifeline (Semantic Danger #D92D20) -->
+                    <div class="p-4 bg-rose-50/60 border border-[#D92D20]/30 rounded-2xl space-y-1">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-emerald-950">National Crisis Lifeline</span>
-                            <span class="px-2 py-0.5 bg-emerald-200 text-emerald-900 text-[10px] font-bold rounded">24/7 • Free</span>
+                            <span class="text-xs font-bold text-gray-900">National Crisis Lifeline</span>
+                            <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded">24/7 • Free</span>
                         </div>
                         <p class="text-xs text-gray-600">Call or Text <strong>988</strong> anytime.</p>
-                        <a href="tel:988" class="inline-block mt-2 px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-bold">Call 988 Now</a>
+                        <a href="tel:988" class="inline-block mt-2 px-3 py-1.5 bg-[#D92D20] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm">Call 988 Now</a>
                     </div>
 
                     <!-- Crisis Text Line -->
@@ -1585,7 +1591,7 @@
             <div class="space-y-3">
                 <div class="flex items-center justify-between">
                     <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Recommended Stress-Relief Habits (1-Click Add):</h4>
-                    <span class="text-[11px] text-emerald-700 font-medium">Science-Backed</span>
+                    <span class="text-[11px] text-[#B83D08] font-medium">Science-Backed</span>
                 </div>
                 <div id="habit-presets-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <!-- Populated by routine.js -->
@@ -1599,12 +1605,12 @@
                     <div>
                         <label for="input-habit-title" class="block text-xs font-semibold text-gray-700 mb-1">Habit Name:</label>
                         <input type="text" id="input-habit-title" placeholder="e.g. 5-Minute Shoulder & Neck Stretch" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                     </div>
                     <div>
                         <label for="input-habit-why" class="block text-xs font-semibold text-gray-700 mb-1">Why it helps you (Encouraging reminder):</label>
                         <input type="text" id="input-habit-why" placeholder="e.g. Releases physical tension stored from typing all day" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -1628,7 +1634,7 @@
                         </div>
                     </div>
                     <div class="pt-2 flex justify-end">
-                        <button type="submit" class="btn-sage px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                        <button type="submit" class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm">
                             + Add Habit to Routine
                         </button>
                     </div>
@@ -1644,7 +1650,7 @@
 
     <!-- Mobile Bottom Navigation Bar -->
     <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex items-center justify-around z-40 px-2">
-        <a href="#today" data-nav="today" class="flex flex-col items-center text-[10px] text-emerald-800 font-semibold">
+        <a href="#today" data-nav="today" class="flex flex-col items-center text-[10px] text-[#FF6B2C] font-semibold">
             <span class="text-base">🏠</span>
             <span>Today</span>
         </a>
@@ -1680,19 +1686,17 @@
             <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
 
             <div class="text-center space-y-1.5">
-                <div class="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto text-xl font-bold">
-                    🌿
-                </div>
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-12 w-auto object-contain mx-auto mb-2">
                 <h3 class="font-heading text-2xl font-bold text-gray-900">Welcome to Tempo</h3>
                 <p class="text-xs text-gray-600">Choose how you'd like to participate in our campus wellbeing network.</p>
             </div>
 
             <div class="space-y-3.5">
                 <!-- Option 1: Student -->
-                <button id="btn-choose-role-student" type="button" class="w-full p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-600 bg-emerald-50/40 hover:bg-emerald-50 text-left transition group space-y-2">
+                <button id="btn-choose-role-student" type="button" class="w-full p-5 rounded-2xl border-2 border-[#FFD2BA] hover:border-[#FF6B2C] bg-[#FFF9F4] hover:bg-[#FFE9DC]/30 text-left transition group space-y-2">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">For Students</span>
-                        <span class="text-emerald-700 font-bold text-sm group-hover:translate-x-1 transition">Continue →</span>
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#B83D08] bg-[#FFE9DC] px-2.5 py-0.5 rounded-full">For Students</span>
+                        <span class="text-[#FF6B2C] font-bold text-sm group-hover:translate-x-1 transition">Continue →</span>
                     </div>
                     <h4 class="font-heading text-base font-bold text-gray-900">I'm looking for support</h4>
                     <p class="text-xs text-gray-600 leading-relaxed">
@@ -1715,7 +1719,7 @@
 
             <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
                 Already registered? 
-                <button onclick="window.TempoAuth.openSignInModal()" class="text-emerald-700 font-bold hover:underline ml-1">Sign In here</button>
+                <button onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Sign In here</button>
             </div>
         </div>
     </div>
@@ -1725,8 +1729,9 @@
         <div class="tempo-card max-w-md w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-5 bg-white rounded-3xl shadow-2xl relative">
             <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
 
-            <div class="space-y-1">
-                <span class="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Student Sign Up</span>
+            <div class="space-y-1 text-center">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-10 w-auto object-contain mx-auto mb-2">
+                <span class="text-[11px] font-bold text-[#B83D08] uppercase tracking-wider">Student Sign Up</span>
                 <h3 class="font-heading text-2xl font-bold text-gray-900">Join Tempo Wellbeing</h3>
                 <p class="text-xs text-gray-500">Free, confidential support for managing university stress and deadlines.</p>
             </div>
@@ -1735,25 +1740,25 @@
                 <div>
                     <label for="reg-student-name" class="block text-xs font-semibold text-gray-700 mb-1">Full Name <span class="text-rose-500">*</span></label>
                     <input type="text" id="reg-student-name" required placeholder="e.g. Your Full Name" 
-                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div>
                     <label for="reg-student-email" class="block text-xs font-semibold text-gray-700 mb-1">University / Preferred Email <span class="text-rose-500">*</span></label>
                     <input type="email" id="reg-student-email" required placeholder="student@university.edu" 
-                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label for="reg-student-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
                         <input type="password" id="reg-student-password" required minlength="6" placeholder="Min. 6 chars" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                     </div>
                     <div>
                         <label for="reg-student-confirm" class="block text-xs font-semibold text-gray-700 mb-1">Confirm Password <span class="text-rose-500">*</span></label>
                         <input type="password" id="reg-student-confirm" required minlength="6" placeholder="Re-enter password" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                     </div>
                 </div>
 
@@ -1761,7 +1766,7 @@
                     <div>
                         <label for="reg-student-university" class="block text-xs font-semibold text-gray-700 mb-1">University (Optional)</label>
                         <input type="text" id="reg-student-university" placeholder="e.g. State University" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                     </div>
                     <div>
                         <label for="reg-student-year" class="block text-xs font-semibold text-gray-700 mb-1">Year of Study (Optional)</label>
@@ -1778,13 +1783,13 @@
 
                 <div class="pt-1">
                     <label class="flex items-start space-x-2 text-xs text-gray-600 cursor-pointer">
-                        <input type="checkbox" id="reg-student-terms" required class="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500">
-                        <span>I agree to the <a href="#hub" class="text-emerald-700 underline">Terms of Service</a> & <a href="#hub" class="text-emerald-700 underline">Privacy Policy</a>. I understand that Tempo provides academic wellbeing & peer support, not emergency medical diagnosis.</span>
+                        <input type="checkbox" id="reg-student-terms" required class="mt-0.5 rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                        <span>I agree to the <a href="#hub" class="text-[#FF6B2C] underline">Terms of Service</a> & <a href="#hub" class="text-[#FF6B2C] underline">Privacy Policy</a>. I understand that Tempo provides academic wellbeing & peer support, not emergency medical diagnosis.</span>
                     </label>
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-sage w-full py-3 rounded-xl font-bold text-xs shadow-md">
+                    <button type="submit" class="btn-primary w-full py-3 rounded-xl font-bold text-xs shadow-md">
                         Create Student Account →
                     </button>
                 </div>
@@ -1792,7 +1797,7 @@
 
             <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
                 Already have an account? 
-                <button onclick="window.TempoAuth.openSignInModal()" class="text-emerald-700 font-bold hover:underline ml-1">Sign In</button>
+                <button onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Sign In</button>
             </div>
         </div>
     </div>
@@ -1803,7 +1808,10 @@
             <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
 
             <div class="space-y-1">
-                <span class="text-[11px] font-bold text-sky-800 uppercase tracking-wider">Peer Supporter Network</span>
+                <div class="flex items-center space-x-2 mb-1">
+                    <img src="assets/tempo-logo.png" alt="Tempo" class="h-8 w-auto object-contain">
+                    <span class="text-[11px] font-bold text-sky-800 uppercase tracking-wider">Peer Supporter Network</span>
+                </div>
                 <h3 class="font-heading text-2xl font-bold text-gray-900">Volunteer Application</h3>
                 <p class="text-xs text-gray-500">
                     Help fellow students work through deadline paralysis with empathetic active listening. Applications undergo manual advisor review.
@@ -1910,11 +1918,11 @@
     <!-- 4. VOLUNTEER APPLICATION SUBMITTED CONFIRMATION MODAL -->
     <div id="modal-volunteer-submitted" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
         <div class="tempo-card max-w-md w-full p-8 text-center space-y-5 bg-white rounded-3xl shadow-2xl relative">
-            <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-3xl shadow-sm">
+            <div class="w-16 h-16 bg-[#FFE9DC] text-[#FF6B2C] rounded-full flex items-center justify-center mx-auto text-3xl shadow-sm">
                 🎉
             </div>
             <div class="space-y-2">
-                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Application Received</span>
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08]">Application Received</span>
                 <h3 class="font-heading text-xl font-bold text-gray-900">Thank you, <span id="vol-submitted-name">Supporter</span>!</h3>
                 <p class="text-xs text-gray-600 leading-relaxed">
                     Your volunteer application has been submitted to the campus wellbeing advisors for review.
@@ -1929,7 +1937,7 @@
             </div>
 
             <button onclick="window.TempoAuth.closeAllAuthModals(); window.TempoApp.navigateTo('volunteer-dashboard');" 
-                class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs shadow-sm">
                 Go to Volunteer Dashboard →
             </button>
         </div>
@@ -1941,9 +1949,7 @@
             <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
 
             <div class="space-y-1 text-center">
-                <div class="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center mx-auto text-lg font-bold mb-2">
-                    🔑
-                </div>
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-12 w-auto object-contain mx-auto mb-2">
                 <h3 class="font-heading text-xl font-bold text-gray-900">Welcome Back</h3>
                 <p class="text-xs text-gray-500">Sign in to your Tempo student or volunteer account.</p>
             </div>
@@ -1952,16 +1958,16 @@
                 <div>
                     <label for="signin-email" class="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
                     <input type="email" id="signin-email" required placeholder="you@university.edu" 
-                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
                 <div>
                     <label for="signin-password" class="block text-xs font-semibold text-gray-700 mb-1">Password</label>
                     <input type="password" id="signin-password" required placeholder="••••••••" 
-                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs shadow-md">
+                    <button type="submit" class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs shadow-md">
                         Sign In →
                     </button>
                 </div>
@@ -1969,10 +1975,29 @@
 
             <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
                 Don't have an account yet? 
-                <button onclick="window.TempoAuth.openRoleSelectModal()" class="text-emerald-700 font-bold hover:underline ml-1">Register</button>
+                <button onclick="window.TempoAuth.openRoleSelectModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Register</button>
             </div>
         </div>
     </div>
+
+    <!-- Global App Footer -->
+    <footer class="mt-auto border-t border-[#E8E4E1] bg-white py-8 px-4 text-center">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-8 w-auto object-contain">
+                <span class="font-heading font-extrabold text-base text-[#202124] tracking-tight">Tempo</span>
+                <span class="text-xs text-[#6F6B68]">| Academic Stress &amp; Deadline Triage</span>
+            </div>
+            <p class="text-xs text-[#6F6B68]">
+                Confidential peer wellbeing support. Not a replacement for emergency or psychiatric services.
+            </p>
+            <div class="flex items-center space-x-3 text-xs">
+                <button onclick="window.TempoEmergencySupport.openModal()" class="text-[#D92D20] font-bold hover:underline">988 Crisis Support</button>
+                <span class="text-gray-300">•</span>
+                <span class="text-[#6F6B68]">© 2026 Tempo</span>
+            </div>
+        </div>
+    </footer>
 
     <!-- Application Scripts -->
     <!-- Supabase CDN Client -->

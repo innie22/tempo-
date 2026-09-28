@@ -101,15 +101,27 @@ window.TempoApp = (function() {
             targetScreen.classList.remove('hidden');
         }
 
-        // Update nav item active states
-        document.querySelectorAll('[data-nav]').forEach(el => {
+        // Update desktop nav item active states
+        document.querySelectorAll('header nav a[data-nav]').forEach(el => {
             const isMatch = el.dataset.nav === tabId;
             if (isMatch) {
-                el.classList.add('text-emerald-800', 'font-semibold', 'bg-emerald-50');
-                el.classList.remove('text-gray-600', 'hover:text-gray-900');
+                el.classList.add('text-[#FF6B2C]', 'font-semibold', 'bg-[#FFE9DC]');
+                el.classList.remove('text-[#6F6B68]', 'hover:text-[#202124]', 'hover:bg-[#F3F1EF]', 'text-gray-600', 'hover:text-gray-900', 'text-emerald-800', 'bg-emerald-50');
             } else {
-                el.classList.remove('text-emerald-800', 'font-semibold', 'bg-emerald-50');
-                el.classList.add('text-gray-600', 'hover:text-gray-900');
+                el.classList.remove('text-[#FF6B2C]', 'font-semibold', 'bg-[#FFE9DC]', 'text-emerald-800', 'bg-emerald-50');
+                el.classList.add('text-[#6F6B68]', 'hover:text-[#202124]', 'hover:bg-[#F3F1EF]');
+            }
+        });
+
+        // Update mobile bottom nav items
+        document.querySelectorAll('nav.md\\:hidden a[data-nav]').forEach(el => {
+            const isMatch = el.dataset.nav === tabId;
+            if (isMatch) {
+                el.classList.add('text-[#FF6B2C]', 'font-semibold');
+                el.classList.remove('text-gray-500');
+            } else {
+                el.classList.remove('text-[#FF6B2C]', 'font-semibold');
+                el.classList.add('text-gray-500');
             }
         });
 

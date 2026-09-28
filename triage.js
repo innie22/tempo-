@@ -255,21 +255,21 @@ window.TempoTriage = (function() {
             const isTop = idx === 0;
             const li = document.createElement('div');
             li.className = `p-4 rounded-xl border flex items-center justify-between ${
-                isTop ? 'bg-emerald-50/60 border-emerald-300' : 'bg-white border-gray-200'
+                isTop ? 'bg-[#FFF9F4] border-[#FFD2BA]' : 'bg-white border-[#E8E4E1]'
             }`;
             li.innerHTML = `
                 <div class="flex items-center space-x-3">
                     <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        isTop ? 'bg-emerald-700 text-white' : 'bg-gray-200 text-gray-700'
+                        isTop ? 'bg-[#FF6B2C] text-white' : 'bg-[#F3F1EF] text-[#6F6B68]'
                     }">${idx + 1}</span>
                     <div>
-                        <h4 class="font-medium text-gray-900">${t.title}</h4>
-                        <p class="text-xs text-gray-500">Deadline: <span class="font-medium text-amber-700">${t.deadline}</span> • Est: ~${t.estimatedHours} hrs</p>
+                        <h4 class="font-medium text-[#202124]">${t.title}</h4>
+                        <p class="text-xs text-[#6F6B68]">Deadline: <span class="font-medium text-[#B83D08]">${t.deadline}</span> • Est: ~${t.estimatedHours} hrs</p>
                     </div>
                 </div>
                 <div class="text-right">
                     <span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${
-                        isTop ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                        isTop ? 'bg-[#FFE9DC] text-[#B83D08]' : 'bg-[#F3F1EF] text-[#6F6B68]'
                     }">${isTop ? 'Focus First' : 'Can Wait'}</span>
                 </div>
             `;
@@ -423,13 +423,13 @@ window.TempoTriage = (function() {
             const actionCard = document.getElementById('one-action-card');
             if (actionCard) {
                 actionCard.innerHTML = `
-                    <div class="p-6 bg-emerald-50 rounded-2xl border border-emerald-300 text-center space-y-4">
-                        <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-xl font-bold">✓</div>
-                        <h3 class="text-xl font-bold text-emerald-900">Step 1 Complete!</h3>
-                        <p class="text-sm text-emerald-700 max-w-md mx-auto">You've unlocked momentum. You can either take a 5-minute breather or continue to the next part of the report.</p>
+                    <div class="p-6 bg-[#FFF9F4] rounded-2xl border border-[#FFD2BA] text-center space-y-4">
+                        <div class="w-12 h-12 bg-[#FFE9DC] text-[#FF6B2C] rounded-full flex items-center justify-center mx-auto text-xl font-bold">✓</div>
+                        <h3 class="text-xl font-bold text-[#202124]">Step 1 Complete!</h3>
+                        <p class="text-sm text-[#6F6B68] max-w-md mx-auto">You've unlocked momentum. You can either take a 5-minute breather or continue to the next part of the report.</p>
                         <div class="flex justify-center space-x-3 pt-2">
-                            <button onclick="window.TempoApp.navigateTo('routine')" class="px-5 py-2.5 bg-emerald-700 text-white rounded-xl text-sm font-medium hover:bg-emerald-800 transition">Save to Today's Routine</button>
-                            <button onclick="window.TempoApp.navigateTo('today')" class="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">Back to Dashboard</button>
+                            <button onclick="window.TempoApp.navigateTo('routine')" class="btn-primary px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm">Save to Today's Routine</button>
+                            <button onclick="window.TempoApp.navigateTo('today')" class="btn-secondary px-5 py-2.5 rounded-xl text-sm font-medium">Back to Dashboard</button>
                         </div>
                     </div>
                 `;

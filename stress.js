@@ -165,8 +165,8 @@ window.TempoStress = (function() {
         // Draw filled polygon for student's snapshot
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         polygon.setAttribute('points', points.join(' '));
-        polygon.setAttribute('fill', 'rgba(45, 106, 79, 0.25)');
-        polygon.setAttribute('stroke', '#2D6A4F');
+        polygon.setAttribute('fill', 'rgba(255, 107, 44, 0.2)');
+        polygon.setAttribute('stroke', '#FF6B2C');
         polygon.setAttribute('stroke-width', '2.5');
         polygon.setAttribute('stroke-linejoin', 'round');
         svg.appendChild(polygon);
@@ -178,7 +178,7 @@ window.TempoStress = (function() {
             dot.setAttribute('cx', px);
             dot.setAttribute('cy', py);
             dot.setAttribute('r', '4');
-            dot.setAttribute('fill', '#2D6A4F');
+            dot.setAttribute('fill', '#FF6B2C');
             dot.setAttribute('stroke', '#FFFFFF');
             dot.setAttribute('stroke-width', '1.5');
             svg.appendChild(dot);
@@ -220,12 +220,12 @@ window.TempoStress = (function() {
         }
 
         recContainer.innerHTML = `
-            <div class="p-5 bg-stone-50 border border-stone-200 rounded-xl space-y-2">
-                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-800">Primary Stress Driver: ${highest.label} (${vals[highest.key]}/10)</span>
-                <h4 class="text-base font-bold text-gray-900">${recTitle}</h4>
-                <p class="text-xs text-gray-600">${recDesc}</p>
+            <div class="p-5 bg-white border border-[#E8E4E1] rounded-2xl space-y-2">
+                <span class="text-xs font-semibold uppercase tracking-wider text-[#FF6B2C]">Primary Stress Driver: ${highest.label} (${vals[highest.key]}/10)</span>
+                <h4 class="text-base font-bold text-[#202124]">${recTitle}</h4>
+                <p class="text-xs text-[#6F6B68]">${recDesc}</p>
                 <div class="pt-2">
-                    <button onclick="${recAction}" class="px-4 py-2 bg-emerald-700 text-white rounded-lg text-xs font-medium hover:bg-emerald-800 transition">
+                    <button onclick="${recAction}" class="btn-primary px-4 py-2 rounded-xl text-xs font-bold shadow-sm">
                         ${recBtn}
                     </button>
                 </div>

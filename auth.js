@@ -229,15 +229,15 @@ window.TempoAuth = (function() {
             if (nameLabel) nameLabel.textContent = profile.full_name || profile.email;
             if (rolePill) {
                 let badgeText = 'Student';
-                let badgeClass = 'bg-emerald-100 text-emerald-800';
+                let badgeClass = 'bg-[#FFE9DC] text-[#B83D08]';
 
                 if (profile.role === 'admin') {
                     badgeText = 'Administrator';
-                    badgeClass = 'bg-purple-100 text-purple-800';
+                    badgeClass = 'bg-[#F3F1EF] text-[#202124] border border-[#E8E4E1]';
                 } else if (profile.role === 'volunteer') {
                     const status = currentVolunteerProfile?.application_status || 'PENDING';
                     badgeText = status === 'APPROVED' ? 'Peer Volunteer' : `Volunteer (${status})`;
-                    badgeClass = status === 'APPROVED' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800';
+                    badgeClass = status === 'APPROVED' ? 'bg-[#FFE9DC] text-[#B83D08]' : 'bg-amber-100 text-amber-800';
                 }
 
                 rolePill.textContent = badgeText;

@@ -33,7 +33,7 @@ window.TempoAdmin = (function() {
                 document.querySelectorAll('.admin-ticket-filter').forEach(b => {
                     b.className = "admin-ticket-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition";
                 });
-                e.currentTarget.className = "admin-ticket-filter px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700 text-white transition";
+                e.currentTarget.className = "admin-ticket-filter px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FF6B2C] text-white transition";
                 currentFilter = e.currentTarget.dataset.filter;
                 renderTickets();
             });
@@ -108,7 +108,7 @@ window.TempoAdmin = (function() {
             const statusClass = t.status === 'Awaiting Advisor' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800';
 
             return `
-                <div class="p-4 border-b border-gray-100 hover:bg-stone-50 cursor-pointer transition ${isSelected ? 'bg-emerald-50/50' : ''}" 
+                <div class="p-4 border-b border-gray-100 hover:bg-stone-50 cursor-pointer transition ${isSelected ? 'bg-[#FFE9DC]/50' : ''}" 
                     onclick="window.TempoAdmin.selectTicket('${t.id}')">
                     <div class="flex items-center justify-between mb-1">
                         <span class="text-xs font-bold text-gray-900">${t.studentName}</span>
@@ -144,9 +144,9 @@ window.TempoAdmin = (function() {
         // Render Conversation
         const threadEl = document.getElementById('admin-detail-messages-thread');
         threadEl.innerHTML = ticket.messages.map(m => `
-            <div class="p-3.5 rounded-xl ${m.sender === 'student' ? 'bg-stone-100 text-gray-800 mr-8' : 'bg-emerald-700 text-white ml-8'}">
+            <div class="p-3.5 rounded-xl ${m.sender === 'student' ? 'bg-stone-100 text-gray-800 mr-8' : 'bg-[#FFF9F4] border border-[#FFD2BA] text-gray-900 ml-8'}">
                 <div class="flex items-center justify-between text-[11px] mb-1 opacity-80">
-                    <span class="font-bold">${m.senderName}</span>
+                    <span class="font-bold ${m.sender === 'student' ? 'text-gray-700' : 'text-[#FF6B2C]'}">${m.senderName}</span>
                     <span>${m.timestamp}</span>
                 </div>
                 <p class="text-xs leading-relaxed whitespace-pre-line">${m.text}</p>
@@ -205,7 +205,7 @@ window.TempoAdmin = (function() {
             <div class="p-4 bg-white border border-gray-200 rounded-xl flex items-center justify-between">
                 <div class="space-y-1">
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">${tip.category}</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded bg-[#FFE9DC] text-[#B83D08] border border-[#FFD2BA]">${tip.category}</span>
                         <span class="text-xs text-gray-400 font-medium">${tip.readMinutes} min read</span>
                     </div>
                     <h4 class="text-sm font-bold text-gray-900">${tip.title}</h4>
@@ -213,7 +213,7 @@ window.TempoAdmin = (function() {
                 </div>
                 <div class="flex items-center space-x-2">
                     <button onclick="window.TempoAdmin.toggleTipPublish('${tip.id}')" 
-                        class="px-3 py-1.5 rounded-lg text-xs font-medium border ${tip.isPublished ? 'border-emerald-600 text-emerald-700 bg-emerald-50' : 'border-gray-300 text-gray-600'}">
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium border ${tip.isPublished ? 'border-[#FF6B2C] text-[#FF6B2C] bg-[#FFE9DC]/50' : 'border-gray-300 text-gray-600'}">
                         ${tip.isPublished ? 'Published' : 'Draft'}
                     </button>
                 </div>
@@ -371,7 +371,7 @@ window.TempoAdmin = (function() {
             if (app.applicationStatus === 'SUSPENDED') statusBadgeClass = 'bg-purple-100 text-purple-800';
 
             return `
-                <div class="tempo-card p-5 space-y-4 border-gray-200 hover:border-emerald-300 transition">
+                <div class="tempo-card p-5 space-y-4 border-gray-200 hover:border-[#FF6B2C] transition">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
                         <div>
                             <div class="flex items-center space-x-2">
@@ -481,7 +481,7 @@ window.TempoAdmin = (function() {
             btn.className = "admin-vol-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition";
         });
         const activeBtn = document.getElementById(`btn-vol-filter-${status.toLowerCase()}`);
-        if (activeBtn) activeBtn.className = "admin-vol-filter px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-700 text-white transition";
+        if (activeBtn) activeBtn.className = "admin-vol-filter px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#FF6B2C] text-white transition";
         renderVolunteerApplications();
     }
 
@@ -494,7 +494,7 @@ window.TempoAdmin = (function() {
         });
 
         const activeBtn = document.getElementById(`btn-admin-tab-${tab}`);
-        if (activeBtn) activeBtn.className = "admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white transition shadow-sm";
+        if (activeBtn) activeBtn.className = "admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-[#FF6B2C] text-white transition shadow-sm";
 
         const activePane = document.getElementById(`admin-tab-${tab}-pane`);
         if (activePane) activePane.classList.remove('hidden');

@@ -114,7 +114,7 @@ window.TempoRoutine = (function() {
             container.innerHTML = `
                 <div class="p-8 text-center bg-white border border-gray-200 rounded-2xl space-y-3">
                     <p class="text-sm text-gray-500">You don't have any scheduled habits yet.</p>
-                    <button onclick="window.TempoRoutine.openAddHabitModal()" class="btn-sage px-4 py-2 rounded-xl text-xs font-semibold">
+                    <button onclick="window.TempoRoutine.openAddHabitModal()" class="btn-primary px-4 py-2 rounded-xl text-xs font-semibold">
                         + Add Your First Gentle Habit
                     </button>
                 </div>
@@ -134,7 +134,7 @@ window.TempoRoutine = (function() {
                 <div class="tempo-card p-4 md:p-5 transition-all duration-200 ${
                     isHabitRestDay 
                         ? 'bg-blue-50/40 border-blue-200' 
-                        : (isCompleted ? 'bg-emerald-50/60 border-emerald-300 shadow-sm' : 'bg-white border-gray-200 hover:border-gray-300')
+                        : (isCompleted ? 'bg-[#FFF9F4] border-[#FFD2BA] shadow-sm' : 'bg-white border-[#E8E4E1] hover:border-stone-300')
                 }">
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex items-start space-x-3.5 flex-1">
@@ -142,7 +142,7 @@ window.TempoRoutine = (function() {
                             <div class="pt-0.5">
                                 <input type="checkbox" id="chk-${habit.id}" ${isCompleted ? 'checked' : ''} ${isHabitRestDay ? 'disabled' : ''}
                                     onchange="window.TempoRoutine.toggleHabitDone('${habit.id}')"
-                                    class="w-5 h-5 text-emerald-700 rounded-lg border-gray-300 focus:ring-emerald-500 cursor-pointer disabled:opacity-40 transition">
+                                    class="w-5 h-5 text-[#FF6B2C] rounded-lg border-gray-300 focus:ring-[#FF6B2C] cursor-pointer accent-[#FF6B2C] disabled:opacity-40 transition">
                             </div>
 
                             <div class="space-y-1 flex-1">
@@ -152,7 +152,7 @@ window.TempoRoutine = (function() {
                                     </h4>
                                     ${categoryBadge}
                                     ${timeBadge}
-                                    ${isCompleted ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">✓ Cared for today</span>' : ''}
+                                    ${isCompleted ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">✓ Cared for today</span>' : ''}
                                     ${isHabitRestDay ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">Resting</span>' : ''}
                                 </div>
                                 <p class="text-xs text-gray-500 leading-relaxed max-w-xl">
@@ -185,7 +185,7 @@ window.TempoRoutine = (function() {
             const dayName = dayLabels[idx % dayLabels.length];
             let dotColor = 'bg-stone-200 text-stone-400';
             if (val === true) {
-                dotColor = 'bg-emerald-600 text-white font-bold';
+                dotColor = 'bg-[#FF6B2C] text-white font-bold';
             } else if (val === 'rest') {
                 dotColor = 'bg-blue-300 text-blue-800';
             }
@@ -217,7 +217,7 @@ window.TempoRoutine = (function() {
             barEl.style.width = isHabitRestDay ? '100%' : `${percent}%`;
             barEl.className = isHabitRestDay 
                 ? 'h-2 rounded-full transition-all duration-500 bg-blue-500' 
-                : 'h-2 rounded-full transition-all duration-500 bg-emerald-600';
+                : 'h-2 rounded-full transition-all duration-500 bg-[#FF6B2C]';
         }
 
         if (messageEl) {
@@ -287,7 +287,7 @@ window.TempoRoutine = (function() {
             case 'Physical':
                 return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800">Physical</span>';
             case 'Mental / Calm':
-                return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">Calm Reset</span>';
+                return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#FFE9DC] text-[#B83D08]">Calm Reset</span>';
             case 'Focus':
                 return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-800">Focus</span>';
             case 'Recovery':
@@ -313,7 +313,7 @@ window.TempoRoutine = (function() {
 
         if (presetsList) {
             presetsList.innerHTML = presets.map((p, idx) => `
-                <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between hover:border-emerald-300 transition">
+                <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between hover:border-[#FF6B2C] transition">
                     <div class="space-y-0.5 pr-2">
                         <div class="flex items-center space-x-2">
                             <h5 class="text-xs font-bold text-gray-900">${p.title}</h5>
@@ -322,7 +322,7 @@ window.TempoRoutine = (function() {
                         <p class="text-[11px] text-gray-500">${p.whyItHelps}</p>
                     </div>
                     <button type="button" onclick="window.TempoRoutine.addPresetHabit(${idx})" 
-                        class="px-2.5 py-1 bg-white border border-gray-300 hover:border-emerald-600 hover:text-emerald-700 text-gray-700 rounded-lg text-xs font-semibold shrink-0 transition">
+                        class="px-2.5 py-1 bg-white border border-gray-300 hover:border-[#FF6B2C] hover:text-[#FF6B2C] text-gray-700 rounded-lg text-xs font-semibold shrink-0 transition">
                         + Add
                     </button>
                 </div>
@@ -426,7 +426,7 @@ window.TempoRoutine = (function() {
                 <div class="flex items-center space-x-2">
                     <input type="checkbox" ${h.isDone && !isHabitRestDay ? 'checked' : ''} ${isHabitRestDay ? 'disabled' : ''}
                         onchange="window.TempoRoutine.toggleHabitDone('${h.id}')"
-                        class="w-4 h-4 text-emerald-700 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer">
+                        class="w-4 h-4 text-[#FF6B2C] rounded border-gray-300 focus:ring-[#FF6B2C] accent-[#FF6B2C] cursor-pointer">
                     <span class="${h.isDone && !isHabitRestDay ? 'line-through text-gray-400' : 'text-gray-800 font-medium'} truncate max-w-[180px]">
                         ${h.title}
                     </span>
@@ -451,11 +451,11 @@ window.TempoRoutine = (function() {
         const html = activeList.map(block => {
             const tagBadge = getTagBadge(block.tag);
             return `
-                <div class="p-3.5 bg-white border border-gray-200 rounded-xl flex items-center justify-between transition hover:border-gray-300">
+                <div class="p-3.5 bg-white border border-[#E8E4E1] rounded-xl flex items-center justify-between transition hover:border-stone-300">
                     <div class="flex items-center space-x-3.5">
                         <input type="checkbox" ${block.isDone ? 'checked' : ''} 
                             onchange="window.TempoRoutine.toggleBlockDone('${block.id}')"
-                            class="w-5 h-5 text-emerald-700 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer">
+                            class="w-5 h-5 text-[#FF6B2C] rounded border-gray-300 focus:ring-[#FF6B2C] accent-[#FF6B2C] cursor-pointer">
                         <div>
                             <span class="text-xs font-semibold text-gray-500 block">${block.time}</span>
                             <h4 class="text-sm font-medium ${block.isDone ? 'line-through text-gray-400' : 'text-gray-900'}">${block.title}</h4>
@@ -482,7 +482,7 @@ window.TempoRoutine = (function() {
 
     function getTagBadge(tag) {
         if (tag === 'Focus') {
-            return `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Focus Block</span>`;
+            return `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#FFE9DC] text-[#B83D08]">Focus Block</span>`;
         } else if (tag === 'Recovery') {
             return `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Recharge</span>`;
         } else {
@@ -513,7 +513,7 @@ window.TempoRoutine = (function() {
                 time: focusWindow === 'morning' ? '09:30 - 10:30 AM' : '02:00 - 03:00 PM',
                 title: 'Primary Priority: Deep Focus Window',
                 tag: 'Focus',
-                tagColor: 'sage',
+                tagColor: 'orange',
                 isDone: false,
                 isFlexible: false
             },
@@ -531,7 +531,7 @@ window.TempoRoutine = (function() {
                 time: focusWindow === 'morning' ? '03:30 - 04:30 PM' : '07:30 - 08:30 PM',
                 title: 'Secondary Priority: Gentle Review & Organization',
                 tag: 'Focus',
-                tagColor: 'sage',
+                tagColor: 'orange',
                 isDone: false,
                 isFlexible: false
             },
@@ -561,7 +561,7 @@ window.TempoRoutine = (function() {
             time: time || 'Flexible',
             title: title,
             tag: 'Focus',
-            tagColor: 'sage',
+            tagColor: 'orange',
             isDone: false,
             isFlexible: true
         });

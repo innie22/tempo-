@@ -1,30 +1,44 @@
 /* ==========================================================================
-   TEMPO DESIGN SYSTEM & CUSTOM UTILITIES
-   Tone: Calm, Grounded, Reassuring, Accessible
+   TEMPO DESIGN SYSTEM & BRAND TOKENS
+   Tone: Warm, Grounded, Reassuring, Accessible
    ========================================================================== */
 
 :root {
-    --brand-sage: #2D6A4F;
-    --brand-sage-hover: #22533C;
-    --brand-sage-tint: #E8F5E9;
-    --brand-sage-border: #C8E6C9;
+    /* Primary Brand Palette */
+    --tempo-orange: #FF6B2C;
+    --tempo-orange-hover: #E8591C;
+    --tempo-ink: #202124;
+    --tempo-cream: #FFF9F4;
+    --tempo-orange-soft: #FFE9DC;
+    --tempo-orange-text: #B83D08;
+    --tempo-gray: #F3F1EF;
+    --tempo-muted: #6F6B68;
+    --tempo-white: #FFFFFF;
+    --tempo-border: #E8E4E1;
+    --tempo-danger: #D92D20;
 
-    --brand-slate: #3D5A80;
-    --brand-slate-bg: #EEF4F8;
-    --brand-slate-border: #D0E1ED;
+    /* Legacy compatibility aliases */
+    --brand-sage: var(--tempo-orange);
+    --brand-sage-hover: var(--tempo-orange-hover);
+    --brand-sage-tint: var(--tempo-orange-soft);
+    --brand-sage-border: #FFD2BA;
 
-    --accent-amber: #D97706;
-    --accent-amber-bg: #FEF3C7;
-    --accent-amber-border: #FDE68A;
+    --brand-slate: var(--tempo-ink);
+    --brand-slate-bg: var(--tempo-gray);
+    --brand-slate-border: var(--tempo-border);
 
-    --bg-app: #FBFBFA;
-    --bg-surface: #FFFFFF;
-    --bg-subtle: #F4F5F2;
+    --accent-amber: var(--tempo-orange);
+    --accent-amber-bg: var(--tempo-orange-soft);
+    --accent-amber-border: #FFD2BA;
 
-    --text-primary: #1F2937;
-    --text-secondary: #4B5563;
-    --text-muted: #9CA3AF;
-    --border-color: #E5E7EB;
+    --bg-app: var(--tempo-cream);
+    --bg-surface: var(--tempo-white);
+    --bg-subtle: var(--tempo-gray);
+
+    --text-primary: var(--tempo-ink);
+    --text-secondary: var(--tempo-muted);
+    --text-muted: #8E8A85;
+    --border-color: var(--tempo-border);
 
     --radius-sm: 8px;
     --radius-md: 12px;
@@ -34,15 +48,16 @@
 }
 
 body {
-    background-color: var(--bg-app);
-    color: var(--text-primary);
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--tempo-cream);
+    color: var(--tempo-ink);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: var(--tempo-ink);
     letter-spacing: -0.02em;
 }
 
@@ -55,50 +70,79 @@ h1, h2, h3, h4, h5, h6, .font-heading {
     background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: #D1D5DB;
+    background: #D9D4D0;
     border-radius: var(--radius-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #9CA3AF;
+    background: var(--tempo-muted);
 }
 
 /* Card & Surface Styling */
 .tempo-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-color);
+    background: var(--tempo-white);
+    border: 1px solid var(--tempo-border);
     border-radius: var(--radius-lg);
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 12px -2px rgba(32, 33, 36, 0.04);
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .tempo-card:hover {
-    border-color: #D1D5DB;
+    border-color: #D3CDC8;
 }
 
 /* Interactive Buttons */
-.btn-sage {
-    background-color: var(--brand-sage);
+.btn-primary, .btn-sage {
+    background-color: var(--tempo-orange);
     color: #FFFFFF;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.btn-sage:hover {
-    background-color: var(--brand-sage-hover);
+.btn-primary:hover, .btn-sage:hover {
+    background-color: var(--tempo-orange-hover);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(45, 106, 79, 0.2);
+    box-shadow: 0 4px 12px rgba(255, 107, 44, 0.22);
 }
-.btn-sage:active {
+.btn-primary:active, .btn-sage:active {
     transform: translateY(0);
 }
 
+.btn-secondary {
+    background-color: var(--tempo-white);
+    border: 1px solid var(--tempo-border);
+    color: var(--tempo-ink);
+    transition: all 0.2s ease;
+}
+.btn-secondary:hover {
+    background-color: var(--tempo-gray);
+    color: var(--tempo-ink);
+}
+
+.btn-soft {
+    background-color: var(--tempo-orange-soft);
+    color: var(--tempo-orange-text);
+    transition: all 0.2s ease;
+}
+.btn-soft:hover {
+    background-color: #FFDCC8;
+}
+
+.btn-danger {
+    background-color: var(--tempo-danger);
+    color: #FFFFFF;
+    transition: all 0.2s ease;
+}
+.btn-danger:hover {
+    background-color: #B91C1C;
+}
+
 .btn-urgent {
-    background-color: var(--accent-amber);
+    background-color: var(--tempo-orange);
     color: #FFFFFF;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .btn-urgent:hover {
-    background-color: #B45309;
+    background-color: var(--tempo-orange-hover);
     transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+    box-shadow: 0 4px 14px rgba(255, 107, 44, 0.25);
 }
 
 /* Breathing Circle Animation (Box Breathing 4-4-4-4) */
@@ -137,8 +181,8 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 
 /* Subtle Glow for ONE Next Action */
 .action-glow {
-    box-shadow: 0 8px 30px -4px rgba(45, 106, 79, 0.12), 0 2px 8px -2px rgba(45, 106, 79, 0.08);
-    border: 2px solid #A7D7C5;
+    box-shadow: 0 8px 30px -4px rgba(255, 107, 44, 0.12), 0 2px 8px -2px rgba(255, 107, 44, 0.08);
+    border: 2px solid #FFD2BA;
 }
 
 /* Tactile Range Sliders for Stress Assessment */
@@ -147,7 +191,7 @@ input[type="range"] {
     appearance: none;
     width: 100%;
     height: 8px;
-    background: #E5E7EB;
+    background: #E8E4E1;
     border-radius: var(--radius-pill);
     outline: none;
 }
@@ -157,22 +201,22 @@ input[type="range"]::-webkit-slider-thumb {
     appearance: none;
     width: 22px;
     height: 22px;
-    background: var(--brand-sage);
+    background: var(--tempo-orange);
     border: 3px solid #FFFFFF;
     border-radius: 50%;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
     transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.2);
-    background: var(--brand-sage-hover);
+    background: var(--tempo-orange-hover);
 }
 
 /* Modal Overlay Animation */
 .modal-backdrop {
-    background-color: rgba(17, 24, 39, 0.45);
+    background-color: rgba(32, 33, 36, 0.55);
     backdrop-filter: blur(4px);
     animation: fadeIn 0.2s ease-out forwards;
 }
@@ -180,6 +224,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+/* Form Input Focus Overrides */
+input:focus, textarea:focus, select:focus {
+    border-color: var(--tempo-orange) !important;
 }
 
 /* Confetti Particles Container */
@@ -192,3 +241,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
     pointer-events: none;
     z-index: 9999;
 }
+
+/* Header & Brand Navbar Styling */
+header,
+header nav,
+#brand-logo-container {
+    background-color: #FFFFFF !important;
+}
+

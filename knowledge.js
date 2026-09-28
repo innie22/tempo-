@@ -21,7 +21,7 @@ window.TempoKnowledge = (function() {
                 document.querySelectorAll('.hub-filter-pill').forEach(p => {
                     p.className = "hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition";
                 });
-                e.currentTarget.className = "hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-700 text-white cursor-pointer transition";
+                e.currentTarget.className = "hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#FF6B2C] text-white cursor-pointer transition";
                 currentCategory = e.currentTarget.dataset.category;
                 renderArticles();
             });
@@ -61,7 +61,7 @@ window.TempoKnowledge = (function() {
             grid.innerHTML = `
                 <div class="col-span-full py-12 text-center text-gray-500">
                     <p class="text-sm">No guides found matching "${searchQuery}".</p>
-                    <button onclick="document.getElementById('hub-search-input').value=''; window.TempoKnowledge.init();" class="mt-2 text-xs text-emerald-700 underline font-medium">Clear search filter</button>
+                    <button onclick="document.getElementById('hub-search-input').value=''; window.TempoKnowledge.init();" class="mt-2 text-xs text-[#FF6B2C] underline font-medium">Clear search filter</button>
                 </div>
             `;
             return;
@@ -71,19 +71,19 @@ window.TempoKnowledge = (function() {
             <div class="tempo-card p-6 flex flex-col justify-between hover:shadow-md cursor-pointer transition" onclick="window.TempoKnowledge.openArticle('${a.id}')">
                 <div class="space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        <span class="text-xs font-semibold text-[#B83D08] bg-[#FFE9DC] px-2.5 py-0.5 rounded-full border border-[#FFD2BA]">
                             ${a.categoryLabel}
                         </span>
                         <span class="text-xs text-gray-400 font-medium">${a.readTime}</span>
                     </div>
-                    <h3 class="text-base font-bold text-gray-900 group-hover:text-emerald-700 leading-snug">
+                    <h3 class="text-base font-bold text-[#202124] hover:text-[#FF6B2C] leading-snug">
                         ${a.title}
                     </h3>
-                    <p class="text-xs text-gray-600 line-clamp-3 leading-relaxed">
+                    <p class="text-xs text-[#6F6B68] line-clamp-3 leading-relaxed">
                         ${a.summary}
                     </p>
                 </div>
-                <div class="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-xs font-medium text-emerald-700">
+                <div class="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between text-xs font-semibold text-[#FF6B2C]">
                     <span>Read Guide & Action Steps</span>
                     <span>→</span>
                 </div>
@@ -105,13 +105,13 @@ window.TempoKnowledge = (function() {
 
         // Key Takeaways
         const takeawaysList = document.getElementById('article-modal-takeaways');
-        takeawaysList.innerHTML = article.keyTakeaways.map(t => `<li class="flex items-start"><span class="text-emerald-700 mr-2 font-bold">•</span><span>${t}</span></li>`).join('');
+        takeawaysList.innerHTML = article.keyTakeaways.map(t => `<li class="flex items-start"><span class="text-[#FF6B2C] mr-2 font-bold">•</span><span>${t}</span></li>`).join('');
 
         // Action Steps
         const stepsList = document.getElementById('article-modal-steps');
         stepsList.innerHTML = article.steps.map((s, idx) => `
             <div class="flex items-start space-x-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
-                <span class="w-6 h-6 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                <span class="w-6 h-6 rounded-full bg-[#FF6B2C] text-white text-xs font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
                 <span class="text-xs text-gray-800 font-medium pt-0.5">${s}</span>
             </div>
         `).join('');

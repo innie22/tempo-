@@ -89,15 +89,15 @@ window.TempoVolunteer = (function() {
                 `;
             } else {
                 queueContainer.innerHTML = availableRequests.map(r => `
-                    <div class="p-4 bg-white border border-gray-200 rounded-xl space-y-2 hover:border-emerald-300 transition">
+                    <div class="p-4 bg-white border border-gray-200 rounded-xl space-y-2 hover:border-[#FF6B2C] transition">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">${r.category}</span>
+                            <span class="text-xs font-semibold text-[#B83D08] bg-[#FFE9DC] px-2 py-0.5 rounded border border-[#FFD2BA]">${r.category}</span>
                             <span class="text-[10px] text-gray-400 font-mono">Urgency: ${r.urgency}</span>
                         </div>
                         <h5 class="text-sm font-bold text-gray-900">${r.subject}</h5>
                         <div class="flex justify-end pt-2">
                             <button onclick="window.TempoVolunteer.claimRequest('${r.id}')" 
-                                class="btn-sage px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm">
+                                class="btn-primary px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm">
                                 Accept & Respond
                             </button>
                         </div>
@@ -115,7 +115,7 @@ window.TempoVolunteer = (function() {
                 `;
             } else {
                 assignedContainer.innerHTML = assignedRequests.map(r => `
-                    <div class="p-4 bg-white border border-emerald-200 rounded-xl space-y-2">
+                    <div class="p-4 bg-white border border-[#FFD2BA] rounded-xl space-y-2">
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-bold text-gray-900">${r.subject}</span>
                             <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800">${r.status}</span>

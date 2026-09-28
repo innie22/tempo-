@@ -11,7 +11,7 @@ window.TEMPO_DATA = {
             time: '10:00 - 10:45 AM',
             title: 'Deep Focus: Marketing Report Intro & Outline',
             tag: 'Focus',
-            tagColor: 'sage',
+            tagColor: 'orange',
             isDone: true,
             isFlexible: false
         },
@@ -29,7 +29,7 @@ window.TEMPO_DATA = {
             time: '03:00 - 03:45 PM',
             title: 'Gentle Focus: Research Presentation Slide Titles',
             tag: 'Focus',
-            tagColor: 'sage',
+            tagColor: 'orange',
             isDone: false,
             isFlexible: false
         },

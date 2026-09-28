@@ -166,17 +166,17 @@ window.TempoEmergencySupport = (function() {
             // Activity 1: Notice your surroundings
             container.innerHTML = `
                 <div class="space-y-4">
-                    <div class="p-5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
-                        <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Grounding 1 of 3 • Sensory Anchoring</span>
+                    <div class="p-5 bg-[#FFF9F4] border border-[#FFD2BA] rounded-2xl space-y-3">
+                        <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Grounding 1 of 3 • Sensory Anchoring</span>
                         <h4 class="font-heading text-lg font-bold text-gray-900">Notice Your Surroundings</h4>
                         <p class="text-sm text-gray-700 leading-relaxed">
                             "Put both feet flat on the floor if you can. Feel the solid ground underneath you.<br>
                             Look around the room slowly, and name 3 things you can see right now."
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
-                            <input type="text" placeholder="1. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                            <input type="text" placeholder="2. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500">
-                            <input type="text" placeholder="3. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                            <input type="text" placeholder="1. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]">
+                            <input type="text" placeholder="2. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]">
+                            <input type="text" placeholder="3. Item I see..." class="p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]">
                         </div>
                     </div>
 
@@ -184,7 +184,7 @@ window.TempoEmergencySupport = (function() {
                         <button onclick="window.TempoEmergencySupport.nextGrounding()" class="text-xs text-gray-500 hover:text-gray-800 font-medium underline">
                             Try another grounding exercise →
                         </button>
-                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-sage px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-primary px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
                             I completed this (Next step)
                         </button>
                     </div>
@@ -195,7 +195,7 @@ window.TempoEmergencySupport = (function() {
             container.innerHTML = `
                 <div class="space-y-5 text-center">
                     <div class="space-y-1">
-                        <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Grounding 2 of 3 • Paced Respiration</span>
+                        <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Grounding 2 of 3 • Paced Respiration</span>
                         <h4 class="font-heading text-lg font-bold text-gray-900">Slow Down Your Breathing</h4>
                         <p class="text-xs text-gray-600 max-w-md mx-auto">
                             Follow the expanding circle. Inhale gently through your nose, pause, and exhale slowly.
@@ -203,9 +203,9 @@ window.TempoEmergencySupport = (function() {
                     </div>
 
                     <div class="h-44 flex items-center justify-center">
-                        <div id="grounding-breathing-circle" class="w-28 h-28 rounded-full bg-emerald-700/20 border-2 border-emerald-600 flex flex-col items-center justify-center transition-all duration-1000">
-                            <span id="grounding-breath-phase" class="text-xs font-semibold text-emerald-900">Inhale</span>
-                            <span id="grounding-breath-count" class="text-xs font-bold text-emerald-700 mt-0.5">4s</span>
+                        <div id="grounding-breathing-circle" class="w-28 h-28 rounded-full bg-[#FFE9DC]/60 border-2 border-[#FF6B2C]/50 flex flex-col items-center justify-center transition-all duration-1000">
+                            <span id="grounding-breath-phase" class="text-xs font-semibold text-[#202124]">Inhale</span>
+                            <span id="grounding-breath-count" class="text-xs font-bold text-[#FF6B2C] mt-0.5">4s</span>
                         </div>
                     </div>
 
@@ -213,7 +213,7 @@ window.TempoEmergencySupport = (function() {
                         <button onclick="window.TempoEmergencySupport.nextGrounding()" class="text-xs text-gray-500 hover:text-gray-800 font-medium underline">
                             Try another grounding exercise →
                         </button>
-                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-sage px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-primary px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm">
                             I feel ready to check in
                         </button>
                     </div>
@@ -244,7 +244,7 @@ window.TempoEmergencySupport = (function() {
                         <button onclick="window.TempoEmergencySupport.openHumanDrawer()" class="p-3 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-semibold text-center transition">
                             📞 Immediate Human Help
                         </button>
-                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-sage p-3 rounded-xl text-xs font-bold text-center transition">
+                        <button onclick="window.TempoEmergencySupport.goToStep('safety_checkin')" class="btn-primary p-3 rounded-xl text-xs font-bold text-center transition">
                             Check In on How I Feel
                         </button>
                     </div>
