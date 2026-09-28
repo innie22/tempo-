@@ -72,7 +72,8 @@ window.TempoApp = (function() {
             navigateTo('admin');
             showToast("Switched to Advisor View. You can now triage student tickets and publish tips.");
         } else {
-            if (label) label.textContent = 'Student: Alex Rivera';
+            const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
+            if (label) label.textContent = profile?.full_name ? `Student: ${profile.full_name}` : 'Student View';
             if (adminTab) adminTab.classList.add('hidden');
             if (roleBanner) roleBanner.classList.add('hidden');
             navigateTo('today');

@@ -289,8 +289,8 @@ Sincerely,
     supportTickets: [
         {
             id: 'TCK-2041',
-            studentName: 'Alex Rivera',
-            studentEmail: 'a.rivera@university.edu',
+            studentName: 'Sam Chen',
+            studentEmail: 's.chen@university.edu',
             category: 'Deadline Cluster & Triage',
             urgency: 'High (Struggling today)',
             status: 'Awaiting Advisor',
@@ -300,7 +300,7 @@ Sincerely,
                 {
                     id: 'msg-1',
                     sender: 'student',
-                    senderName: 'Alex Rivera',
+                    senderName: 'Sam Chen',
                     text: 'Hello. I have a marketing report due tomorrow, slides due Friday, and an exam next Monday. I had a severe migraine yesterday and lost 8 hours of study time. I don’t know whether to ask for an extension or try to pull an all-nighter. I am feeling really anxious and paralyzed.',
                     timestamp: '25m ago'
                 }

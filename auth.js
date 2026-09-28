@@ -11,6 +11,7 @@ window.TempoAuth = (function() {
 
     async function init() {
         bindEvents();
+        updateUserGreeting(null);
         // Initialize Supabase Client
         if (window.TempoSupabase) {
             await window.TempoSupabase.init();
@@ -129,7 +130,7 @@ window.TempoAuth = (function() {
                 currentProfile = {
                     id: userId,
                     email: currentUser.email,
-                    full_name: currentUser.user_metadata?.full_name || 'Tempo User',
+                    full_name: currentUser.user_metadata?.full_name || '',
                     role: currentUser.user_metadata?.role || 'student'
                 };
             } else {
@@ -160,7 +161,58 @@ window.TempoAuth = (function() {
         }
     }
 
+    /**
+     * Extracts the appropriate greeting name from a full name.
+     * Supports Vietnamese naming order (given name last) and Western naming order (given name first).
+     * e.g. "Đặng Nguyễn Yến Nhi" -> "Nhi"
+     * e.g. "John Smith" -> "John"
+     */
+    function extractGreetingName(fullName) {
+        if (!fullName || typeof fullName !== 'string') return null;
+        const trimmed = fullName.trim();
+        if (!trimmed) return null;
+        const parts = trimmed.split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+
+        // Check for Vietnamese diacritics or common Vietnamese family names
+        const hasVietnameseDiacritics = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđĐ]/i.test(trimmed);
+        const commonVnSurnames = /^(nguyen|tran|le|pham|hoang|huynh|phan|vu|vo|dang|bui|do|ho|ngo|duong|ly|dinh|dao|doan|luong|mai|truong|ha|trinh)/i;
+        const startsWithVnSurname = commonVnSurnames.test(parts[0]);
+
+        if (hasVietnameseDiacritics || startsWithVnSurname) {
+            // In Vietnamese naming order, informal address uses the given name (last token)
+            return parts[parts.length - 1];
+        }
+
+        // Standard Western convention: given name is first token
+        return parts[0];
+    }
+
+    /**
+     * Updates the home screen heading with a personalized greeting if authenticated,
+     * or a neutral greeting if unauthenticated / profile name unavailable.
+     */
+    function updateUserGreeting(profile) {
+        const greetingEl = document.getElementById('home-greeting-heading');
+        if (!greetingEl) return;
+
+        if (!profile) {
+            greetingEl.textContent = 'Hi there 👋';
+            return;
+        }
+
+        const greetingName = extractGreetingName(profile.full_name);
+        if (greetingName) {
+            greetingEl.textContent = `Hi, ${greetingName} 👋`;
+        } else {
+            greetingEl.textContent = 'Hi there 👋';
+        }
+    }
+
     function renderHeaderUI(profile) {
+        updateUserGreeting(profile);
+
         const unauthBox = document.getElementById('header-unauthenticated-box');
         const authBox = document.getElementById('header-authenticated-box');
         const nameLabel = document.getElementById('header-user-name');
@@ -506,6 +558,8 @@ window.TempoAuth = (function() {
         openRoleSelectModal,
         openSignInModal,
         handleSignOut,
-        loadUserProfile
+        loadUserProfile,
+        extractGreetingName,
+        updateUserGreeting
     };
 })();

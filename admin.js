@@ -9,19 +9,15 @@ window.TempoAdmin = (function() {
     let tips = [];
 
     // Pre-written Empathetic Advisor Templates
-    const templates = {
-        extension: `Hi Alex, thank you for reaching out. First, please know that taking a pause to protect your health is the right decision. 
-
-I strongly encourage you to send an extension request for the Marketing Report right now. Most professors are very accommodating if you write before the deadline. You can use the template from our Knowledge Hub (under 'Asking for Help'). 
-
-Propose a concrete alternative time, such as Sunday at 5:00 PM. Let me know if you would like me to review your email draft before you send it.`,
-        deescalate: `Hi Alex, take a slow breath. When three deadlines converge, your nervous system is in full emergency mode. 
-
-Tonight, let's focus exclusively on ONE task: the 9:00 AM report. Give yourself full permission to ignore the Friday slides until tomorrow afternoon. Getting 6 hours of sleep tonight will make you twice as productive tomorrow. I am here if you need more support.`,
-        dropin: `Hi Alex, I can see how much pressure you have been carrying this week. 
-
-I have an open drop-in wellbeing slot tomorrow at 11:30 AM (virtual or in Student Center 304). Would you like me to hold that for you? We can sit down together and map out a gentle plan for the rest of your semester.`
-    };
+    function getTemplate(tplKey, studentName) {
+        const name = studentName || 'there';
+        const templates = {
+            extension: `Hi ${name}, thank you for reaching out. First, please know that taking a pause to protect your health is the right decision. \n\nI strongly encourage you to send an extension request for the Marketing Report right now. Most professors are very accommodating if you write before the deadline. You can use the template from our Knowledge Hub (under 'Asking for Help'). \n\nPropose a concrete alternative time, such as Sunday at 5:00 PM. Let me know if you would like me to review your email draft before you send it.`,
+            deescalate: `Hi ${name}, take a slow breath. When three deadlines converge, your nervous system is in full emergency mode. \n\nTonight, let's focus exclusively on ONE task: the 9:00 AM report. Give yourself full permission to ignore the Friday slides until tomorrow afternoon. Getting 6 hours of sleep tonight will make you twice as productive tomorrow. I am here if you need more support.`,
+            dropin: `Hi ${name}, I can see how much pressure you have been carrying this week. \n\nI have an open drop-in wellbeing slot tomorrow at 11:30 AM (virtual or in Student Center 304). Would you like me to hold that for you? We can sit down together and map out a gentle plan for the rest of your semester.`
+        };
+        return templates[tplKey] || '';
+    }
 
     function init() {
         tips = [...(window.TEMPO_DATA.tips || [])];
@@ -48,8 +44,20 @@ I have an open drop-in wellbeing slot tomorrow at 11:30 AM (virtual or in Studen
             btn.addEventListener('click', (e) => {
                 const tplKey = e.currentTarget.dataset.template;
                 const replyTextarea = document.getElementById('admin-reply-textarea');
-                if (replyTextarea && templates[tplKey]) {
-                    replyTextarea.value = templates[tplKey];
+                const tickets = window.TempoSupport ? window.TempoSupport.getTickets() : [];
+                const currentTicket = tickets.find(t => t.id === selectedTicketId);
+                let studentGreetingName = 'there';
+                if (currentTicket && currentTicket.studentName) {
+                    const rawName = currentTicket.studentName.replace(/\s*\(You\)$/, '');
+                    if (window.TempoAuth && typeof window.TempoAuth.extractGreetingName === 'function') {
+                        studentGreetingName = window.TempoAuth.extractGreetingName(rawName) || 'there';
+                    } else {
+                        studentGreetingName = rawName.split(' ')[0] || 'there';
+                    }
+                }
+                const templateContent = getTemplate(tplKey, studentGreetingName);
+                if (replyTextarea && templateContent) {
+                    replyTextarea.value = templateContent;
                     window.TempoApp.showToast("Empathetic template inserted into reply box.");
                 }
             });

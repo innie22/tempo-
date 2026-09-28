@@ -52,10 +52,15 @@ window.TempoSupport = (function() {
             return;
         }
 
+        const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
+        const studentDisplayName = profile?.full_name ? `${profile.full_name} (You)` : 'You';
+        const studentEmail = profile?.email || 'student@university.edu';
+        const senderDisplayName = profile?.full_name || 'You';
+
         const newTicket = {
             id: `TCK-${Math.floor(1000 + Math.random() * 9000)}`,
-            studentName: 'Alex Rivera (You)',
-            studentEmail: 'a.rivera@university.edu',
+            studentName: studentDisplayName,
+            studentEmail: studentEmail,
             category: category,
             urgency: urgency,
             status: 'Awaiting Advisor',
@@ -65,7 +70,7 @@ window.TempoSupport = (function() {
                 {
                     id: `msg-${Date.now()}`,
                     sender: 'student',
-                    senderName: 'Alex Rivera',
+                    senderName: senderDisplayName,
                     text: message,
                     timestamp: 'Just now'
                 }
@@ -149,10 +154,12 @@ window.TempoSupport = (function() {
 
         const ticket = tickets.find(t => t.id === ticketId);
         if (ticket) {
+            const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
+            const senderDisplayName = profile?.full_name ? `${profile.full_name} (You)` : 'You';
             ticket.messages.push({
                 id: `msg-${Date.now()}`,
                 sender: 'student',
-                senderName: 'Alex Rivera (You)',
+                senderName: senderDisplayName,
                 text: text,
                 timestamp: 'Just now'
             });

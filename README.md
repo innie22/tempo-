@@ -39,7 +39,7 @@ Unlike conventional productivity tools that exacerbate guilt, or generic meditat
    - Includes 1-click copyable professor extension request email template.
 
 6. **Human Support & Advisor Portal**
-   - Role switcher toggle: `[🎓 Student: Alex Rivera]` $\leftrightarrow$ `[👩‍🏫 Advisor: Dr. Elena Vance]`.
+   - Role switcher toggle: `[🎓 Student View]` $\leftrightarrow$ `[👩‍🏫 Advisor: Dr. Elena Vance]`.
    - Support ticket inquiry queue with 1-click empathetic advisor response templates (*Extension Strategy*, *De-escalation*, *Drop-in Offer*).
    - Micro-tip authoring and publishing system that updates the student feed in real time.
 
