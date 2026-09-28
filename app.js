@@ -20,6 +20,8 @@ window.TempoApp = (function() {
         if (window.TempoSupport) window.TempoSupport.init();
         if (window.TempoAdmin) window.TempoAdmin.init();
         if (window.TempoEmergencySupport) window.TempoEmergencySupport.init();
+        if (window.TempoAuth) window.TempoAuth.init();
+        if (window.TempoVolunteer) window.TempoVolunteer.init();
 
         // Handle hash navigation
         window.addEventListener('hashchange', handleHashChange);
@@ -109,6 +111,14 @@ window.TempoApp = (function() {
                 el.classList.add('text-gray-600', 'hover:text-gray-900');
             }
         });
+
+        // Screen-specific activations
+        if (tabId === 'admin' && window.TempoAdmin) {
+            window.TempoAdmin.loadVolunteerApplications();
+        }
+        if (tabId === 'volunteer-dashboard' && window.TempoVolunteer) {
+            window.TempoVolunteer.render();
+        }
 
         // Scroll top gently
         window.scrollTo({ top: 0, behavior: 'smooth' });

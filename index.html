@@ -73,10 +73,11 @@
                 <a href="#routine" data-nav="routine" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Routine</a>
                 <a href="#hub" data-nav="hub" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Learn & Solve</a>
                 <a href="#support" data-nav="support" class="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition">Support</a>
+                <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
                 <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
             </nav>
 
-            <!-- Actions: Urgent Triage Pill, Helpline & Role Switcher -->
+            <!-- Actions: Urgent Triage Pill, Helpline & Auth State -->
             <div class="flex items-center space-x-2">
                 <!-- Urgent Emergency Support Button -->
                 <button onclick="window.TempoEmergencySupport.openModal()" class="btn-urgent px-3.5 py-2 rounded-xl text-xs font-bold flex items-center shadow-sm">
@@ -90,12 +91,27 @@
                     </svg>
                 </button>
 
-                <!-- Role Switcher -->
-                <button id="btn-toggle-role" class="px-3 py-1.5 border border-gray-200 hover:border-gray-300 rounded-xl text-xs font-medium text-gray-700 bg-stone-50 transition flex items-center space-x-1.5" title="Switch User Role">
-                    <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
-                    <span id="current-role-label">Alex Rivera (Student)</span>
-                    <span class="text-gray-400 text-[10px]">⇄</span>
-                </button>
+                <!-- 1. Unauthenticated Header State -->
+                <div id="header-unauthenticated-box" class="flex items-center space-x-1.5">
+                    <button id="btn-header-signin" class="px-3 py-1.5 rounded-xl border border-gray-200 hover:border-gray-300 text-xs font-medium text-gray-700 bg-white hover:bg-stone-50 transition">
+                        Sign In
+                    </button>
+                    <button id="btn-header-register" class="btn-sage px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">
+                        Register
+                    </button>
+                </div>
+
+                <!-- 2. Authenticated Header State -->
+                <div id="header-authenticated-box" class="hidden flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 px-3 py-1.5 bg-stone-100/90 rounded-xl border border-stone-200">
+                        <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                        <span id="header-user-name" class="text-xs font-bold text-gray-800">User</span>
+                        <span id="header-user-role-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Student</span>
+                    </div>
+                    <button id="btn-header-signout" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-transparent hover:border-rose-100">
+                        Sign Out
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -682,116 +698,275 @@
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
                 <div>
                     <h2 class="font-heading text-2xl font-extrabold text-gray-900">Campus Wellbeing Advisor Portal</h2>
-                    <p class="text-xs text-gray-600">Review student inquiries, deploy empathetic response templates, and publish student tips.</p>
+                    <p class="text-xs text-gray-600">Review student inquiries, vet peer volunteer candidates, and publish student tips.</p>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Advisor: Dr. Elena Vance</span>
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Advisor Desk: Dr. Elena Vance</span>
                 </div>
             </div>
 
-            <!-- Support Inbox Master-Detail -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 tempo-card overflow-hidden">
-                <!-- Left: Ticket Queue List -->
-                <div class="border-r border-gray-200 bg-white">
-                    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
-                        <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-gray-700">Student Inquiries</h3>
-                        <div class="flex space-x-1">
-                            <button data-filter="all" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-700 text-white">All</button>
-                            <button data-filter="awaiting" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-700">Needs Reply</button>
+            <!-- Admin Navigation Tabs -->
+            <div class="flex items-center space-x-2 border-b border-gray-200 pb-2">
+                <button id="btn-admin-tab-tickets" onclick="window.TempoAdmin.switchTab('tickets')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white transition shadow-sm">
+                    💬 Student Inquiries
+                </button>
+                <button id="btn-admin-tab-volunteers" onclick="window.TempoAdmin.switchTab('volunteers')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-semibold bg-stone-100 text-gray-700 hover:bg-stone-200 transition flex items-center space-x-1.5">
+                    <span>🤝 Volunteer Applications</span>
+                    <span id="admin-vol-pending-count" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">2</span>
+                </button>
+                <button id="btn-admin-tab-tips" onclick="window.TempoAdmin.switchTab('tips')" class="admin-main-tab px-4 py-2 rounded-xl text-xs font-semibold bg-stone-100 text-gray-700 hover:bg-stone-200 transition">
+                    💡 Micro-Tips Publisher
+                </button>
+            </div>
+
+            <!-- Tab Pane 1: Student Inquiries (Tickets) -->
+            <div id="admin-tab-tickets-pane" class="admin-tab-pane">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 tempo-card overflow-hidden">
+                    <!-- Left: Ticket Queue List -->
+                    <div class="border-r border-gray-200 bg-white">
+                        <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                            <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-gray-700">Student Inquiries</h3>
+                            <div class="flex space-x-1">
+                                <button data-filter="all" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-semibold bg-emerald-700 text-white">All</button>
+                                <button data-filter="awaiting" class="admin-ticket-filter px-2.5 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-700">Needs Reply</button>
+                            </div>
+                        </div>
+                        <div id="admin-tickets-table" class="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
+                            <!-- Populated by admin.js -->
                         </div>
                     </div>
-                    <div id="admin-tickets-table" class="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
-                        <!-- Populated by admin.js -->
-                    </div>
-                </div>
 
-                <!-- Right: Ticket Detail & Empathetic Response Desk -->
-                <div id="admin-ticket-detail-pane" class="lg:col-span-2 p-6 flex flex-col justify-between space-y-6 bg-stone-50/30">
-                    <div class="space-y-4">
-                        <div class="flex items-start justify-between pb-3 border-b border-gray-200">
+                    <!-- Right: Ticket Detail & Empathetic Response Desk -->
+                    <div id="admin-ticket-detail-pane" class="lg:col-span-2 p-6 flex flex-col justify-between space-y-6 bg-stone-50/30">
+                        <div class="space-y-4">
+                            <div class="flex items-start justify-between pb-3 border-b border-gray-200">
+                                <div>
+                                    <h4 id="admin-detail-student-name" class="font-heading text-lg font-bold text-gray-900">Alex Rivera</h4>
+                                    <p id="admin-detail-student-email" class="text-xs text-gray-500">a.rivera@university.edu</p>
+                                    <p id="admin-detail-category" class="text-xs text-emerald-800 font-semibold mt-1">Deadline Cluster</p>
+                                </div>
+                                <button id="btn-admin-resolve-ticket" class="px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition">
+                                    Mark as Resolved
+                                </button>
+                            </div>
+
                             <div>
-                                <h4 id="admin-detail-student-name" class="font-heading text-lg font-bold text-gray-900">Alex Rivera</h4>
-                                <p id="admin-detail-student-email" class="text-xs text-gray-500">a.rivera@university.edu</p>
-                                <p id="admin-detail-category" class="text-xs text-emerald-800 font-semibold mt-1">Deadline Cluster</p>
-                            </div>
-                            <button id="btn-admin-resolve-ticket" class="px-3 py-1.5 border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-medium text-gray-700 transition">
-                                Mark as Resolved
-                            </button>
-                        </div>
-
-                        <div>
-                            <h5 id="admin-detail-subject" class="text-sm font-bold text-gray-800 mb-2">Subject Title</h5>
-                            <div id="admin-detail-messages-thread" class="space-y-3 max-h-64 overflow-y-auto p-1">
-                                <!-- Populated dynamically -->
+                                <h5 id="admin-detail-subject" class="text-sm font-bold text-gray-800 mb-2">Subject Title</h5>
+                                <div id="admin-detail-messages-thread" class="space-y-3 max-h-64 overflow-y-auto p-1">
+                                    <!-- Populated dynamically -->
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Empathetic Quick Response Controls -->
-                    <div class="space-y-3 pt-4 border-t border-gray-200">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-xs font-semibold text-gray-500">Insert Empathetic Template:</span>
-                            <button data-template="extension" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Extension Strategy</button>
-                            <button data-template="deescalate" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">De-escalation</button>
-                            <button data-template="dropin" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Drop-in Offer</button>
-                        </div>
+                        <!-- Empathetic Quick Response Controls -->
+                        <div class="space-y-3 pt-4 border-t border-gray-200">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-semibold text-gray-500">Insert Empathetic Template:</span>
+                                <button data-template="extension" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Extension Strategy</button>
+                                <button data-template="deescalate" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">De-escalation</button>
+                                <button data-template="dropin" class="btn-use-template px-2.5 py-1 bg-white border border-gray-300 rounded text-xs hover:bg-stone-50">Drop-in Offer</button>
+                            </div>
 
-                        <textarea id="admin-reply-textarea" rows="4" placeholder="Write an encouraging response to the student..." 
-                            class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"></textarea>
+                            <textarea id="admin-reply-textarea" rows="4" placeholder="Write an encouraging response to the student..." 
+                                class="w-full p-3 border border-gray-300 rounded-xl text-xs bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600"></textarea>
 
-                        <div class="flex justify-end">
-                            <button id="btn-admin-send-reply" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
-                                Send Response to Student
-                            </button>
+                            <div class="flex justify-end">
+                                <button id="btn-admin-send-reply" class="btn-sage px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                                    Send Response to Student
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Tips Publisher Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Create Tip Form -->
-                <div class="tempo-card p-6 space-y-4">
-                    <h3 class="font-heading text-base font-bold text-gray-900">Publish New Student Micro-Tip</h3>
-                    <form id="form-create-tip" class="space-y-3">
-                        <div>
-                            <label for="input-tip-title" class="block text-xs font-medium text-gray-700 mb-1">Tip Headline:</label>
-                            <input type="text" id="input-tip-title" placeholder="e.g. The 10-Minute Morning Dump" 
-                                class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
+            <!-- Tab Pane 2: Volunteer Applications Review (US04) -->
+            <div id="admin-tab-volunteers-pane" class="admin-tab-pane hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100">
+                    <div>
+                        <h3 class="font-heading text-lg font-bold text-gray-900">Volunteer Candidate Reviews</h3>
+                        <p class="text-xs text-gray-500">Strict vetting of peer volunteers before granting access to student inquiries.</p>
+                    </div>
+                    <div class="flex items-center space-x-1.5 flex-wrap">
+                        <button id="btn-vol-filter-all" onclick="window.TempoAdmin.filterVolunteerApplications('all')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-700 text-white transition">All</button>
+                        <button id="btn-vol-filter-pending" onclick="window.TempoAdmin.filterVolunteerApplications('PENDING')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Pending Review</button>
+                        <button id="btn-vol-filter-approved" onclick="window.TempoAdmin.filterVolunteerApplications('APPROVED')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Approved</button>
+                        <button id="btn-vol-filter-rejected" onclick="window.TempoAdmin.filterVolunteerApplications('REJECTED')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Rejected</button>
+                        <button id="btn-vol-filter-suspended" onclick="window.TempoAdmin.filterVolunteerApplications('SUSPENDED')" class="admin-vol-filter px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition">Suspended</button>
+                    </div>
+                </div>
+
+                <div id="admin-volunteer-applications-list" class="space-y-4">
+                    <!-- Populated by admin.js -->
+                </div>
+            </div>
+
+            <!-- Tab Pane 3: Tips Publisher -->
+            <div id="admin-tab-tips-pane" class="admin-tab-pane hidden space-y-8">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Create Tip Form -->
+                    <div class="tempo-card p-6 space-y-4">
+                        <h3 class="font-heading text-base font-bold text-gray-900">Publish New Student Micro-Tip</h3>
+                        <form id="form-create-tip" class="space-y-3">
                             <div>
-                                <label for="select-tip-category" class="block text-xs font-medium text-gray-700 mb-1">Category:</label>
-                                <select id="select-tip-category" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
-                                    <option value="Prioritization">Prioritization</option>
-                                    <option value="Stress Relief">Stress Relief</option>
-                                    <option value="Study Habits">Study Habits</option>
-                                    <option value="Sleep">Sleep</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="input-tip-readtime" class="block text-xs font-medium text-gray-700 mb-1">Read Time (Mins):</label>
-                                <input type="number" id="input-tip-readtime" value="2" min="1" max="10" 
+                                <label for="input-tip-title" class="block text-xs font-medium text-gray-700 mb-1">Tip Headline:</label>
+                                <input type="text" id="input-tip-title" placeholder="e.g. The 10-Minute Morning Dump" 
                                     class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
                             </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="select-tip-category" class="block text-xs font-medium text-gray-700 mb-1">Category:</label>
+                                    <select id="select-tip-category" class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                                        <option value="Prioritization">Prioritization</option>
+                                        <option value="Stress Relief">Stress Relief</option>
+                                        <option value="Study Habits">Study Habits</option>
+                                        <option value="Sleep">Sleep</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="input-tip-readtime" class="block text-xs font-medium text-gray-700 mb-1">Read Time (Mins):</label>
+                                    <input type="number" id="input-tip-readtime" value="2" min="1" max="10" 
+                                        class="w-full p-2 border border-gray-200 rounded-lg text-xs bg-white">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="textarea-tip-content" class="block text-xs font-medium text-gray-700 mb-1">Practical Content:</label>
+                                <textarea id="textarea-tip-content" rows="4" placeholder="Give students 1 concrete, shame-free action they can take immediately..." 
+                                    class="w-full p-2.5 border border-gray-200 rounded-lg text-xs bg-white"></textarea>
+                            </div>
+                            <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs">
+                                Publish Tip to Student App
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Tips List -->
+                    <div class="lg:col-span-2 tempo-card p-6 space-y-4">
+                        <h3 class="font-heading text-base font-bold text-gray-900">Curated Micro-Tips</h3>
+                        <div id="admin-tips-table" class="space-y-3">
+                            <!-- Populated by admin.js -->
                         </div>
-                        <div>
-                            <label for="textarea-tip-content" class="block text-xs font-medium text-gray-700 mb-1">Practical Content:</label>
-                            <textarea id="textarea-tip-content" rows="4" placeholder="Give students 1 concrete, shame-free action they can take immediately..." 
-                                class="w-full p-2.5 border border-gray-200 rounded-lg text-xs bg-white"></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================
+             SCREEN 8: VOLUNTEER DASHBOARD & ACCESS GATE
+             =================================================================== -->
+        <section id="screen-volunteer-dashboard" class="screen-container hidden space-y-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200">
+                <div>
+                    <h2 class="font-heading text-2xl font-extrabold text-gray-900 flex items-center">
+                        Peer Support Volunteer Desk
+                        <span class="ml-2.5 text-xs font-bold bg-sky-100 text-sky-800 px-3 py-1 rounded-full">Volunteer Portal</span>
+                    </h2>
+                    <p class="text-xs text-gray-600">Provide non-diagnostic active listening and practical encouragement to fellow university students.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="btn-volunteer-toggle-online" class="px-4 py-2 rounded-xl text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition flex items-center space-x-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="volunteer-online-label">Available for Peer Support</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 1. PENDING REVIEW GATE (Active when status === 'PENDING') -->
+            <div id="volunteer-view-pending" class="space-y-6">
+                <div class="tempo-card p-8 text-center space-y-5 border-amber-200 bg-gradient-to-b from-amber-50/50 to-white max-w-2xl mx-auto">
+                    <div class="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto text-2xl shadow-sm">
+                        ⏳
+                    </div>
+                    <div class="space-y-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Application Under Review</span>
+                        <h3 class="font-heading text-xl font-bold text-gray-900">Thank you for applying to be a Tempo Volunteer!</h3>
+                        <p class="text-xs text-gray-600 max-w-md mx-auto leading-relaxed">
+                            Your application is currently being evaluated by our campus wellbeing advisors.
+                        </p>
+                    </div>
+
+                    <div class="p-5 bg-white rounded-2xl border border-amber-100 text-left space-y-3 max-w-lg mx-auto">
+                        <div class="flex items-center space-x-2 text-xs font-bold text-amber-900">
+                            <span>🛡️</span>
+                            <span>Why is access restricted?</span>
                         </div>
-                        <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs">
-                            Publish Tip to Student App
+                        <p class="text-xs text-gray-600 leading-relaxed">
+                            To protect student safety, privacy, and psychological wellbeing, volunteers cannot view student inquiries or peer conversations until an administrator has verified their background and approved their application.
+                        </p>
+                        <div class="pt-2 text-[11px] text-gray-500 flex items-center justify-between border-t border-gray-100">
+                            <span>Typical Review Timeline:</span>
+                            <span class="font-semibold text-gray-800">24–48 hours</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button onclick="window.TempoApp.navigateTo('hub')" class="btn-sage px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm">
+                            Browse Knowledge Hub & Guides →
                         </button>
-                    </form>
+                        <button onclick="window.TempoAuth.checkSession()" class="px-4 py-2.5 bg-white border border-gray-300 hover:bg-stone-50 rounded-xl text-xs font-medium text-gray-700 transition">
+                            Refresh Application Status
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. APPROVED VOLUNTEER WORKSPACE (Active when status === 'APPROVED') -->
+            <div id="volunteer-view-approved" class="hidden space-y-8">
+                <!-- Peer Support Guidelines & Ethics Banner -->
+                <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start space-x-3 text-xs text-emerald-950">
+                    <span class="text-lg">🌿</span>
+                    <div>
+                        <strong class="font-bold">Peer Support Safety Protocols:</strong> Provide compassionate, non-judgmental active listening. Never diagnose mental health conditions, prescribe medication, or offer clinical treatment. If a student indicates crisis or self-harm, immediately direct them to campus emergency contacts and 988.
+                    </div>
                 </div>
 
-                <!-- Tips List -->
-                <div class="lg:col-span-2 tempo-card p-6 space-y-4">
-                    <h3 class="font-heading text-base font-bold text-gray-900">Curated Micro-Tips</h3>
-                    <div id="admin-tips-table" class="space-y-3">
-                        <!-- Populated by admin.js -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left: Open Student Inquiries Queue -->
+                    <div class="tempo-card p-6 space-y-4">
+                        <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                            <div>
+                                <h3 class="font-heading text-base font-bold text-gray-900">Open Student Inquiries</h3>
+                                <p class="text-xs text-gray-500">Students seeking empathetic peer support</p>
+                            </div>
+                            <button onclick="window.TempoVolunteer.loadVolunteerData()" class="text-xs text-emerald-700 font-semibold hover:underline">
+                                Refresh
+                            </button>
+                        </div>
+                        <div id="volunteer-available-queue" class="space-y-3">
+                            <!-- Populated dynamically -->
+                        </div>
                     </div>
+
+                    <!-- Right: My Active Assigned Conversations -->
+                    <div class="tempo-card p-6 space-y-4">
+                        <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                            <div>
+                                <h3 class="font-heading text-base font-bold text-gray-900">My Active Conversations</h3>
+                                <p class="text-xs text-gray-500">Requests assigned to you</p>
+                            </div>
+                        </div>
+                        <div id="volunteer-assigned-queue" class="space-y-3">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. RESTRICTED / SUSPENDED STATE -->
+            <div id="volunteer-view-restricted" class="hidden space-y-6">
+                <div class="tempo-card p-8 text-center space-y-4 border-rose-200 bg-rose-50/40 max-w-lg mx-auto">
+                    <div class="w-14 h-14 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto text-xl font-bold">
+                        ✕
+                    </div>
+                    <div class="space-y-1">
+                        <h3 class="font-heading text-lg font-bold text-gray-900">Volunteer Account Inactive</h3>
+                        <p class="text-xs text-gray-600">
+                            Your volunteer application was not approved or has been temporarily suspended by the campus advisory team.
+                        </p>
+                    </div>
+                    <p class="text-xs text-gray-500">
+                        If you believe this is in error, please contact the campus counseling coordinator directly at <span class="font-mono text-gray-700">wellbeing@university.edu</span>.
+                    </p>
                 </div>
             </div>
         </section>
@@ -1495,7 +1670,318 @@
         </a>
     </nav>
 
+    <!-- ===================================================================
+         AUTHENTICATION & ROLE SELECTION MODALS
+         =================================================================== -->
+
+    <!-- 1. ROLE SELECTION MODAL (US01) -->
+    <div id="modal-role-select" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
+        <div class="tempo-card max-w-lg w-full p-6 md:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+
+            <div class="text-center space-y-1.5">
+                <div class="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto text-xl font-bold">
+                    🌿
+                </div>
+                <h3 class="font-heading text-2xl font-bold text-gray-900">Welcome to Tempo</h3>
+                <p class="text-xs text-gray-600">Choose how you'd like to participate in our campus wellbeing network.</p>
+            </div>
+
+            <div class="space-y-3.5">
+                <!-- Option 1: Student -->
+                <button id="btn-choose-role-student" type="button" class="w-full p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-600 bg-emerald-50/40 hover:bg-emerald-50 text-left transition group space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">For Students</span>
+                        <span class="text-emerald-700 font-bold text-sm group-hover:translate-x-1 transition">Continue →</span>
+                    </div>
+                    <h4 class="font-heading text-base font-bold text-gray-900">I'm looking for support</h4>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        Manage academic stress, triage concentrated deadlines, build healthier routines, and connect with empathetic peer support.
+                    </p>
+                </button>
+
+                <!-- Option 2: Volunteer -->
+                <button id="btn-choose-role-volunteer" type="button" class="w-full p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-600 bg-sky-50/40 hover:bg-sky-50 text-left transition group space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-full">For Supporters</span>
+                        <span class="text-sky-700 font-bold text-sm group-hover:translate-x-1 transition">Apply Now →</span>
+                    </div>
+                    <h4 class="font-heading text-base font-bold text-gray-900">I want to support others</h4>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        Join Tempo as a vetted peer volunteer. Provide non-diagnostic active listening and encouragement to fellow students.
+                    </p>
+                </button>
+            </div>
+
+            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
+                Already registered? 
+                <button onclick="window.TempoAuth.openSignInModal()" class="text-emerald-700 font-bold hover:underline ml-1">Sign In here</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. STUDENT REGISTRATION MODAL (US02) -->
+    <div id="modal-student-register" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
+        <div class="tempo-card max-w-md w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-5 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+
+            <div class="space-y-1">
+                <span class="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Student Sign Up</span>
+                <h3 class="font-heading text-2xl font-bold text-gray-900">Join Tempo Wellbeing</h3>
+                <p class="text-xs text-gray-500">Free, confidential support for managing university stress and deadlines.</p>
+            </div>
+
+            <form id="form-student-register" class="space-y-3.5">
+                <div>
+                    <label for="reg-student-name" class="block text-xs font-semibold text-gray-700 mb-1">Full Name <span class="text-rose-500">*</span></label>
+                    <input type="text" id="reg-student-name" required placeholder="e.g. Alex Rivera" 
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div>
+                    <label for="reg-student-email" class="block text-xs font-semibold text-gray-700 mb-1">University / Preferred Email <span class="text-rose-500">*</span></label>
+                    <input type="email" id="reg-student-email" required placeholder="alex.rivera@university.edu" 
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reg-student-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
+                        <input type="password" id="reg-student-password" required minlength="6" placeholder="Min. 6 chars" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="reg-student-confirm" class="block text-xs font-semibold text-gray-700 mb-1">Confirm Password <span class="text-rose-500">*</span></label>
+                        <input type="password" id="reg-student-confirm" required minlength="6" placeholder="Re-enter password" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reg-student-university" class="block text-xs font-semibold text-gray-700 mb-1">University (Optional)</label>
+                        <input type="text" id="reg-student-university" placeholder="e.g. State University" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label for="reg-student-year" class="block text-xs font-semibold text-gray-700 mb-1">Year of Study (Optional)</label>
+                        <select id="reg-student-year" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800">
+                            <option value="">Select Year...</option>
+                            <option value="1st Year">1st Year (Freshman)</option>
+                            <option value="2nd Year">2nd Year (Sophomore)</option>
+                            <option value="3rd Year">3rd Year (Junior)</option>
+                            <option value="4th Year">4th Year (Senior)</option>
+                            <option value="Graduate / Postgrad">Graduate / Postgraduate</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-1">
+                    <label class="flex items-start space-x-2 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" id="reg-student-terms" required class="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500">
+                        <span>I agree to the <a href="#hub" class="text-emerald-700 underline">Terms of Service</a> & <a href="#hub" class="text-emerald-700 underline">Privacy Policy</a>. I understand that Tempo provides academic wellbeing & peer support, not emergency medical diagnosis.</span>
+                    </label>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="btn-sage w-full py-3 rounded-xl font-bold text-xs shadow-md">
+                        Create Student Account →
+                    </button>
+                </div>
+            </form>
+
+            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
+                Already have an account? 
+                <button onclick="window.TempoAuth.openSignInModal()" class="text-emerald-700 font-bold hover:underline ml-1">Sign In</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. VOLUNTEER APPLICATION MODAL (US03) -->
+    <div id="modal-volunteer-apply" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden auth-modal-overlay">
+        <div class="tempo-card max-w-xl w-full max-h-[92vh] overflow-y-auto p-6 md:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+
+            <div class="space-y-1">
+                <span class="text-[11px] font-bold text-sky-800 uppercase tracking-wider">Peer Supporter Network</span>
+                <h3 class="font-heading text-2xl font-bold text-gray-900">Volunteer Application</h3>
+                <p class="text-xs text-gray-500">
+                    Help fellow students work through deadline paralysis with empathetic active listening. Applications undergo manual advisor review.
+                </p>
+            </div>
+
+            <form id="form-volunteer-apply" class="space-y-4">
+                <!-- Section 1: Identity & Credentials -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-1">1. Personal & Contact Information</h4>
+                    <div>
+                        <label for="vol-name" class="block text-xs font-semibold text-gray-700 mb-1">Full Name <span class="text-rose-500">*</span></label>
+                        <input type="text" id="vol-name" required placeholder="e.g. Maya Lin" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label for="vol-email" class="block text-xs font-semibold text-gray-700 mb-1">University / Institutional Email <span class="text-rose-500">*</span></label>
+                        <input type="email" id="vol-email" required placeholder="m.lin@university.edu" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="vol-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
+                            <input type="password" id="vol-password" required minlength="6" placeholder="Min. 6 chars" 
+                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div>
+                            <label for="vol-confirm" class="block text-xs font-semibold text-gray-700 mb-1">Confirm Password <span class="text-rose-500">*</span></label>
+                            <input type="password" id="vol-confirm" required minlength="6" placeholder="Re-enter password" 
+                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="vol-organization" class="block text-xs font-semibold text-gray-700 mb-1">University / Campus Department <span class="text-rose-500">*</span></label>
+                        <input type="text" id="vol-organization" required placeholder="e.g. Department of Psychology & Social Work" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+
+                <!-- Section 2: Background & Qualification -->
+                <div class="space-y-3 pt-2">
+                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-1">2. Academic & Support Background</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="vol-background" class="block text-xs font-semibold text-gray-700 mb-1">Support Profile / Track <span class="text-rose-500">*</span></label>
+                            <select id="vol-background" required class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800">
+                                <option value="Psychology student">Psychology Student</option>
+                                <option value="Counseling-related field">Counseling / Social Work</option>
+                                <option value="Trained peer mentor">Trained Peer Mentor</option>
+                                <option value="General student volunteer">General Student Volunteer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="vol-studyyear" class="block text-xs font-semibold text-gray-700 mb-1">Current Year / Qualification <span class="text-rose-500">*</span></label>
+                            <input type="text" id="vol-studyyear" required placeholder="e.g. Year 3 (BSc Psychology)" 
+                                class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="vol-availability" class="block text-xs font-semibold text-gray-700 mb-1">Expected Weekly Availability <span class="text-rose-500">*</span></label>
+                        <input type="text" id="vol-availability" required placeholder="e.g. 3–5 hours/week, mostly weekday evenings" 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+
+                <!-- Section 3: Experience & Motivation -->
+                <div class="space-y-3 pt-2">
+                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-1">3. Experience & Purpose</h4>
+                    <div>
+                        <label for="vol-experience" class="block text-xs font-semibold text-gray-700 mb-1">Relevant Experience & Training <span class="text-rose-500">*</span></label>
+                        <textarea id="vol-experience" rows="3" required placeholder="Describe any relevant experience (active listening training, mentoring, student leadership, previous volunteering)..." 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+                    </div>
+                    <div>
+                        <label for="vol-motivation" class="block text-xs font-semibold text-gray-700 mb-1">Why do you want to volunteer with Tempo? <span class="text-rose-500">*</span></label>
+                        <textarea id="vol-motivation" rows="3" required placeholder="Share your motivation for supporting university students through academic stress..." 
+                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+                    </div>
+                </div>
+
+                <!-- Section 4: Ethical & Safety Agreement -->
+                <div class="p-4 bg-sky-50/70 border border-sky-200 rounded-2xl space-y-2">
+                    <div class="flex items-center space-x-2 text-xs font-bold text-sky-950">
+                        <span>🛡️</span>
+                        <span>Mandatory Non-Diagnostic Peer Support Agreement</span>
+                    </div>
+                    <label class="flex items-start space-x-2.5 text-xs text-sky-900 cursor-pointer pt-1">
+                        <input type="checkbox" id="vol-ethical-acknowledgement" required class="mt-0.5 rounded text-sky-600 focus:ring-sky-500">
+                        <span class="leading-relaxed">
+                            I understand and agree that Tempo volunteers provide <strong>non-diagnostic, supportive active listening only</strong>. I will never offer clinical psychiatric diagnoses, medical prescriptions, or emergency crisis treatment. I commit to immediately escalating any high-risk distress or self-harm concerns to campus emergency counselors and the 988 lifeline.
+                        </span>
+                    </label>
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-3 bg-sky-700 hover:bg-sky-800 text-white rounded-xl font-bold text-xs shadow-md transition">
+                        Submit Volunteer Application →
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 4. VOLUNTEER APPLICATION SUBMITTED CONFIRMATION MODAL -->
+    <div id="modal-volunteer-submitted" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
+        <div class="tempo-card max-w-md w-full p-8 text-center space-y-5 bg-white rounded-3xl shadow-2xl relative">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto text-3xl shadow-sm">
+                🎉
+            </div>
+            <div class="space-y-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Application Received</span>
+                <h3 class="font-heading text-xl font-bold text-gray-900">Thank you, <span id="vol-submitted-name">Supporter</span>!</h3>
+                <p class="text-xs text-gray-600 leading-relaxed">
+                    Your volunteer application has been submitted to the campus wellbeing advisors for review.
+                </p>
+            </div>
+
+            <div class="p-4 bg-stone-50 rounded-2xl border border-stone-200 text-left space-y-1.5 text-xs text-gray-600">
+                <div class="font-bold text-gray-800">What happens next?</div>
+                <p>• Advisors verify academic credentials and ethical commitments.</p>
+                <p>• Review is typically complete within <strong>24–48 hours</strong>.</p>
+                <p>• You can sign in anytime to view your live status.</p>
+            </div>
+
+            <button onclick="window.TempoAuth.closeAllAuthModals(); window.TempoApp.navigateTo('volunteer-dashboard');" 
+                class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs shadow-sm">
+                Go to Volunteer Dashboard →
+            </button>
+        </div>
+    </div>
+
+    <!-- 5. SIGN IN MODAL -->
+    <div id="modal-signin" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
+        <div class="tempo-card max-w-sm w-full p-6 md:p-8 space-y-5 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+
+            <div class="space-y-1 text-center">
+                <div class="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center mx-auto text-lg font-bold mb-2">
+                    🔑
+                </div>
+                <h3 class="font-heading text-xl font-bold text-gray-900">Welcome Back</h3>
+                <p class="text-xs text-gray-500">Sign in to your Tempo student or volunteer account.</p>
+            </div>
+
+            <form id="form-signin" class="space-y-3.5">
+                <div>
+                    <label for="signin-email" class="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
+                    <input type="email" id="signin-email" required placeholder="you@university.edu" 
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label for="signin-password" class="block text-xs font-semibold text-gray-700 mb-1">Password</label>
+                    <input type="password" id="signin-password" required placeholder="••••••••" 
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="btn-sage w-full py-2.5 rounded-xl font-bold text-xs shadow-md">
+                        Sign In →
+                    </button>
+                </div>
+            </form>
+
+            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
+                Don't have an account yet? 
+                <button onclick="window.TempoAuth.openRoleSelectModal()" class="text-emerald-700 font-bold hover:underline ml-1">Register</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Application Scripts -->
+    <!-- Supabase CDN Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabaseClient.js"></script>
+    <script src="auth.js"></script>
+    <script src="volunteer.js"></script>
+
+    <!-- Core App Controllers -->
     <script src="data.js"></script>
     <script src="triage.js"></script>
     <script src="stress.js"></script>

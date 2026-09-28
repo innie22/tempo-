@@ -263,10 +263,250 @@ I have an open drop-in wellbeing slot tomorrow at 11:30 AM (virtual or in Studen
         window.TempoApp.showToast("New micro-tip published successfully!");
     }
 
+    // =========================================================================
+    // VOLUNTEER APPLICATIONS MANAGEMENT (US04)
+    // =========================================================================
+    let volunteerApplications = [];
+    let currentVolFilter = 'all';
+
+    async function loadVolunteerApplications() {
+        const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
+        if (supabase) {
+            try {
+                // Fetch profiles with volunteer role
+                const { data, error } = await supabase
+                    .from('volunteer_profiles')
+                    .select('*, profiles(full_name, email)');
+
+                if (!error && data) {
+                    volunteerApplications = data.map(v => ({
+                        userId: v.user_id,
+                        fullName: v.profiles?.full_name || 'Volunteer Applicant',
+                        email: v.profiles?.email || 'N/A',
+                        universityOrOrg: v.university_or_organization,
+                        background: v.background,
+                        studyYear: v.study_year_or_qualification,
+                        experience: v.experience,
+                        motivation: v.motivation,
+                        availability: v.availability,
+                        applicationStatus: v.application_status,
+                        reviewedAt: v.reviewed_at,
+                        createdAt: v.created_at
+                    }));
+                }
+            } catch (e) {
+                console.error("Error loading volunteer applications:", e);
+            }
+        }
+
+        // If no remote apps yet, populate with realistic demo applications
+        if (volunteerApplications.length === 0) {
+            volunteerApplications = [
+                {
+                    userId: 'vol-demo-1',
+                    fullName: 'Maya Lin',
+                    email: 'm.lin@university.edu',
+                    universityOrOrg: 'Faculty of Psychology & Neuroscience',
+                    background: 'Psychology student',
+                    studyYear: 'Year 3 (BSc Psychology)',
+                    experience: 'Completed 40 hours of active listening peer mentorship training; campus wellbeing volunteer last semester.',
+                    motivation: 'I know how isolating exam crunch periods can be. I want to offer an empathetic, non-judgmental presence to fellow students.',
+                    availability: 'Weekday evenings (6:00 PM – 9:00 PM)',
+                    applicationStatus: 'PENDING',
+                    createdAt: '2 hours ago'
+                },
+                {
+                    userId: 'vol-demo-2',
+                    fullName: 'Samuel Chen',
+                    email: 's.chen@university.edu',
+                    universityOrOrg: 'School of Education & Counseling',
+                    background: 'Counseling-related field',
+                    studyYear: 'Master of Education (Guidance & Counseling)',
+                    experience: 'Certified in Youth Mental Health First Aid (YMHFA); 2 years volunteer at community youth hotline.',
+                    motivation: 'Passionate about helping students unfreeze academic paralysis without clinical stigmatization.',
+                    availability: 'Weekends & Friday afternoons',
+                    applicationStatus: 'APPROVED',
+                    createdAt: '3 days ago'
+                }
+            ];
+        }
+
+        renderVolunteerApplications();
+    }
+
+    function renderVolunteerApplications() {
+        const container = document.getElementById('admin-volunteer-applications-list');
+        if (!container) return;
+
+        const pendingCount = volunteerApplications.filter(a => a.applicationStatus === 'PENDING').length;
+        const countBadge = document.getElementById('admin-vol-pending-count');
+        if (countBadge) countBadge.textContent = pendingCount;
+
+        const filtered = volunteerApplications.filter(app => {
+            if (currentVolFilter === 'all') return true;
+            return app.applicationStatus === currentVolFilter;
+        });
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="p-8 text-center text-gray-500 bg-stone-50 rounded-2xl border border-stone-200">
+                    <p class="text-xs">No volunteer applications in this status filter.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = filtered.map(app => {
+            let statusBadgeClass = 'bg-amber-100 text-amber-800';
+            if (app.applicationStatus === 'APPROVED') statusBadgeClass = 'bg-emerald-100 text-emerald-800';
+            if (app.applicationStatus === 'REJECTED') statusBadgeClass = 'bg-rose-100 text-rose-800';
+            if (app.applicationStatus === 'SUSPENDED') statusBadgeClass = 'bg-purple-100 text-purple-800';
+
+            return `
+                <div class="tempo-card p-5 space-y-4 border-gray-200 hover:border-emerald-300 transition">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h4 class="font-heading text-base font-bold text-gray-900">${app.fullName}</h4>
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${statusBadgeClass}">
+                                    ${app.applicationStatus}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-500">${app.email} • ${app.universityOrOrg}</p>
+                        </div>
+                        <span class="text-[11px] text-gray-400 font-medium">${app.background}</span>
+                    </div>
+
+                    <!-- Details Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-700">
+                        <div class="space-y-1">
+                            <span class="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Study Year / Qualification:</span>
+                            <p class="font-medium text-gray-900">${app.studyYear}</p>
+                        </div>
+                        <div class="space-y-1">
+                            <span class="font-bold text-gray-500 uppercase tracking-wider text-[10px]">General Availability:</span>
+                            <p class="font-medium text-gray-900">${app.availability}</p>
+                        </div>
+                        <div class="space-y-1 col-span-full">
+                            <span class="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Relevant Background & Experience:</span>
+                            <p class="leading-relaxed bg-stone-50 p-2.5 rounded-xl border border-stone-200">${app.experience}</p>
+                        </div>
+                        <div class="space-y-1 col-span-full">
+                            <span class="font-bold text-gray-500 uppercase tracking-wider text-[10px]">Motivation to Volunteer:</span>
+                            <p class="leading-relaxed bg-stone-50 p-2.5 rounded-xl border border-stone-200">${app.motivation}</p>
+                        </div>
+                    </div>
+
+                    <!-- Decision Controls -->
+                    <div class="pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-[11px] text-gray-500 italic">Peer Support Agreement: Acknowledged ✓</span>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="window.TempoAdmin.setApplicationStatus('${app.userId}', 'APPROVED')" 
+                                class="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition shadow-sm">
+                                ✓ Approve
+                            </button>
+                            <button onclick="window.TempoAdmin.setApplicationStatus('${app.userId}', 'REJECTED')" 
+                                class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition">
+                                Reject
+                            </button>
+                            <button onclick="window.TempoAdmin.setApplicationStatus('${app.userId}', 'SUSPENDED')" 
+                                class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-lg text-xs font-medium transition">
+                                Suspend
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function setApplicationStatus(userId, newStatus) {
+        // 1. Strict Authorization Gate: Caller must be an authenticated administrator
+        const currentProfile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
+        if (!currentProfile || currentProfile.role !== 'admin') {
+            window.TempoApp.showToast("Security violation: Only verified administrators can review volunteer applications.");
+            return;
+        }
+
+        const app = volunteerApplications.find(a => a.userId === userId);
+        if (!app) return;
+
+        const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
+        if (supabase) {
+            try {
+                const currentUser = window.TempoAuth.getCurrentUser();
+                const { error } = await supabase
+                    .from('volunteer_profiles')
+                    .update({
+                        application_status: newStatus,
+                        reviewed_at: new Date().toISOString(),
+                        reviewed_by: currentUser?.id || null
+                    })
+                    .eq('user_id', userId);
+
+                if (error) {
+                    console.error("[TempoAdmin] Review action rejected by database:", error.message);
+                    window.TempoApp.showToast(`Action rejected by database security: ${error.message}`);
+                    return; // Strictly abort: do NOT mutate client-side state
+                }
+            } catch (e) {
+                console.error("[TempoAdmin] Network or database error:", e);
+                window.TempoApp.showToast("Failed to contact database. Client state unchanged.");
+                return; // Strictly abort
+            }
+        }
+
+        // 2. Only mutate client state AFTER database confirms success
+        app.applicationStatus = newStatus;
+        renderVolunteerApplications();
+        window.TempoApp.showToast(`Volunteer application for ${app.fullName} is now ${newStatus}.`);
+
+        // If currently viewing as that volunteer, refresh their view
+        if (window.TempoAuth?.getCurrentUser()?.id === userId) {
+            window.TempoAuth.loadUserProfile(userId);
+        }
+    }
+
+    function filterVolunteerApplications(status) {
+        currentVolFilter = status;
+        document.querySelectorAll('.admin-vol-filter').forEach(btn => {
+            btn.className = "admin-vol-filter px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition";
+        });
+        const activeBtn = document.getElementById(`btn-vol-filter-${status.toLowerCase()}`);
+        if (activeBtn) activeBtn.className = "admin-vol-filter px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-700 text-white transition";
+        renderVolunteerApplications();
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.admin-main-tab').forEach(btn => {
+            btn.className = "admin-main-tab px-4 py-2 rounded-xl text-xs font-semibold bg-stone-100 text-gray-700 hover:bg-stone-200 transition";
+        });
+        document.querySelectorAll('.admin-tab-pane').forEach(pane => {
+            pane.classList.add('hidden');
+        });
+
+        const activeBtn = document.getElementById(`btn-admin-tab-${tab}`);
+        if (activeBtn) activeBtn.className = "admin-main-tab px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 text-white transition shadow-sm";
+
+        const activePane = document.getElementById(`admin-tab-${tab}-pane`);
+        if (activePane) activePane.classList.remove('hidden');
+
+        if (tab === 'volunteers') {
+            loadVolunteerApplications();
+        }
+    }
+
     return {
         init,
         renderTickets,
         selectTicket,
-        toggleTipPublish
+        toggleTipPublish,
+        loadVolunteerApplications,
+        renderVolunteerApplications,
+        setApplicationStatus,
+        filterVolunteerApplications,
+        switchTab
     };
 })();
+
+

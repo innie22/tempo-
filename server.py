@@ -38,6 +38,36 @@ class TempoHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'ok', 'app': 'Tempo Wellbeing', 'version': '1.0.0'}).encode('utf-8'))
             return
+
+        if parsed.path == '/api/config':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            
+            url = os.environ.get('SUPABASE_URL') or os.environ.get('NEXT_PUBLIC_SUPABASE_URL') or ''
+            key = os.environ.get('SUPABASE_PUBLISHABLE_KEY') or os.environ.get('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') or os.environ.get('SUPABASE_ANON_KEY') or os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY') or ''
+            
+            env_file = os.path.join(DIRECTORY, '.env.local')
+            if (not url or not key) and os.path.exists(env_file):
+                try:
+                    with open(env_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if '=' in line and not line.startswith('#'):
+                                k, v = line.split('=', 1)
+                                k, v = k.strip(), v.strip()
+                                if k in ('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL') and not url:
+                                    url = v
+                                elif k in ('SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY') and not key:
+                                    key = v
+                except Exception:
+                    pass
+            
+            self.wfile.write(json.dumps({
+                'supabaseUrl': url,
+                'supabasePublishableKey': key
+            }).encode('utf-8'))
+            return
         
         # Default fallback to index.html for root or SPA paths
         if parsed.path in ('', '/', '/emergency', '/stress-check', '/routine', '/hub', '/support', '/admin'):
