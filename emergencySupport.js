@@ -413,10 +413,18 @@ window.TempoEmergencySupport = (function() {
         }
     }
 
+    function openSOS() {
+        openModal();
+        isSafetyMode = true;
+        goToStep('checkin');
+        openHumanDrawer();
+    }
+
     return {
         init,
         openModal,
         closeModal,
+        openSOS,
         goToStep,
         handleInitialCheckin,
         nextGrounding,

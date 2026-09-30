@@ -7,7 +7,10 @@
 window.TempoTriage = (function() {
     let activePlan = null;
     let timerInterval = null;
-    let timerSecondsLeft = 25 * 60;
+    let timerPhase = 'focus'; // 'focus' (45m) | 'rest' (15m)
+    let focusDurationSeconds = 45 * 60; // 45 minutes default
+    let restDurationSeconds = 15 * 60;  // 15 minutes default
+    let timerSecondsLeft = 45 * 60;
     let isTimerRunning = false;
     let currentTaskTitle = "Immediate Focus Step";
     let ambientAudioContext = null;
@@ -301,21 +304,63 @@ window.TempoTriage = (function() {
         }
     }
 
-    function launchFocusMode() {
+    function launchFocusMode(initialPhase = 'focus') {
         const focusModal = document.getElementById('focus-session-modal');
         if (!focusModal) return;
 
+        timerPhase = initialPhase;
+        timerSecondsLeft = timerPhase === 'focus' ? focusDurationSeconds : restDurationSeconds;
         focusModal.classList.remove('hidden');
-        document.getElementById('focus-task-name').textContent = currentTaskTitle;
 
-        // Reset timer to 25 minutes
-        timerSecondsLeft = 25 * 60;
+        const taskNameEl = document.getElementById('focus-task-name');
+        if (taskNameEl) {
+            taskNameEl.textContent = timerPhase === 'focus' 
+                ? (currentTaskTitle || 'Single Focus Objective') 
+                : 'Restorative Break • Step away from screens';
+        }
+
+        updatePhaseUI();
         updateTimerDisplay();
         startTimer();
 
         // Start ambient sound if selected
         if (currentAmbientType !== 'none') {
             startAmbientSound(currentAmbientType);
+        }
+    }
+
+    function switchTimerPhase(phase) {
+        timerPhase = phase;
+        timerSecondsLeft = timerPhase === 'focus' ? focusDurationSeconds : restDurationSeconds;
+        const taskNameEl = document.getElementById('focus-task-name');
+        if (taskNameEl) {
+            taskNameEl.textContent = timerPhase === 'focus' 
+                ? (currentTaskTitle || 'Single Focus Objective') 
+                : 'Restorative Break • Step away from screens';
+        }
+        updatePhaseUI();
+        updateTimerDisplay();
+        if (!isTimerRunning) {
+            startTimer();
+        }
+        if (window.TempoApp) {
+            window.TempoApp.showToast(phase === 'focus' ? "Switched to 45-Min Focus Phase" : "Switched to 15-Min Rest Phase");
+        }
+    }
+
+    function updatePhaseUI() {
+        const phaseLabel = document.getElementById('focus-phase-label');
+        const phaseToggleBtn = document.getElementById('btn-focus-phase-toggle');
+        if (phaseLabel) {
+            phaseLabel.textContent = timerPhase === 'focus' ? 'FOCUS PHASE • 45 MIN' : 'GENTLE REST PHASE • 15 MIN';
+            phaseLabel.className = timerPhase === 'focus' 
+                ? 'text-xs uppercase tracking-widest text-[#FF6B2C] font-semibold'
+                : 'text-xs uppercase tracking-widest text-emerald-400 font-semibold';
+        }
+        if (phaseToggleBtn) {
+            phaseToggleBtn.innerHTML = timerPhase === 'focus' 
+                ? '☕ Switch to 15m Rest' 
+                : '🎯 Switch to 45m Focus';
         }
     }
 
@@ -329,7 +374,8 @@ window.TempoTriage = (function() {
 
         // Document title update
         if (isTimerRunning) {
-            document.title = `(${display}) Focus - Tempo`;
+            const phaseTitle = timerPhase === 'focus' ? 'Focus' : 'Rest';
+            document.title = `(${display}) ${phaseTitle} - Tempo`;
         } else {
             document.title = `Tempo - Student Wellbeing`;
         }
@@ -379,6 +425,21 @@ window.TempoTriage = (function() {
         clearInterval(timerInterval);
         isTimerRunning = false;
         stopAmbientSound();
+
+        // Check if completing Focus or Rest
+        if (timerPhase === 'focus') {
+            const next = confirm("45-Minute Focus Session Completed! 🎉\n\nWould you like to begin your 15-minute gentle rest period now?");
+            if (next) {
+                switchTimerPhase('rest');
+                return;
+            }
+        } else {
+            const next = confirm("15-Minute Rest Period Complete! 🌿\n\nYour mind is refreshed. Would you like to start your next 45-minute focus block?");
+            if (next) {
+                switchTimerPhase('focus');
+                return;
+            }
+        }
 
         // Hide focus modal
         const focusModal = document.getElementById('focus-session-modal');
@@ -448,6 +509,11 @@ window.TempoTriage = (function() {
     }
 
     function openBoxBreathingModal() {
+        if (window.TempoStressRelief) {
+            window.TempoStressRelief.openBreathing({ context: 'home' });
+            return;
+        }
+
         const modal = document.getElementById('box-breathing-modal');
         if (!modal) return;
         modal.classList.remove('hidden');
@@ -586,6 +652,8 @@ window.TempoTriage = (function() {
     return {
         init,
         launchFocusMode,
+        switchTimerPhase,
+        openBoxBreathingModal,
         handleAnalyze
     };
 })();

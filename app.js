@@ -22,6 +22,18 @@ window.TempoApp = (function() {
         if (window.TempoEmergencySupport) window.TempoEmergencySupport.init();
         if (window.TempoAuth) window.TempoAuth.init();
         if (window.TempoVolunteer) window.TempoVolunteer.init();
+        if (window.TempoCommunity) window.TempoCommunity.init();
+        if (window.TempoStressRelief) window.TempoStressRelief.init();
+        if (window.TempoPlanStore) window.TempoPlanStore.init();
+        if (window.TempoEmergencyFlow) window.TempoEmergencyFlow.init();
+        if (window.TempoFocusZone) window.TempoFocusZone.init();
+        if (window.TempoMode) window.TempoMode.init();
+
+        // UI Interactions
+        initGlobalSearch();
+        initQuickToolsDropdown();
+        initMainRoutingFlow();
+        initWhatIsTempoModal();
 
         // Handle hash navigation
         window.addEventListener('hashchange', handleHashChange);
@@ -87,6 +99,15 @@ window.TempoApp = (function() {
     }
 
     function navigateTo(tabId) {
+        // Enforce auth gate for anonymous visitors attempting to access mode routes directly
+        if ((tabId === 'emergency' || tabId === 'recovery-mode' || tabId === 'unclear-mode') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+            const targetMode = tabId === 'emergency' ? 'emergency' : (tabId === 'recovery-mode' ? 'recovery' : 'unclear');
+            if (window.TempoMode) {
+                window.TempoMode.requestMode(targetMode);
+            }
+            return;
+        }
+
         currentTab = tabId;
         window.location.hash = `#${tabId}`;
 
@@ -99,6 +120,29 @@ window.TempoApp = (function() {
         const targetScreen = document.getElementById(`screen-${tabId}`);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
+        }
+
+        // If on today tab, check if emergency mode should render dynamic Emode home
+        if (tabId === 'today') {
+            if (window.TempoMode && window.TempoMode.getMode() === 'emergency') {
+                window.TempoMode.renderEmodeHome();
+            } else if (window.TempoMode) {
+                const dmodeBox = document.getElementById('dmode-home-content');
+                const emodeBox = document.getElementById('emode-home-content');
+                if (dmodeBox) dmodeBox.classList.remove('hidden');
+                if (emodeBox) emodeBox.classList.add('hidden');
+            }
+        }
+
+        // If entering Emergency Mode, ensure Emode is active and resume stage
+        if (tabId === 'emergency') {
+            if (window.TempoMode && window.TempoMode.getMode() !== 'emergency') {
+                window.TempoMode.setMode('emergency', { silent: true });
+            }
+            if (window.TempoEmergencyFlow) {
+                const stage = window.TempoEmergencyFlow.getCurrentStage();
+                window.TempoEmergencyFlow.goToStage(stage || 'entry');
+            }
         }
 
         // Update desktop nav item active states
@@ -217,12 +261,287 @@ window.TempoApp = (function() {
         update();
     }
 
+    // =========================================================================
+    // GLOBAL SEARCH IMPLEMENTATION
+    // =========================================================================
+    function initGlobalSearch() {
+        const searchInput = document.getElementById('global-search-input');
+        const searchDropdown = document.getElementById('global-search-results-dropdown');
+        if (!searchInput || !searchDropdown) return;
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim().toLowerCase();
+            if (!query) {
+                searchDropdown.classList.add('hidden');
+                return;
+            }
+            renderSearchResults(query, searchDropdown);
+        });
+
+        // Close search on click outside
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) {
+                searchDropdown.classList.add('hidden');
+            }
+        });
+
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.trim()) {
+                searchDropdown.classList.remove('hidden');
+            }
+        });
+    }
+
+    function renderSearchResults(query, dropdown) {
+        const results = [];
+
+        // 1. Searchable Tools
+        const tools = [
+            { name: 'Focus Zone', category: 'Tool', desc: 'Focus with intentional breaks. Default 45 min focus / 15 min rest.', action: () => { if (window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode(); } },
+            { name: 'Breathing (Box Breathing)', category: 'Tool', desc: 'A quick 4-4-4-4 breathing exercise to calm your mind.', action: () => { window.TempoStressRelief.openBreathing({ context: 'home' }); } },
+            { name: 'Quick Stress Relief', category: 'Tool', desc: 'Simple micro-actions (1m, 3m, 5m) to ease stress in minutes.', action: () => { window.TempoStressRelief.openLibrary({ context: 'home' }); } },
+            { name: 'Self-check', category: 'Tool', desc: 'Track your stress signals and wellbeing habits across 6 dimensions.', action: () => { navigateTo('stress-check'); } },
+            { name: 'Emergency Mode (Deadline Triage)', category: 'Tool', desc: 'Academic triage: unfreeze panic and extract the ONE next action.', action: () => { navigateTo('emergency'); } },
+            { name: 'Routine & Habit Tracker', category: 'Tool', desc: 'Build gentle, non-punitive habits and daily routine blocks.', action: () => { navigateTo('routine'); } },
+            { name: 'SOS Safety Support', category: 'Safety', desc: '24/7 Lifeline (988), Crisis Text Line (741741), and urgent safety help.', action: () => { window.TempoEmergencySupport.openSOS(); } }
+        ];
+
+        tools.forEach(t => {
+            if (t.name.toLowerCase().includes(query) || t.desc.toLowerCase().includes(query)) {
+                results.push(t);
+            }
+        });
+
+        // 2. Tempo Posts
+        if (window.TempoCommunity) {
+            const posts = window.TempoCommunity.getAllPosts();
+            posts.forEach(p => {
+                if (p.content.toLowerCase().includes(query) || p.tag.toLowerCase().includes(query) || p.authorName.toLowerCase().includes(query)) {
+                    results.push({
+                        name: `${p.tag} • ${p.authorName}`,
+                        category: 'Tempo Post',
+                        desc: p.content.slice(0, 80) + '...',
+                        action: () => { window.TempoCommunity.openCommunityModal(); }
+                    });
+                }
+            });
+        }
+
+        // 3. Knowledge Guides
+        if (window.TEMPO_DATA && window.TEMPO_DATA.articles) {
+            window.TEMPO_DATA.articles.forEach(art => {
+                if (art.title.toLowerCase().includes(query) || art.summary.toLowerCase().includes(query) || art.category.toLowerCase().includes(query)) {
+                    results.push({
+                        name: art.title,
+                        category: 'Guide',
+                        desc: art.summary.slice(0, 80) + '...',
+                        action: () => { 
+                            navigateTo('hub');
+                            if (window.TempoKnowledge) window.TempoKnowledge.openArticle(art.id);
+                        }
+                    });
+                }
+            });
+        }
+
+        // 4. Topic Hashtags
+        const topics = ['#Deadline', '#MentalHealth', '#Focus', '#Recovery', '#ExamSeason', '#Sleep'];
+        topics.forEach(tag => {
+            if (tag.toLowerCase().includes(query)) {
+                results.push({
+                    name: `Topic: ${tag}`,
+                    category: 'Hashtag',
+                    desc: `View student conversations and experiences about ${tag}`,
+                    action: () => { window.TempoCommunity.openCommunityModal(); }
+                });
+            }
+        });
+
+        dropdown.classList.remove('hidden');
+
+        if (results.length === 0) {
+            dropdown.innerHTML = `
+                <div class="p-5 text-center space-y-1.5">
+                    <p class="text-xs font-bold text-[#202124]">No matches found for "${escapeHtml(query)}"</p>
+                    <p class="text-[11px] text-[#6F6B68]">Try searching for <strong>Focus Zone</strong>, <strong>Breathing</strong>, <strong>#Deadline</strong>, or <strong>Self-check</strong>.</p>
+                </div>
+            `;
+            return;
+        }
+
+        dropdown.innerHTML = `
+            <div class="p-2 space-y-1 max-h-72 overflow-y-auto">
+                ${results.slice(0, 5).map((res, i) => `
+                    <div id="search-item-${i}" class="p-2.5 hover:bg-[#FFF4EC] rounded-xl cursor-pointer transition flex items-start justify-between group">
+                        <div class="space-y-0.5 max-w-[85%]">
+                            <div class="flex items-center space-x-1.5">
+                                <span class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">${res.name}</span>
+                                <span class="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 bg-stone-100 text-stone-600 rounded">${res.category}</span>
+                            </div>
+                            <p class="text-[11px] text-[#6F6B68] truncate">${res.desc}</p>
+                        </div>
+                        <span class="text-xs text-[#FF6B2C] opacity-0 group-hover:opacity-100 transition-opacity font-bold mt-1">→</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        results.slice(0, 5).forEach((res, i) => {
+            const el = document.getElementById(`search-item-${i}`);
+            if (el) {
+                el.addEventListener('click', () => {
+                    dropdown.classList.add('hidden');
+                    const searchInput = document.getElementById('global-search-input');
+                    if (searchInput) searchInput.value = '';
+                    res.action();
+                });
+            }
+        });
+    }
+
+    // =========================================================================
+    // QUICK TOOLS NAVIGATION DROPDOWN
+    // =========================================================================
+    function initQuickToolsDropdown() {
+        const btn = document.getElementById('nav-btn-quick-tools');
+        const dropdown = document.getElementById('nav-quick-tools-dropdown');
+        if (!btn || !dropdown) return;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    // =========================================================================
+    // MAIN ROUTING STATE SELECTION
+    // =========================================================================
+    // MAIN ROUTING STATE SELECTION (Find Your Next Step)
+    // =========================================================================
+    function initMainRoutingFlow() {
+        const ctaBtn = document.getElementById('btn-hero-figure-start');
+        const modal = document.getElementById('modal-routing-selection');
+        const closeBtn = document.getElementById('btn-close-routing-modal');
+
+        function openModal() {
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            // Accessibility focus on first card or close button
+            const firstCard = modal.querySelector('.state-choice-card');
+            if (firstCard) {
+                firstCard.focus();
+            }
+        }
+
+        function closeModal() {
+            if (!modal) return;
+            modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            if (ctaBtn) {
+                ctaBtn.focus();
+            }
+        }
+
+        if (ctaBtn) {
+            ctaBtn.addEventListener('click', openModal);
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+        }
+
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    }
+
+    function selectRoutingState(state) {
+        const modal = document.getElementById('modal-routing-selection');
+        if (modal) {
+            modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        if (state === 'urgent') {
+            if (window.TempoMode) {
+                window.TempoMode.requestMode('emergency');
+            } else {
+                navigateTo('emergency');
+            }
+        } else if (state === 'recovering') {
+            if (window.TempoMode) {
+                window.TempoMode.requestMode('recovery');
+            } else {
+                navigateTo('recovery-mode');
+            }
+        } else if (state === 'unclear') {
+            if (window.TempoMode) {
+                window.TempoMode.requestMode('unclear');
+            } else {
+                navigateTo('unclear-mode');
+            }
+        } else if (state === 'unsafe') {
+            if (window.TempoEmergencySupport) {
+                window.TempoEmergencySupport.openSOS();
+            }
+        }
+    }
+
+    // =========================================================================
+    // WHAT IS TEMPO MODAL
+    // =========================================================================
+    function initWhatIsTempoModal() {
+        const navBtn = document.getElementById('nav-link-what-is-tempo');
+        const modal = document.getElementById('modal-what-is-tempo');
+        const closeBtn = document.getElementById('btn-close-what-is-tempo');
+        if (navBtn && modal) {
+            navBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                modal.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+            });
+        }
+        if (closeBtn && modal) {
+            closeBtn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            });
+        }
+    }
+
+    function escapeHtml(str) {
+        return (str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     return {
         init,
         navigateTo,
         setRole,
         showToast,
-        triggerConfetti
+        triggerConfetti,
+        selectRoutingState
     };
 })();
 

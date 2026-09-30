@@ -47,52 +47,139 @@
     <link rel="icon" type="image/png" href="assets/tempo-logo.png">
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-[#FFF9F4] text-[#202124] min-h-screen flex flex-col pb-20 md:pb-8">
+<body class="bg-[#FFF8F2] text-[#202124] min-h-screen flex flex-col pb-20 md:pb-8">
 
     <!-- Top Role Banner (When in Advisor Mode) -->
     <div id="role-indicator-banner" class="hidden bg-[#202124] text-white text-xs py-2 px-4 shadow-sm"></div>
 
     <!-- Global App Header -->
     <header class="bg-white border-b border-[#E8E4E1] sticky top-0 z-40">
-        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-            <!-- Brand Logo -->
-            <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center space-x-3 cursor-pointer bg-white" title="Tempo Home">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-10 w-auto object-contain">
-                <div>
-                    <h1 class="font-heading font-extrabold text-xl text-[#202124] tracking-tight flex items-center">
-                        Tempo
-                        <span class="ml-2 text-[10px] font-bold tracking-wider text-[#B83D08] bg-white border border-[#FFD2BA] px-2 py-0.5 rounded-full uppercase">Wellbeing</span>
-                    </h1>
-                    <p class="text-[11px] text-[#6F6B68] font-medium">Academic Stress & Deadline Triage</p>
-                </div>
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-2 sm:gap-4">
+            <!-- Brand Logo (Clean White, No rectangular colored box) -->
+            <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center space-x-2.5 cursor-pointer bg-white shrink-0" title="Tempo Home">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-9 w-auto object-contain">
+                <span class="font-heading font-extrabold text-xl text-[#202124] tracking-tight">Tempo</span>
             </div>
 
-            <!-- Top Desktop Navigation -->
-            <nav class="hidden md:flex items-center space-x-1">
-                <a href="#today" data-nav="today" class="px-3.5 py-2 rounded-lg text-xs font-semibold text-[#FF6B2C] bg-[#FFE9DC] transition">Today</a>
-                <a href="#emergency" data-nav="emergency" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition flex items-center">
-                    <span class="mr-1 text-[#FF6B2C] font-bold">⚡</span> Triage
+            <!-- Global Mode Indicator Badge & Change Mode Trigger -->
+            <div id="mode-indicator-shell" class="hidden items-center space-x-2 pl-1 sm:pl-2">
+                <span id="mode-badge" class="px-2.5 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-xs">
+                    <span id="mode-badge-icon">⚡</span>
+                    <span id="mode-badge-label">Emergency Mode</span>
+                </span>
+                <button id="btn-change-mode" onclick="window.TempoMode.openChangeModeModal()" class="text-xs text-[#6F6B68] hover:text-[#202124] font-semibold underline transition">
+                    Change mode
+                </button>
+            </div>
+
+            <!-- Top Desktop Navigation Links -->
+            <nav class="hidden md:flex items-center space-x-1 lg:space-x-2">
+                <a id="nav-link-what-is-tempo" href="#what-is-tempo" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
+                    What is Tempo
                 </a>
-                <a href="#stress-check" data-nav="stress-check" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Self-Check</a>
-                <a href="#routine" data-nav="routine" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Routine</a>
-                <a href="#hub" data-nav="hub" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Learn & Solve</a>
-                <a href="#support" data-nav="support" class="px-3.5 py-2 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] transition">Support</a>
-                <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
-                <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3.5 py-2 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
+                
+                <!-- Quick Tools with Dropdown Trigger -->
+                <div class="relative">
+                    <button id="nav-btn-quick-tools" type="button" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition flex items-center space-x-1">
+                        <span>Quick Tools</span>
+                        <span class="text-[10px]">▾</span>
+                    </button>
+                    <!-- Quick Tools Dropdown Menu -->
+                    <div id="nav-quick-tools-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 p-2 space-y-1 nav-dropdown-menu">
+                        <!-- Focus Zone -->
+                        <div onclick="if(window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
+                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
+                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Focus Zone</h5>
+                                <p class="text-[11px] text-[#6F6B68]">45m focus / 15m rest cycle with ambient sound.</p>
+                            </div>
+                        </div>
+                        <!-- Breathing -->
+                        <div onclick="window.TempoTriage.openBoxBreathingModal(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
+                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
+                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Breathing</h5>
+                                <p class="text-[11px] text-[#6F6B68]">A quick breathing exercise to calm your mind.</p>
+                            </div>
+                        </div>
+                        <!-- Quick Stress Relief -->
+                        <div onclick="window.TempoStressRelief.openModal(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
+                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
+                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Quick Stress Relief</h5>
+                                <p class="text-[11px] text-[#6F6B68]">Simple micro-actions to ease stress in a few minutes.</p>
+                            </div>
+                        </div>
+                        <!-- Self-check -->
+                        <div onclick="window.TempoApp.navigateTo('stress-check'); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
+                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
+                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Self-check</h5>
+                                <p class="text-[11px] text-[#6F6B68]">Track your stress signals and wellbeing habits.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="#stress-check" data-nav="stress-check" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
+                    Self-check
+                </a>
+                <a id="nav-link-posts" href="#posts" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
+                    Tempo Posts
+                </a>
+
+                <!-- Hidden tabs for Advisor & Volunteer roles preserved -->
+                <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-3 py-1.5 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
+                <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
             </nav>
 
-            <!-- Actions: Urgent Triage Pill, Helpline & Auth State -->
-            <div class="flex items-center space-x-2">
-                <!-- Urgent Emergency Support Button -->
-                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-urgent px-3.5 py-2 rounded-xl text-xs font-bold flex items-center shadow-sm">
-                    <span class="mr-1.5">⚡</span> Emergency Support
-                </button>
+            <!-- Center/Right: Search, Language, SOS, and Auth Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- Compact Global Search -->
+                <div class="relative hidden sm:block w-36 md:w-44 lg:w-56">
+                    <div class="flex items-center px-3 py-1.5 bg-[#F8F6F4] border border-[#E8E4E1] rounded-full text-xs text-[#6F6B68] focus-within:border-[#FF6B2C] focus-within:bg-white transition">
+                        <svg class="w-3.5 h-3.5 text-[#6F6B68] mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input id="global-search-input" type="text" placeholder="Search Tempo..." 
+                               class="bg-transparent border-none outline-none w-full text-xs text-[#202124] placeholder-[#8E8A85]">
+                    </div>
+                    <!-- Live Search Results Dropdown -->
+                    <div id="global-search-results-dropdown" class="hidden absolute left-0 right-0 mt-2 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 overflow-hidden w-80 -ml-12 nav-dropdown-menu"></div>
+                </div>
 
-                <!-- 24/7 Crisis Help Trigger -->
-                <button onclick="window.TempoEmergencySupport.openModal()" class="btn-open-crisis-helpline p-2 text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100 rounded-xl transition" title="24/7 Crisis Helplines & Grounding">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
+                <!-- Language Selector -->
+                <div class="relative hidden md:block">
+                    <button id="nav-btn-language" type="button" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-50 transition flex items-center space-x-1 border border-transparent hover:border-gray-200">
+                        <span>🌐</span>
+                        <span>EN</span>
+                        <span class="text-[10px]">▾</span>
+                    </button>
+                </div>
+
+                <!-- SOS Emergency Support Button (Always Accessible) -->
+                <button id="btn-nav-sos" onclick="window.TempoEmergencySupport.openSOS()" class="btn-sos px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shadow-sm" title="Safety Emergency Support (24/7 Lifelines & Grounding)">
+                    <span class="mr-1">⚡</span> SOS
                 </button>
 
                 <!-- 1. Unauthenticated Header State -->
@@ -126,106 +213,160 @@
         <!-- ===================================================================
              SCREEN 1: HOME / TODAY DASHBOARD
              =================================================================== -->
-        <section id="screen-today" class="screen-container space-y-8">
-            <!-- Gentle Welcome Banner -->
-            <div class="space-y-1">
-                <h2 id="home-greeting-heading" class="font-heading text-2xl md:text-3xl font-bold text-gray-900">Hi there 👋</h2>
-                <p class="text-sm text-gray-600">Take a breath. You don't have to finish everything today. Just take one mindful step.</p>
-            </div>
+        <section id="screen-today" class="screen-container space-y-10">
+            <!-- Dynamic Emergency Mode Home Container (Populated by window.TempoMode) -->
+            <div id="emode-home-content" class="hidden space-y-8"></div>
 
-            <!-- Hero Urgent Emergency Card -->
-            <div class="tempo-card p-6 md:p-8 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-200">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div class="space-y-2">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                            ⚡ Acute Deadline Relief
-                        </span>
-                        <h3 class="font-heading text-xl md:text-2xl font-bold text-gray-900">Feeling overwhelmed by multiple deadlines?</h3>
-                        <p class="text-sm text-gray-600 max-w-xl">
-                            When everything feels urgent at once, your working memory freezes. Dump your deadlines here and let Tempo extract <strong>the ONE next action</strong> to get you started in 90 seconds.
+            <!-- Default Neutral Dmode Home Container -->
+            <div id="dmode-home-content" class="space-y-10">
+                <!-- Top Grid: Left Routing Hero (~70%) + Right Community Preview (~30%) -->
+            <div class="grid grid-cols-1 lg:grid-cols-10 gap-6 items-stretch">
+                <!-- LEFT: Main Routing Hero (approx 70% / 7 cols) -->
+                <div class="lg:col-span-7 hero-warm-card border border-[#E8E4E1] rounded-3xl p-8 sm:p-10 md:p-12 flex flex-col justify-between shadow-sm">
+                    <div class="space-y-4 max-w-xl relative z-10">
+                        <!-- Small Label -->
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">WELCOME TO TEMPO</span>
+                        
+                        <!-- Main Heading -->
+                        <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#202124] tracking-tight leading-tight">
+                            What do you need<br>right now?
+                        </h2>
+                        
+                        <!-- Supporting Copy -->
+                        <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed">
+                            You don't need to figure it out alone. Tell Tempo your current situation, and we'll help you find the next step.
                         </p>
-                    </div>
-                    <div class="shrink-0 flex flex-col sm:flex-row gap-2">
-                        <button onclick="window.TempoEmergencySupport.openModal()" class="btn-urgent px-6 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
-                            <span>Open Emergency Support</span>
-                            <span>→</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Two-Column Layout: Today's Cadence & Daily Micro-Tip -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Left 2 Cols: Today's Gentle Cadence -->
-                <div class="lg:col-span-2 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="font-heading text-lg font-bold text-gray-900">Today's Gentle Cadence</h3>
-                            <p id="routine-progress-counter" class="text-xs text-gray-500">2 of 5 activities completed</p>
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <label class="flex items-center space-x-2 text-xs font-medium text-gray-600 cursor-pointer">
-                                <span>Gentle Day Mode</span>
-                                <input type="checkbox" id="toggle-gentle-day" class="rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                            </label>
-                            <button data-nav="routine" class="text-xs text-[#FF6B2C] font-semibold hover:underline">Customize</button>
+                        
+                        <!-- Primary CTA Button -->
+                        <div class="pt-3">
+                            <button id="btn-hero-figure-start" 
+                                    class="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm sm:text-base shadow-md inline-flex items-center space-x-2.5 transition">
+                                <span>Help me figure out where to start</span>
+                                <span class="text-lg leading-none">→</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Routine Blocks Container -->
-                    <div id="dashboard-routine-list" class="space-y-3">
-                        <!-- Populated dynamically by routine.js -->
+                    <!-- Supporting Information Underneath -->
+                    <div class="pt-8 mt-6 border-t border-gray-100 flex flex-wrap items-center gap-6 text-xs text-[#6F6B68] relative z-10">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-base text-[#FF6B2C]">🕒</span>
+                            <span class="font-medium text-[#202124]">Takes less than 1 minute</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-base text-[#FF6B2C]">🛡️</span>
+                            <span class="font-medium text-[#202124]">Personalized guidance</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Right 1 Col: Advisor Tip & Quick Checks -->
-                <div class="space-y-6">
-                    <!-- Daily Micro-Tip -->
-                    <div class="tempo-card p-6 space-y-4 border-[#FFD2BA] bg-[#FFF9F4]">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">💡 Daily Wellbeing Tip</span>
-                            <span class="text-xs text-gray-400 font-medium">Advisor Curated</span>
-                        </div>
-                        <h4 id="dashboard-tip-title" class="font-heading text-base font-bold text-gray-900">The 5-Minute Starter Rule</h4>
-                        <p id="dashboard-tip-content" class="text-xs text-gray-600 leading-relaxed">
-                            When starting feels physically impossible, tell your brain you only have to work for 5 minutes. If you still want to stop after 300 seconds, you have full permission.
-                        </p>
-                        <div class="pt-2 border-t border-[#FFD2BA] flex items-center justify-between text-xs">
-                            <span id="dashboard-tip-author" class="text-gray-500 font-medium">Dr. Elena Vance (2m read)</span>
-                            <button onclick="window.TempoKnowledge.openArticle('art-1')" class="text-[#FF6B2C] font-semibold hover:underline">Read Full Guide</button>
-                        </div>
-                    </div>
-
-                    <!-- Today's Gentle Habits Quick-Glance Widget -->
-                    <div class="tempo-card p-6 space-y-4">
-                        <div class="flex items-center justify-between">
+                <!-- RIGHT: Small Tempo Community Preview (approx 30% / 3 cols) -->
+                <div class="lg:col-span-3 bg-white border border-[#E8E4E1] rounded-3xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
+                    <div class="space-y-3">
+                        <!-- Community Header -->
+                        <div class="flex items-center justify-between pb-1">
                             <div class="flex items-center space-x-2">
-                                <span class="text-base">🌱</span>
-                                <h4 class="font-heading text-sm font-bold text-gray-900">Today's Habits</h4>
+                                <span class="text-base text-[#FF6B2C]">💬</span>
+                                <h3 class="font-heading text-xs sm:text-sm font-bold text-[#202124]">From the Tempo community</h3>
                             </div>
-                            <span id="dashboard-habit-count-label" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#FFE9DC] text-[#B83D08]">2/5 done</span>
-                        </div>
-                        <div id="dashboard-habits-mini-list" class="space-y-1">
-                            <!-- Populated dynamically by routine.js -->
-                        </div>
-                        <div class="pt-1">
-                            <button data-nav="routine" class="w-full py-2 bg-[#FFE9DC] hover:bg-[#FFE9DC]/80 text-[#B83D08] rounded-xl text-xs font-semibold transition text-center">
-                                View & Track All Habits →
+                            <button id="btn-see-all-posts" class="text-xs font-bold text-[#FF6B2C] hover:underline flex items-center space-x-1">
+                                <span>See all</span>
+                                <span>→</span>
                             </button>
+                        </div>
+
+                        <!-- Posts List Container (Populated by communityPosts.js) -->
+                        <div id="homepage-community-posts-list" class="space-y-3">
+                            <!-- Social peer posts injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Tools Section -->
+            <div class="space-y-4 pt-2">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">Quick Tools</h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68]">Simple tools to help you feel better and get through your day.</p>
+                    </div>
+                    <button onclick="document.getElementById('nav-btn-quick-tools').click()" class="text-xs font-bold text-[#FF6B2C] hover:underline flex items-center space-x-1">
+                        <span>View all tools</span>
+                        <span>→</span>
+                    </button>
+                </div>
+
+                <!-- 4 Cards Grid (4 cols desktop, 2x2 tablet, 1-2 mobile) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Card 1: Focus Zone -->
+                    <div onclick="if(window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode();" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
+                        <div class="space-y-3">
+                            <div class="quick-tool-icon-circle">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Focus Zone</h4>
+                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Focus with intentional breaks. Default 45 min focus / 15 min rest.</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end pt-1">
+                            <div class="quick-tool-arrow-btn">→</div>
                         </div>
                     </div>
 
-                    <!-- Quick Self-Check Snapshot -->
-                    <div class="tempo-card p-6 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h4 class="font-heading text-sm font-bold text-gray-900">Recent Stress Snapshot</h4>
-                            <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">Strained</span>
+                    <!-- Card 2: Breathing -->
+                    <div onclick="window.TempoTriage.openBoxBreathingModal()" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
+                        <div class="space-y-3">
+                            <div class="quick-tool-icon-circle">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Breathing</h4>
+                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">A quick breathing exercise to calm your mind.</p>
+                            </div>
                         </div>
-                        <p class="text-xs text-gray-500">Your deadline pressure was highest during your last check-in 2 days ago.</p>
-                        <div class="pt-2">
-                            <button data-nav="stress-check" class="w-full py-2.5 bg-stone-100 hover:bg-stone-200 text-gray-800 rounded-xl text-xs font-medium transition text-center">
-                                Retake 6-Dimension Self-Check →
-                            </button>
+                        <div class="flex justify-end pt-1">
+                            <div class="quick-tool-arrow-btn">→</div>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Quick Stress Relief -->
+                    <div onclick="window.TempoStressRelief.openModal()" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
+                        <div class="space-y-3">
+                            <div class="quick-tool-icon-circle">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Quick Stress Relief</h4>
+                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Feel overwhelmed? Try a simple action to ease stress in a few minutes.</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end pt-1">
+                            <div class="quick-tool-arrow-btn">→</div>
+                        </div>
+                    </div>
+
+                    <!-- Card 4: Self-check -->
+                    <div onclick="window.TempoApp.navigateTo('stress-check')" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
+                        <div class="space-y-3">
+                            <div class="quick-tool-icon-circle">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Self-check</h4>
+                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Track your stress signals and wellbeing habits.</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end pt-1">
+                            <div class="quick-tool-arrow-btn">→</div>
                         </div>
                     </div>
                 </div>
@@ -237,106 +378,133 @@
              SCREEN 2: EMERGENCY TRIAGE & ONE NEXT ACTION
              =================================================================== -->
         <section id="screen-emergency" class="screen-container hidden space-y-8">
-            <!-- Header -->
-            <div class="max-w-2xl mx-auto text-center space-y-2">
-                <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 uppercase tracking-wide">Emergency Mode</span>
-                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Regain Control of Your Deadlines</h2>
-                <p class="text-sm text-gray-600">Dump everything here. Don't worry about order, grammar, or formatting. We'll turn it into one doable step.</p>
+            <!-- Flow Shell Header -->
+            <div class="emergency-flow-header max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between pb-4 border-b border-[#EAE4DF] gap-4">
+                <!-- Back to Home Link (keeps Emergency Mode active) -->
+                <button onclick="window.TempoApp.navigateTo('today')" class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] flex items-center space-x-1.5 transition" title="Return to Home while keeping Emergency Mode active">
+                    <span>←</span>
+                    <span>Back to Home</span>
+                </button>
+
+                <!-- Lightweight Phase Indicator (RESET • ORGANIZE • PLAN • READY) -->
+                <div class="flex items-center space-x-1.5 sm:space-x-2 text-[11px] font-bold uppercase tracking-wider">
+                    <span id="em-phase-reset" class="px-3 py-1 rounded-full bg-[#FFE9DC] text-[#B83D08] transition-colors">RESET</span>
+                    <span class="text-stone-300">•</span>
+                    <span id="em-phase-organize" class="px-3 py-1 rounded-full text-[#8E8A85] transition-colors">ORGANIZE</span>
+                    <span class="text-stone-300">•</span>
+                    <span id="em-phase-plan" class="px-3 py-1 rounded-full text-[#8E8A85] transition-colors">PLAN</span>
+                    <span class="text-stone-300">•</span>
+                    <span id="em-phase-ready" class="px-3 py-1 rounded-full text-[#8E8A85] transition-colors">READY</span>
+                </div>
+
+                <!-- Always Accessible SOS button -->
+                <button onclick="window.TempoEmergencySupport.openSOS()" class="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center space-x-1 transition shadow-sm" title="Safety Crisis Support">
+                    <span>⚡</span>
+                    <span>SOS Support</span>
+                </button>
             </div>
 
-            <!-- Brain Dump Box -->
-            <div class="max-w-3xl mx-auto tempo-card p-6 md:p-8 space-y-6">
-                <!-- Pre-populated Quick Scenario Chips -->
-                <div class="space-y-2">
-                    <span class="text-xs font-medium text-gray-500">Quick Test Scenarios (Click to test):</span>
-                    <div class="flex flex-wrap gap-2">
-                        <button type="button" data-scenario="marketing" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
-                            📋 Marketing Report + Friday Slides (4h tonight)
-                        </button>
-                        <button type="button" data-scenario="exams" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
-                            📚 2 Midterm Exams & 4 Chapters Behind
-                        </button>
-                        <button type="button" data-scenario="coding" class="sample-chip px-3 py-1.5 rounded-lg text-xs bg-stone-100 hover:bg-stone-200 text-gray-700 font-medium transition">
-                            💻 Coding Lab Failing Test Case (Due tonight)
-                        </button>
-                    </div>
+            <!-- ==========================================
+                 STAGE 1: EMERGENCY MODE ENTRY / SETTLE CHOICE
+                 ========================================== -->
+            <div id="emergency-stage-entry" class="max-w-xl mx-auto py-8 sm:py-12 space-y-8">
+                <div class="text-center space-y-2">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EMERGENCY MODE</span>
+                    <h2 class="font-heading text-3xl sm:text-4xl font-extrabold text-[#202124] tracking-tight">
+                        Let's get things back under control.
+                    </h2>
+                    <p class="text-sm sm:text-base text-[#6F6B68]">
+                        We'll take this one step at a time.
+                    </p>
                 </div>
 
-                <!-- Textarea -->
-                <div class="space-y-2">
-                    <label for="emergency-brain-dump" class="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        What's on your plate right now?
-                    </label>
-                    <textarea id="emergency-brain-dump" rows="5" 
-                        placeholder="e.g. I have a Marketing report due tomorrow at 9 AM and only finished the intro. I also have slides due Friday and an exam next week. I have about 4 hours tonight and my head is spinning..." 
-                        class="w-full p-4 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] text-sm text-gray-800 leading-relaxed"></textarea>
-                </div>
+                <!-- Active Plan or Draft Resume Banner -->
+                <div id="em-entry-resume-container" class="hidden space-y-4"></div>
 
-                <!-- Available Time Constraint -->
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-gray-100">
-                    <div class="flex items-center space-x-3 w-full sm:w-auto">
-                        <label for="emergency-hours-select" class="text-xs font-medium text-gray-600 whitespace-nowrap">Available Time Tonight:</label>
-                        <select id="emergency-hours-select" class="p-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
-                            <option value="2">2 Hours</option>
-                            <option value="3">3 Hours</option>
-                            <option value="4" selected>4 Hours</option>
-                            <option value="5">5+ Hours</option>
-                        </select>
-                    </div>
-
-                    <button id="btn-analyze-emergency" class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center space-x-2">
-                        <span>Analyze & Create Calm Plan</span>
-                        <span>→</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Triage Results & The ONE Action Container (Initially Hidden) -->
-            <div id="emergency-plan-results" class="hidden max-w-3xl mx-auto space-y-6">
-                <!-- THE ONE NEXT ACTION CARD -->
-                <div id="one-action-card" class="tempo-card p-6 md:p-8 action-glow bg-white space-y-6">
-                    <div class="flex items-center justify-between">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFE9DC] text-[#B83D08] tracking-wide uppercase">
-                            ✨ THE ONE NEXT ACTION
-                        </span>
-                        <span id="one-action-context" class="text-xs font-medium text-gray-500">Target: 25 minutes</span>
-                    </div>
-
+                <!-- Settle Decision Card -->
+                <div id="em-entry-settle-card" class="bg-white border border-[#EAE4DF] rounded-[22px] p-6 sm:p-8 space-y-6 shadow-sm">
                     <div class="space-y-2">
-                        <h3 id="one-action-title" class="font-heading text-2xl font-extrabold text-gray-900 leading-snug">
-                            <!-- Populated dynamically -->
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
+                            Do you need a moment to settle first?
                         </h3>
-                        <div class="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-1">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Why this first?</span>
-                            <p id="one-action-rationale" class="text-xs text-gray-700 leading-relaxed"></p>
-                        </div>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            If stress is making it hard to think clearly, you can take a moment before looking at your workload.
+                        </p>
                     </div>
 
-                    <!-- Action Controls -->
-                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                        <button id="btn-start-focus" class="btn-primary w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2">
-                            <span>▶ Start 25-Min Gentle Focus</span>
+                    <div class="pt-2 flex flex-col sm:flex-row items-center gap-3">
+                        <button id="btn-em-settle-yes" 
+                                onclick="window.TempoEmergencyFlow.startSettle()"
+                                class="btn-primary w-full sm:w-auto px-6 py-3.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center space-x-2 transition">
+                            <span>Yes, help me settle</span>
                         </button>
-                        
-                        <div class="flex items-center space-x-3 text-xs">
-                            <button id="btn-smaller-step" class="text-[#FF6B2C] hover:text-[#E8591C] font-semibold underline" data-mode="standard">
-                                <span>🤏 Make it even smaller (5 mins)</span>
-                            </button>
-                        </div>
+                        <button id="btn-em-settle-no" 
+                                onclick="window.TempoEmergencyFlow.skipSettle()"
+                                class="w-full sm:w-auto px-5 py-3.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-stone-50 transition flex items-center justify-center space-x-1">
+                            <span>No, I'm ready to continue</span>
+                            <span>→</span>
+                        </button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Structured Roadmap Accordion -->
-                <div class="tempo-card p-6 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h4 class="font-heading text-sm font-bold text-gray-900">Your Prioritized Task Roadmap</h4>
-                            <p id="triage-budget-summary" class="text-xs text-gray-500"></p>
-                        </div>
-                    </div>
-                    <div id="triage-task-list" class="space-y-3">
-                        <!-- Populated by triage.js -->
-                    </div>
+            <!-- ==========================================
+                 STAGE 2: REALITY CHECK (Brain Dump)
+                 ========================================== -->
+            <div id="emergency-stage-reality-check" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 3: PRIORITIZE + ESTIMATE (1-by-1 Assessment)
+                 ========================================== -->
+            <div id="emergency-stage-prioritize" class="max-w-xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 4: PRIORITY REVIEW (Category Buckets)
+                 ========================================== -->
+            <div id="emergency-stage-priority-review" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 5: AVAILABLE TIME (Time Block Inputs)
+                 ========================================== -->
+            <div id="emergency-stage-available-time" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 6: FEASIBILITY CHECK (Deficit / Surplus)
+                 ========================================== -->
+            <div id="emergency-stage-feasibility" class="max-w-xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 7: GENERATING PLAN (Brief Calm Transition)
+                 ========================================== -->
+            <div id="emergency-stage-generating" class="max-w-xl mx-auto py-16 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 8: EMERGENCY PLAN REVIEW & EDIT
+                 ========================================== -->
+            <div id="emergency-stage-plan-review" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 9: BREAK DOWN TASKS (In Plan Order)
+                 ========================================== -->
+            <div id="emergency-stage-breakdown" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- ==========================================
+                 STAGE 10: START WORKING / CLEAN HANDOFF STATE
+                 ========================================== -->
+            <div id="emergency-stage-handoff" class="max-w-xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+
+            <!-- Legacy Triage elements container (kept hidden so existing JS handles references without error) -->
+            <div id="emergency-legacy-triage" class="hidden">
+                <textarea id="emergency-brain-dump"></textarea>
+                <select id="emergency-hours-select"><option value="4" selected>4 Hours</option></select>
+                <button id="btn-analyze-emergency"></button>
+                <div id="emergency-plan-results">
+                    <h3 id="one-action-title"></h3>
+                    <p id="one-action-rationale"></p>
+                    <p id="triage-budget-summary"></p>
+                    <div id="triage-task-list"></div>
+                    <button id="btn-start-focus"></button>
+                    <button id="btn-smaller-step"></button>
                 </div>
             </div>
         </section>
@@ -696,6 +864,60 @@
 
 
         <!-- ===================================================================
+             SCREEN: RECOVERY MODE (PLACEHOLDER)
+             =================================================================== -->
+        <section id="screen-recovery-mode" class="screen-container hidden space-y-8">
+            <div class="max-w-xl mx-auto text-center py-16 px-4 space-y-6">
+                <div class="w-16 h-16 rounded-2xl bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA] flex items-center justify-center mx-auto text-2xl shadow-sm">
+                    🌱
+                </div>
+                <div class="space-y-2">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#166545]">RECOVERY & RECHARGE</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">Recovery Mode is being prepared</h2>
+                    <p class="text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
+                        We're designing a dedicated recovery flow to help you decompress, recharge, and rebuild mental stamina after high stress.
+                    </p>
+                </div>
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button onclick="window.TempoApp.navigateTo('today')" class="btn-primary px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-sm transition">
+                        ← Return to Home
+                    </button>
+                    <button onclick="window.TempoApp.navigateTo('routine')" class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-stone-50 transition">
+                        Explore Gentle Routine
+                    </button>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN: UNCLEAR MODE (PLACEHOLDER)
+             =================================================================== -->
+        <section id="screen-unclear-mode" class="screen-container hidden space-y-8">
+            <div class="max-w-xl mx-auto text-center py-16 px-4 space-y-6">
+                <div class="w-16 h-16 rounded-2xl bg-[#FEF7EC] text-[#9A5B13] border border-[#FDE5BE] flex items-center justify-center mx-auto text-2xl shadow-sm">
+                    🧭
+                </div>
+                <div class="space-y-2">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#9A5B13]">UNCLEAR MODE</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">Unclear Mode is being prepared</h2>
+                    <p class="text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
+                        We're designing a guided unpack flow to help you navigate when you feel off but can't clearly identify what you need right now.
+                    </p>
+                </div>
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button onclick="window.TempoApp.navigateTo('today')" class="btn-primary px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-sm transition">
+                        ← Return to Home
+                    </button>
+                    <button onclick="window.TempoApp.navigateTo('stress-check')" class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-stone-50 transition">
+                        Take Self-Check in the Meantime
+                    </button>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
              SCREEN 7: ADVISOR / ADMIN PORTAL (DR. ELENA VANCE)
              =================================================================== -->
         <section id="screen-admin" class="screen-container hidden space-y-8">
@@ -981,6 +1203,9 @@
          MODALS & OVERLAYS
          =================================================================== -->
 
+    <!-- TEMPO FOCUS ZONE (MVP) -->
+    <div id="tempo-focus-zone-root" class="fixed inset-0 z-50 flex flex-col hidden transition-colors duration-300"></div>
+
     <!-- 1. FULL-SCREEN GENTLE FOCUS TIMER MODAL -->
     <div id="focus-session-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/95 text-white p-6 hidden">
         <div class="max-w-xl w-full text-center space-y-8">
@@ -1008,7 +1233,13 @@
 
             <!-- Task Display -->
             <div class="space-y-2">
-                <span class="text-xs uppercase tracking-widest text-[#FF6B2C] font-semibold">Single Focus Objective</span>
+                <div class="flex items-center justify-center space-x-2">
+                    <span id="focus-phase-label" class="text-xs uppercase tracking-widest text-[#FF6B2C] font-semibold">FOCUS PHASE • 45 MIN</span>
+                    <span class="text-stone-600">•</span>
+                    <button id="btn-focus-phase-toggle" onclick="window.TempoTriage.switchTimerPhase('rest')" class="text-[11px] font-semibold px-3 py-1 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-300 transition">
+                        ☕ Switch to 15m Rest
+                    </button>
+                </div>
                 <h3 id="focus-task-name" class="font-heading text-2xl md:text-3xl font-bold text-stone-100 max-w-lg mx-auto leading-snug">
                     Draft 3 core section headings
                 </h3>
@@ -1017,7 +1248,7 @@
             <!-- Timer Clock -->
             <div class="py-6">
                 <div id="focus-timer-clock" class="font-mono text-7xl md:text-8xl font-extrabold tracking-tight text-white">
-                    25:00
+                    45:00
                 </div>
                 <p class="text-xs text-stone-400 mt-2">Just this one step. The rest of the world can wait.</p>
             </div>
@@ -1677,6 +1908,242 @@
     </nav>
 
     <!-- ===================================================================
+         STUDENT HOMEPAGE & ROUTING MODALS
+         =================================================================== -->
+
+    <!-- 1. MAIN ROUTING STATE SELECTION MODAL (Find Your Next Step) -->
+    <div id="modal-routing-selection" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="routing-modal-title">
+        <div class="tempo-card max-w-3xl w-full my-auto bg-white rounded-2xl sm:rounded-[24px] p-5 sm:p-8 space-y-6 relative shadow-xl border border-[#EAE4DF]">
+            <!-- Header -->
+            <div class="flex items-start justify-between pb-3 border-b border-gray-100 gap-4">
+                <div class="space-y-1.5">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">FIND YOUR NEXT STEP</span>
+                    <h2 id="routing-modal-title" class="font-heading text-xl sm:text-2xl md:text-[26px] font-bold text-[#202124] leading-snug">
+                        What best describes where you are right now?
+                    </h2>
+                </div>
+                <button id="btn-close-routing-modal" type="button" aria-label="Close dialog" class="text-gray-400 hover:text-gray-700 hover:bg-stone-100 p-2 rounded-xl text-lg transition shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                Different situations need different approaches. Choose the path that matches what you're experiencing:
+            </p>
+
+            <!-- 2x2 Grid of Mode Cards (Desktop 2x2, Mobile Stacked) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <!-- TOP LEFT: Emergency Mode -->
+                <div onclick="window.TempoApp.selectRoutingState('urgent')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.TempoApp.selectRoutingState('urgent');}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="Deadline is Urgent, Go to Emergency Mode"
+                     class="state-choice-card state-choice-card--urgent p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                    <div class="space-y-3">
+                        <div>
+                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FFF0E6] text-[#C2410C] border border-[#FFD9C4]">
+                                <span>⚡</span>
+                                <span>ACUTE ACTION</span>
+                            </span>
+                        </div>
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
+                            Deadline is Urgent
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            Urgent work needs attention, but stress is making it hard to focus, start, or prioritize.
+                        </p>
+                    </div>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
+                        <span class="text-xs sm:text-sm font-bold text-[#FF6B2C]">Go to Emergency Mode</span>
+                        <span class="text-base font-bold text-[#FF6B2C] group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                </div>
+
+                <!-- TOP RIGHT: Recovery Mode -->
+                <div onclick="window.TempoApp.selectRoutingState('recovering')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.TempoApp.selectRoutingState('recovering');}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="Recovering from Heavy Stress, Go to Recovery Mode"
+                     class="state-choice-card state-choice-card--recovery p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                    <div class="space-y-3">
+                        <div>
+                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]">
+                                <span>🌱</span>
+                                <span>RECOVER & RECHARGE</span>
+                            </span>
+                        </div>
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#1B7F53] transition-colors">
+                            Recovering from Heavy Stress
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            The urgent pressure has passed, but you still feel tired, anxious, or mentally drained.
+                        </p>
+                    </div>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
+                        <span class="text-xs sm:text-sm font-bold text-[#1B7F53]">Go to Recovery Mode</span>
+                        <span class="text-base font-bold text-[#1B7F53] group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                </div>
+
+                <!-- BOTTOM LEFT: Unclear Mode -->
+                <div onclick="window.TempoApp.selectRoutingState('unclear')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.TempoApp.selectRoutingState('unclear');}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="Not Sure What's Wrong, Go to Unclear Mode"
+                     class="state-choice-card state-choice-card--unclear p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                    <div class="space-y-3">
+                        <div>
+                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FEF7EC] text-[#9A5B13] border border-[#FDE5BE]">
+                                <span>🧭</span>
+                                <span>UNCLEAR</span>
+                            </span>
+                        </div>
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#B45309] transition-colors">
+                            Not Sure What's Wrong
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            You feel off, but you're not sure why or what you need right now.
+                        </p>
+                    </div>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
+                        <span class="text-xs sm:text-sm font-bold text-[#B45309]">Go to Unclear Mode</span>
+                        <span class="text-base font-bold text-[#B45309] group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                </div>
+
+                <!-- BOTTOM RIGHT: Immediate Support / SOS -->
+                <div onclick="window.TempoApp.selectRoutingState('unsafe')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.TempoApp.selectRoutingState('unsafe');}"
+                     tabindex="0"
+                     role="button"
+                     aria-label="I Don't Feel Safe, Get Immediate Support"
+                     class="state-choice-card state-choice-card--support p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                    <div class="space-y-3">
+                        <div>
+                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FEF2F2] text-[#B42318] border border-[#FECDCA]">
+                                <span>🛡️</span>
+                                <span>IMMEDIATE SUPPORT</span>
+                            </span>
+                        </div>
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#B42318] group-hover:text-[#991B1B] transition-colors">
+                            I Don't Feel Safe
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            You feel panicked or out of control, have thoughts of self-harm, or don't feel safe being alone right now.
+                        </p>
+                    </div>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-rose-100">
+                        <span class="text-xs sm:text-sm font-bold text-[#B42318]">Get Immediate Support</span>
+                        <span class="text-base font-bold text-[#B42318] group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. QUICK STRESS RELIEF & BREATHING REUSABLE MODAL -->
+    <div id="modal-quick-stress-relief" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true">
+        <div class="tempo-card max-w-2xl w-full my-auto max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-[24px] p-5 sm:p-8 space-y-4 relative shadow-xl border border-[#EAE4DF]">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-100">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Grounded Pause</span>
+                <button id="btn-close-stress-relief" type="button" aria-label="Close dialog" class="text-gray-400 hover:text-gray-700 hover:bg-stone-100 p-2 rounded-xl text-lg transition shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Dynamic Content Body rendered by window.TempoStressRelief -->
+            <div id="stress-relief-content-body">
+                <!-- Populated dynamically: Library, Detail, Breathing Setup, Active Session, or Checkpoint -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. WHAT IS TEMPO MODAL -->
+    <div id="modal-what-is-tempo" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
+        <div class="tempo-card max-w-lg w-full max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-5 relative shadow-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div class="flex items-center space-x-2.5">
+                    <img src="assets/tempo-logo.png" alt="Tempo" class="h-8 w-auto object-contain">
+                    <h3 class="font-heading text-lg font-bold text-[#202124]">What is Tempo?</h3>
+                </div>
+                <button id="btn-close-what-is-tempo" class="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg text-lg transition">✕</button>
+            </div>
+            <div class="space-y-4 text-xs text-[#6F6B68] leading-relaxed">
+                <p>
+                    <strong class="text-[#202124]">Tempo</strong> is a calm, supportive, non-clinical student wellbeing platform built to help university students manage academic pressure, break deadline paralysis, and find support when university life feels heavy.
+                </p>
+                <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA]/60 rounded-2xl space-y-2">
+                    <h4 class="font-bold text-[#202124] text-xs">Our Core Commitments:</h4>
+                    <ul class="space-y-1.5 list-disc list-inside">
+                        <li><strong class="text-[#202124]">No Toxic Productivity:</strong> Missing a habit or study block is never treated as a personal failure.</li>
+                        <li><strong class="text-[#202124]">The ONE Next Action:</strong> When panic strikes, we help deconstruct chaos into a single 25-minute doable step.</li>
+                        <li><strong class="text-[#202124]">Safety First:</strong> 24/7 crisis lifelines (988 & 741741) are always 1 click away without any quizzes or gates.</li>
+                    </ul>
+                </div>
+                <p>
+                    Use Tempo to decompress, track your gentle habits, run quiet focus blocks, and access peer encouragement whenever you need a mindful anchor.
+                </p>
+            </div>
+            <div class="pt-2">
+                <button onclick="document.getElementById('modal-what-is-tempo').classList.add('hidden'); document.body.classList.remove('overflow-hidden');" 
+                        class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs">
+                    Got it, thanks!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. TEMPO COMMUNITY POSTS MODAL -->
+    <div id="modal-community-posts" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden">
+        <div class="tempo-card max-w-2xl w-full max-h-[92vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-6 relative shadow-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div class="flex items-center space-x-2.5">
+                    <span class="text-xl">💬</span>
+                    <div>
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">From the Tempo Community</h3>
+                        <p class="text-xs text-[#6F6B68]">Supportive, honest thoughts from students navigating university life.</p>
+                    </div>
+                </div>
+                <button id="btn-close-community-modal" class="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg text-lg transition">✕</button>
+            </div>
+
+            <!-- Share a Thought Box -->
+            <form id="form-create-post" class="p-4 bg-[#FFF8F2] border border-[#FFD2BA]/70 rounded-2xl space-y-3">
+                <textarea id="input-new-post-content" rows="2" placeholder="Share an encouraging thought, deadline win, or ask fellow students for advice..." 
+                          class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]"></textarea>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center space-x-3 text-xs">
+                        <select id="select-new-post-tag" class="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 text-[#202124]">
+                            <option value="#Deadline">#Deadline</option>
+                            <option value="#MentalHealth">#MentalHealth</option>
+                            <option value="#Focus">#Focus</option>
+                            <option value="#Recovery">#Recovery</option>
+                            <option value="#General">#General</option>
+                        </select>
+                        <label class="flex items-center space-x-1.5 text-[#6F6B68] cursor-pointer">
+                            <input id="checkbox-new-post-anon" type="checkbox" checked class="text-[#FF6B2C] focus:ring-[#FF6B2C] rounded">
+                            <span>Post Anonymously</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn-primary px-4 py-1.5 rounded-xl font-bold text-xs">
+                        Post to Community
+                    </button>
+                </div>
+            </form>
+
+            <!-- Posts List Container -->
+            <div id="modal-community-posts-list" class="space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
          AUTHENTICATION & ROLE SELECTION MODALS
          =================================================================== -->
 
@@ -1734,6 +2201,17 @@
                 <span class="text-[11px] font-bold text-[#B83D08] uppercase tracking-wider">Student Sign Up</span>
                 <h3 class="font-heading text-2xl font-bold text-gray-900">Join Tempo Wellbeing</h3>
                 <p class="text-xs text-gray-500">Free, confidential support for managing university stress and deadlines.</p>
+            </div>
+
+            <!-- Mode Gate Banner (Visible when unauthenticated user requested a mode) -->
+            <div class="auth-mode-gate-banner hidden p-3 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left text-xs text-[#B83D08] space-y-1">
+                <div class="flex items-center space-x-1.5 font-bold">
+                    <span>⚡</span>
+                    <span class="auth-mode-gate-title">Authentication Required</span>
+                </div>
+                <p class="auth-mode-gate-desc text-[11px] text-[#6F6B68]">
+                    Sign in or register below to enter Emergency Mode. Your selection will continue directly after.
+                </p>
             </div>
 
             <form id="form-student-register" class="space-y-3.5">
@@ -1954,6 +2432,17 @@
                 <p class="text-xs text-gray-500">Sign in to your Tempo student or volunteer account.</p>
             </div>
 
+            <!-- Mode Gate Banner (Visible when unauthenticated user requested a mode) -->
+            <div class="auth-mode-gate-banner hidden p-3 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left text-xs text-[#B83D08] space-y-1">
+                <div class="flex items-center space-x-1.5 font-bold">
+                    <span>⚡</span>
+                    <span class="auth-mode-gate-title">Authentication Required</span>
+                </div>
+                <p class="auth-mode-gate-desc text-[11px] text-[#6F6B68]">
+                    Sign in to enter Emergency Mode. Your selection will continue directly after.
+                </p>
+            </div>
+
             <form id="form-signin" class="space-y-3.5">
                 <div>
                     <label for="signin-email" class="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
@@ -1976,6 +2465,93 @@
             <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
                 Don't have an account yet? 
                 <button onclick="window.TempoAuth.openRoleSelectModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
+         CHANGE MODE MODAL
+         =================================================================== -->
+    <div id="modal-change-mode" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" role="dialog" aria-modal="true">
+        <div class="tempo-card max-w-lg w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF]">
+            <button onclick="window.TempoMode.closeChangeModeModal()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition" title="Close">✕</button>
+
+            <div class="space-y-1.5 text-center">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-[#FF6B2C]">TEMPO MODES</span>
+                <h3 class="font-heading text-2xl font-bold text-[#202124]">Change Tempo Mode</h3>
+                <p class="text-xs text-[#6F6B68] max-w-sm mx-auto leading-relaxed">
+                    A mode changes what Tempo brings forward first. Your tasks, plans, and progress are always preserved.
+                </p>
+            </div>
+
+            <!-- Mode Choices List -->
+            <div class="space-y-3">
+                <!-- Option 0: Emergency Mode -->
+                <button type="button" id="change-mode-opt-emergency" onclick="window.TempoMode.setMode('emergency')"
+                        class="w-full p-4 rounded-2xl border-2 border-[#FFD2BA] hover:border-[#FF6B2C] bg-[#FFE9DC]/50 hover:bg-[#FFE9DC] text-left transition group space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#B83D08] bg-white px-2.5 py-0.5 rounded-full border border-[#FFD2BA]">
+                            ⚡ Emergency Mode
+                        </span>
+                        <span class="text-xs font-bold text-[#B83D08] group-hover:translate-x-1 transition-transform">Shift to Emergency →</span>
+                    </div>
+                    <h4 class="font-heading text-sm font-bold text-[#202124]">Academic Deadline Triage</h4>
+                    <p class="text-xs text-[#6F6B68]">
+                        Acute workload triage, feasibility check, and structured execution when deadlines are urgent.
+                    </p>
+                </button>
+
+                <!-- Option 1: Recovery Mode -->
+                <button type="button" id="change-mode-opt-recovery" onclick="window.TempoMode.setMode('recovery')"
+                        class="w-full p-4 rounded-2xl border-2 border-[#CDE9DA] hover:border-[#166545] bg-[#EDF7F1]/50 hover:bg-[#EDF7F1] text-left transition group space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#166545] bg-white px-2.5 py-0.5 rounded-full border border-[#CDE9DA]">
+                            🌱 Recovery Mode
+                        </span>
+                        <span class="text-xs font-bold text-[#166545] group-hover:translate-x-1 transition-transform">Shift to Recovery →</span>
+                    </div>
+                    <h4 class="font-heading text-sm font-bold text-[#202124]">Rebuild Rhythm & Recharge</h4>
+                    <p class="text-xs text-[#6F6B68]">
+                        Shift Tempo toward recovery, rebuilding rhythm, and sustainable pacing after heavy pressure.
+                    </p>
+                </button>
+
+                <!-- Option 2: Unclear Mode -->
+                <button type="button" id="change-mode-opt-unclear" onclick="window.TempoMode.setMode('unclear')"
+                        class="w-full p-4 rounded-2xl border-2 border-[#FDE5BE] hover:border-[#9A5B13] bg-[#FEF7EC]/50 hover:bg-[#FEF7EC] text-left transition group space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#9A5B13] bg-white px-2.5 py-0.5 rounded-full border border-[#FDE5BE]">
+                            🧭 Unclear Mode
+                        </span>
+                        <span class="text-xs font-bold text-[#9A5B13] group-hover:translate-x-1 transition-transform">Shift to Unclear →</span>
+                    </div>
+                    <h4 class="font-heading text-sm font-bold text-[#202124]">Unpack Confusion</h4>
+                    <p class="text-xs text-[#6F6B68]">
+                        Shift Tempo toward understanding what you need right now when things feel foggy.
+                    </p>
+                </button>
+
+                <!-- Option 3: Take a Break / Default Tempo -->
+                <button type="button" id="change-mode-opt-default" onclick="window.TempoMode.setMode('default')"
+                        class="w-full p-4 rounded-2xl border-2 border-stone-200 hover:border-stone-400 bg-stone-50 hover:bg-white text-left transition group space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-stone-700 bg-white px-2.5 py-0.5 rounded-full border border-stone-200">
+                            ☕ Take a Break (Default)
+                        </span>
+                        <span class="text-xs font-bold text-stone-700 group-hover:translate-x-1 transition-transform">Return to Default →</span>
+                    </div>
+                    <h4 class="font-heading text-sm font-bold text-[#202124]">Neutral Tempo Experience</h4>
+                    <p class="text-xs text-[#6F6B68]">
+                        Return to the regular Tempo homepage without an active mode. Your emergency tasks remain saved.
+                    </p>
+                </button>
+            </div>
+
+            <!-- Footer: Stay in Current Mode -->
+            <div class="pt-2 text-center border-t border-gray-100">
+                <button type="button" id="change-mode-footer-btn" onclick="window.TempoMode.closeChangeModeModal()" class="text-xs font-bold text-[#6F6B68] hover:text-[#202124] underline">
+                    Stay in Emergency Mode
+                </button>
             </div>
         </div>
     </div>
@@ -2015,6 +2591,12 @@
     <script src="support.js"></script>
     <script src="admin.js"></script>
     <script src="emergencySupport.js"></script>
+    <script src="communityPosts.js"></script>
+    <script src="stressRelief.js"></script>
+    <script src="planStore.js"></script>
+    <script src="emergencyFlow.js"></script>
+    <script src="focusZone.js"></script>
+    <script src="mode.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

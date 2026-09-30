@@ -8,7 +8,7 @@
     --tempo-orange: #FF6B2C;
     --tempo-orange-hover: #E8591C;
     --tempo-ink: #202124;
-    --tempo-cream: #FFF9F4;
+    --tempo-cream: #FFF8F2;
     --tempo-orange-soft: #FFE9DC;
     --tempo-orange-text: #B83D08;
     --tempo-gray: #F3F1EF;
@@ -169,6 +169,14 @@ h1, h2, h3, h4, h5, h6, .font-heading {
     animation: boxBreathe 16s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+    #active-breathing-circle, .breathing-circle-active {
+        transition: none !important;
+        animation: none !important;
+        transform: none !important;
+    }
+}
+
 /* Sound Wave Animation */
 @keyframes soundPulse {
     0%, 100% { height: 6px; }
@@ -248,4 +256,329 @@ header nav,
 #brand-logo-container {
     background-color: #FFFFFF !important;
 }
+
+/* SOS Navigation Button */
+.btn-sos {
+    background-color: #E03126;
+    color: #FFFFFF;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-sos:hover {
+    background-color: #C0261B;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(224, 49, 38, 0.3);
+}
+
+/* Hero Warm Card with subtle organic curve */
+.hero-warm-card {
+    background: #FFFFFF;
+    position: relative;
+    overflow: hidden;
+}
+.hero-warm-card::after {
+    content: '';
+    position: absolute;
+    right: -100px;
+    bottom: -130px;
+    width: 480px;
+    height: 480px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 233, 220, 0.75) 0%, rgba(255, 244, 236, 0.4) 55%, transparent 75%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Quick Tools Card Design */
+.quick-tool-card {
+    background: #FFFFFF;
+    border: 1px solid #E8E4E1;
+    border-radius: 20px;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.quick-tool-card:hover {
+    border-color: #FF6B2C;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -6px rgba(255, 107, 44, 0.1);
+}
+.quick-tool-icon-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background-color: #FFF4EC;
+    color: #FF6B2C;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.quick-tool-arrow-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: #F8F6F4;
+    color: #6F6B68;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.quick-tool-card:hover .quick-tool-arrow-btn {
+    background-color: #FF6B2C;
+    color: #FFFFFF;
+    transform: translateX(2px);
+}
+
+/* Nav Dropdown Animations */
+.nav-dropdown-menu {
+    animation: fadeInSlide 0.15s ease-out forwards;
+}
+@keyframes fadeInSlide {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* State Choice Cards (Routing Modal: Find Your Next Step) */
+.state-choice-card {
+    background-color: #FFFFFF;
+    border: 1.5px solid #EAE4DF;
+    border-radius: 22px;
+    transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+    outline: none;
+}
+
+.state-choice-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px -4px rgba(32, 33, 36, 0.06);
+}
+
+/* Card A: Emergency / Acute Action */
+.state-choice-card--urgent:hover {
+    border-color: #FF6B2C;
+    background-color: #FFFDFB;
+}
+.state-choice-card--urgent:focus-visible {
+    border-color: #FF6B2C;
+    outline: 2px solid #FF6B2C;
+    outline-offset: 2px;
+}
+
+/* Card B: Recovery / Recharge */
+.state-choice-card--recovery:hover {
+    border-color: #2E7D5B;
+    background-color: #FBFDFB;
+}
+.state-choice-card--recovery:focus-visible {
+    border-color: #2E7D5B;
+    outline: 2px solid #2E7D5B;
+    outline-offset: 2px;
+}
+
+/* Card C: Unclear */
+.state-choice-card--unclear:hover {
+    border-color: #D97706;
+    background-color: #FFFCF8;
+}
+.state-choice-card--unclear:focus-visible {
+    border-color: #D97706;
+    outline: 2px solid #D97706;
+    outline-offset: 2px;
+}
+
+/* Card D: Immediate Support */
+.state-choice-card--support {
+    background-color: #FFFDFD;
+    border-color: rgba(254, 205, 202, 0.85);
+}
+.state-choice-card--support:hover {
+    border-color: #D92D20;
+    background-color: #FFF9F9;
+}
+.state-choice-card--support:focus-visible {
+    border-color: #D92D20;
+    outline: 2px solid #D92D20;
+    outline-offset: 2px;
+}
+
+/* Emergency Mode Interactive Pills & Timeline Cards */
+.em-choice-pill {
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1.5px solid #EAE4DF;
+    background-color: #FFFFFF;
+}
+.em-choice-pill:hover {
+    border-color: #FF6B2C;
+    background-color: #FFFDFB;
+}
+.em-choice-pill--selected {
+    border-color: #FF6B2C !important;
+    background-color: #FFF4EC !important;
+    color: #B83D08 !important;
+    font-weight: 700 !important;
+}
+
+.em-timeline-card {
+    background-color: #FFFFFF;
+    border: 1.5px solid #EAE4DF;
+    border-radius: 20px;
+    transition: all 0.15s ease;
+}
+.em-timeline-card:hover {
+    border-color: #D3CDC7;
+}
+
+.badge-up-next {
+    background-color: #FFE9DC;
+    color: #B83D08;
+    border: 1px solid #FFD5C0;
+}
+.badge-then {
+    background-color: #FBF0E4;
+    color: #9A5B13;
+    border: 1px solid #F5E1CE;
+}
+.badge-later {
+    background-color: #F3F1EF;
+    color: #6F6B68;
+    border: 1px solid #E2DFDC;
+}
+
+/* ==========================================================================
+   TEMPO FOCUS ZONE VISUAL SYSTEM
+   ========================================================================== */
+
+/* Full Viewport Atmosphere Backgrounds */
+.fz-bg-cream {
+    background: radial-gradient(circle at 50% 20%, #FFFDF9 0%, #FFF8F2 60%, #FAF0E6 100%);
+    color: #202124;
+}
+
+.fz-bg-sunset {
+    background: linear-gradient(180deg, #FDE6D2 0%, #F5A98B 35%, #C26379 65%, #3C233D 100%);
+    color: #202124;
+}
+
+.fz-bg-sky {
+    background: linear-gradient(180deg, #BAE6FD 0%, #D8EDFA 40%, #E0F2FE 70%, #F8FAFC 100%);
+    color: #0F172A;
+}
+
+.fz-bg-night {
+    background: linear-gradient(180deg, #0F172A 0%, #1E1B4B 50%, #030712 100%);
+    color: #F8FAFC;
+}
+
+/* Atmosphere Swatch Previews in Setup */
+.fz-swatch {
+    position: relative;
+    width: 100%;
+    height: 52px;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.fz-swatch-cream {
+    background: radial-gradient(circle at 50% 30%, #FFFDF9 0%, #FFF5ED 60%, #FAF0E6 100%);
+}
+.fz-swatch-sunset {
+    background: linear-gradient(180deg, #FDE6D2 0%, #F5A98B 45%, #C26379 80%, #3C233D 100%);
+}
+.fz-swatch-sky {
+    background: linear-gradient(180deg, #BAE6FD 0%, #D8EDFA 50%, #E0F2FE 100%);
+}
+.fz-swatch-night {
+    background: linear-gradient(180deg, #0F172A 0%, #1E1B4B 60%, #030712 100%);
+}
+
+/* Glowing Sun for Sunset Atmosphere */
+.fz-glowing-sun {
+    position: absolute;
+    top: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 237, 213, 0.95) 0%, rgba(254, 215, 170, 0.5) 45%, rgba(254, 215, 170, 0) 75%);
+    filter: blur(8px);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Mountain Silhouette Container */
+.fz-mountain-silhouette {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 180px;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Progress Ring SVGs */
+.fz-timer-circle-bg {
+    fill: none;
+    stroke: currentColor;
+    opacity: 0.12;
+}
+
+.fz-timer-circle-fg {
+    fill: none;
+    stroke: #FF6B2C;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 0.8s ease;
+}
+
+.fz-break-circle-fg {
+    fill: none;
+    stroke: #059669;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 0.8s ease;
+}
+
+/* Translucent Glass Control Bar */
+.fz-control-bar {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.fz-bg-night .fz-control-bar {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #F8FAFC;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Night theme element adjustments */
+.fz-bg-night .tempo-focus-card {
+    background-color: rgba(30, 41, 59, 0.85);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #F8FAFC;
+}
+
+.fz-bg-night .fz-text-muted {
+    color: #94A3B8;
+}
+
+.fz-bg-night .fz-btn-secondary {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #F8FAFC;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.fz-bg-night .fz-btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+
 

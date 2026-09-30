@@ -295,7 +295,25 @@ window.TempoAuth = (function() {
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
         if (!supabase) {
-            window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.");
+            currentUser = { id: 'local_student_' + Date.now(), email: email };
+            currentProfile = {
+                id: currentUser.id,
+                email: email,
+                full_name: fullName,
+                role: 'student',
+                university: university || 'Not specified',
+                year_of_study: yearOfStudy || 'Not specified'
+            };
+            renderHeaderUI(currentProfile);
+            closeAllAuthModals();
+            window.TempoApp.triggerConfetti();
+            window.TempoApp.showToast(`Welcome, ${fullName}! Your account has been created.`);
+
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else {
+                window.TempoApp.navigateTo('today');
+            }
             return;
         }
 
@@ -333,7 +351,12 @@ window.TempoAuth = (function() {
             } else {
                 window.TempoApp.showToast("Please check your email to confirm your account!");
             }
-            window.TempoApp.navigateTo('today');
+
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else {
+                window.TempoApp.navigateTo('today');
+            }
 
         } catch (err) {
             console.error("Student register error:", err);
@@ -444,7 +467,22 @@ window.TempoAuth = (function() {
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
         if (!supabase) {
-            window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.");
+            currentUser = { id: 'local_student_' + Date.now(), email: email };
+            currentProfile = {
+                id: currentUser.id,
+                email: email,
+                full_name: email.split('@')[0],
+                role: 'student'
+            };
+            renderHeaderUI(currentProfile);
+            closeAllAuthModals();
+            window.TempoApp.showToast(`Welcome back, ${currentProfile.full_name}!`);
+
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else {
+                window.TempoApp.navigateTo('today');
+            }
             return;
         }
 
@@ -469,7 +507,9 @@ window.TempoAuth = (function() {
             await loadUserProfile(data.user.id);
             window.TempoApp.showToast(`Welcome back, ${currentProfile?.full_name || email}!`);
 
-            if (currentProfile?.role === 'volunteer') {
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else if (currentProfile?.role === 'volunteer') {
                 window.TempoApp.navigateTo('volunteer-dashboard');
             } else if (currentProfile?.role === 'admin') {
                 window.TempoApp.navigateTo('admin');
@@ -498,6 +538,9 @@ window.TempoAuth = (function() {
         currentProfile = null;
         currentVolunteerProfile = null;
         renderHeaderUI(null);
+        if (window.TempoMode) {
+            window.TempoMode.setMode('default', { silent: true });
+        }
         window.TempoApp.showToast("You have been signed out.");
         window.TempoApp.navigateTo('today');
     }
