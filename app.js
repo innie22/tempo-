@@ -7,12 +7,12 @@ window.TempoApp = (function() {
     let currentRole = 'student'; // 'student' | 'admin'
     let currentTab = 'today';
 
-    function init() {
+    async function init() {
         bindNavigation();
         bindRoleSwitcher();
         initConfettiCanvas();
 
-        // Initialize sub-modules
+        // 1. Initialize standalone sub-modules
         if (window.TempoTriage) window.TempoTriage.init();
         if (window.TempoStress) window.TempoStress.init();
         if (window.TempoRoutine) window.TempoRoutine.init();
@@ -20,14 +20,34 @@ window.TempoApp = (function() {
         if (window.TempoSupport) window.TempoSupport.init();
         if (window.TempoAdmin) window.TempoAdmin.init();
         if (window.TempoEmergencySupport) window.TempoEmergencySupport.init();
-        if (window.TempoAuth) window.TempoAuth.init();
         if (window.TempoVolunteer) window.TempoVolunteer.init();
         if (window.TempoCommunity) window.TempoCommunity.init();
         if (window.TempoStressRelief) window.TempoStressRelief.init();
-        if (window.TempoPlanStore) window.TempoPlanStore.init();
-        if (window.TempoEmergencyFlow) window.TempoEmergencyFlow.init();
+
+        // 2. Initialize Supabase Auth and await session resolution (AUTH_LOADING -> AUTHENTICATED / ANONYMOUS)
+        if (window.TempoAuth) {
+            await window.TempoAuth.init();
+            if (typeof window.TempoAuth.waitForAuthResolution === 'function') {
+                await window.TempoAuth.waitForAuthResolution();
+            }
+        }
+
+        // 3. Initialize centralized Plan Store with resolved identity (authenticated user or guest)
+        if (window.TempoPlanStore) {
+            await window.TempoPlanStore.init();
+        }
+
+        // 4. Hydrate Emergency Flow with active plan or draft for resolved user
+        if (window.TempoEmergencyFlow) {
+            await window.TempoEmergencyFlow.init();
+        }
+
         if (window.TempoFocusZone) window.TempoFocusZone.init();
-        if (window.TempoMode) window.TempoMode.init();
+
+        // 5. Initialize Mode system with hydrated plan and auth state
+        if (window.TempoMode) {
+            window.TempoMode.init();
+        }
 
         // UI Interactions
         initGlobalSearch();
@@ -35,7 +55,7 @@ window.TempoApp = (function() {
         initMainRoutingFlow();
         initWhatIsTempoModal();
 
-        // Handle hash navigation
+        // Handle hash navigation with resolved user & plan state
         window.addEventListener('hashchange', handleHashChange);
         if (window.location.hash) {
             handleHashChange();
@@ -142,6 +162,13 @@ window.TempoApp = (function() {
             if (window.TempoEmergencyFlow) {
                 const stage = window.TempoEmergencyFlow.getCurrentStage();
                 window.TempoEmergencyFlow.goToStage(stage || 'entry');
+            }
+        }
+
+        // If entering Plan Workspace, render workspace
+        if (tabId === 'plan-workspace') {
+            if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
+                window.TempoPlanWorkspace.render();
             }
         }
 

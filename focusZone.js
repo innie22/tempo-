@@ -17,7 +17,7 @@ window.TempoFocusZone = (function() {
     // -------------------------------------------------------------------------
     let session = {
         isOpen: false,
-        phase: 'setup', // 'quick_entry' | 'setup' | 'focus' | 'paused' | 'block_complete' | 'finish_confirm' | 'subtasks_all_done' | 'break' | 'break_game' | 'break_move' | 'break_just' | 'break_ended' | 'return_transition'
+        phase: 'setup', // 'quick_entry' | 'setup' | 'focus' | 'paused' | 'block_complete' | 'finish_confirm' | 'subtasks_all_done' | 'break' | 'break_game' | 'break_move' | 'break_just' | 'break_ended' | 'return_transition' | 'task_finished_early' | 'last_task_today' | 'pre_break_orientation' | 'finish_early_orient' | 'today_complete' | 'review_tomorrow' | 'round_grace' | 'change_rhythm' | 'rhythm_updated'
         
         // Task reference (shared, not owned)
         taskId: null,
@@ -41,6 +41,8 @@ window.TempoFocusZone = (function() {
         // Break properties
         hasUsedBreakExtension: false,
         isFinishingAllowedGameRound: false,
+        breakActivityType: 'other', // 'round_game' | 'non_round_game' | 'other'
+        isPostDayBreak: false,
         selectedMoveOption: null,
         
         // Styling & Atmosphere
@@ -52,6 +54,150 @@ window.TempoFocusZone = (function() {
         // Memory game state
         gameState: null
     };
+
+    // Rhythm modal configuration state
+    let rhythmModalState = {
+        selectedPreset: '45_15', // '25_5' | '45_15' | '50_10' | 'custom'
+        customFocus: 35,
+        customBreak: 10
+    };
+
+    // Helper: Load saved Focus Rhythm
+    function loadSavedRhythm() {
+        try {
+            const raw = localStorage.getItem('tempo_focus_rhythm');
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (data && data.focusDurationSeconds && data.breakDurationSeconds) {
+                    session.focusDurationSeconds = data.focusDurationSeconds;
+                    session.breakDurationSeconds = data.breakDurationSeconds;
+                    return true;
+                }
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    // Helper: Resolve shared Emergency Plan and tasks for Today and Tomorrow
+    function getPlanContext() {
+        let plan = null;
+        if (window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            plan = window.TempoPlanStore.getActivePlan('emergency');
+        }
+        if (!plan && window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
+            plan = window.TempoEmergencyFlow.getConfirmedPlan();
+        }
+
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        const tomorrowDate = new Date(now);
+        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+        const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+        const plannedTasks = (plan && Array.isArray(plan.plannedTasks)) ? plan.plannedTasks : [];
+
+        let todayItems = plannedTasks.filter(pt => {
+            if (!pt || !pt.task) return false;
+            if (pt.dayDate === todayStr) return true;
+            if (pt.dayLabel && pt.dayLabel.toUpperCase() === 'TODAY') return true;
+            return false;
+        });
+
+        const tomorrowItems = plannedTasks.filter(pt => {
+            if (!pt || !pt.task) return false;
+            if (pt.dayDate === tomorrowStr) return true;
+            if (pt.dayLabel && pt.dayLabel.toUpperCase() === 'TOMORROW') return true;
+            return false;
+        });
+
+        // Fallback: If no explicit dates match today/tomorrow, treat all uncompleted planned tasks as today
+        if (todayItems.length === 0 && tomorrowItems.length === 0 && plannedTasks.length > 0) {
+            todayItems = plannedTasks.filter(pt => pt && pt.task);
+        }
+
+        const todayUnfinished = todayItems.filter(pt => pt.task && !pt.task.completed);
+        const tomorrowUnfinished = tomorrowItems.filter(pt => pt.task && !pt.task.completed);
+
+        return {
+            plan,
+            todayStr,
+            tomorrowStr,
+            plannedTasks,
+            todayItems,
+            todayUnfinished,
+            tomorrowItems,
+            tomorrowUnfinished
+        };
+    }
+
+    // Helper: 12H time formatting (e.g. 08:30 -> 8:30 AM, 20:30 -> 8:30 PM)
+    function formatTime12H(timeStr) {
+        if (!timeStr) return '';
+        if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
+        const parts = timeStr.split(':');
+        if (parts.length < 2) return timeStr;
+        let h = parseInt(parts[0], 10);
+        const m = parts[1].padStart(2, '0');
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        return `${h}:${m} ${ampm}`;
+    }
+
+    // Helper: Duration friendly formatting (e.g. 165 -> 2h45)
+    function formatMinutesFriendly(mins) {
+        if (!mins || mins <= 0) return '0m';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (h > 0 && m > 0) return `${h}h${m.toString().padStart(2, '0')}`;
+        if (h > 0) return `${h}h`;
+        return `${m}m`;
+    }
+
+    // Helper: Check if a time string is in the future today
+    function isTimeInFuture(timeStr) {
+        if (!timeStr) return false;
+        try {
+            let h = 0, m = 0;
+            if (timeStr.includes('AM') || timeStr.includes('PM')) {
+                const parts = timeStr.split(' ');
+                const timeParts = parts[0].split(':');
+                h = parseInt(timeParts[0], 10);
+                m = parseInt(timeParts[1], 10);
+                if (parts[1].toUpperCase() === 'PM' && h < 12) h += 12;
+                if (parts[1].toUpperCase() === 'AM' && h === 12) h = 0;
+            } else {
+                const parts = timeStr.split(':');
+                h = parseInt(parts[0], 10);
+                m = parseInt(parts[1], 10);
+            }
+            const now = new Date();
+            const taskTime = new Date();
+            taskTime.setHours(h, m, 0, 0);
+            return taskTime.getTime() > now.getTime();
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // Navigation helpers
+    function navigateHomeAndClose() {
+        close();
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('today');
+        } else {
+            window.location.hash = '#today';
+        }
+    }
+
+    function viewTodaysPlanAndClose() {
+        close();
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('plan-workspace');
+        } else {
+            window.location.hash = '#plan-workspace';
+        }
+    }
 
     // Web Audio Synthesizer state
     let audioCtx = null;
@@ -129,7 +275,12 @@ window.TempoFocusZone = (function() {
         session.isOpen = true;
         session.hasUsedBreakExtension = false;
         session.isFinishingAllowedGameRound = false;
+        session.breakActivityType = 'other';
+        session.isPostDayBreak = false;
         session.focusElapsedSeconds = 0;
+
+        // Restore saved focus rhythm preference if present
+        loadSavedRhythm();
 
         // Resolve shared task reference
         if (options.taskId) {
@@ -138,20 +289,17 @@ window.TempoFocusZone = (function() {
         } else if (options.taskName) {
             session.taskId = null;
             session.taskName = options.taskName;
-            session.nextAction = options.nextAction || 'Single focus objective.';
+            session.nextAction = options.nextAction || '';
             session.subtasks = [];
         } else {
             session.taskId = null;
-            session.taskName = 'Independent Focus Session';
-            session.nextAction = 'Focus with intentional breaks.';
+            session.taskName = 'No task selected';
+            session.nextAction = '';
             session.subtasks = [];
         }
 
-        // Set default 45/15 rhythm
-        session.focusDurationSeconds = 45 * 60;
-        session.breakDurationSeconds = 15 * 60;
-        session.focusSecondsRemaining = 45 * 60;
-        session.breakSecondsRemaining = 15 * 60;
+        session.focusSecondsRemaining = session.focusDurationSeconds;
+        session.breakSecondsRemaining = session.breakDurationSeconds;
 
         session.phase = 'setup';
 
@@ -180,11 +328,15 @@ window.TempoFocusZone = (function() {
         session.nextAction = 'Focus with intentional breaks.';
         session.subtasks = [];
         session.hasUsedBreakExtension = false;
+        session.isFinishingAllowedGameRound = false;
+        session.breakActivityType = 'other';
+        session.isPostDayBreak = false;
+        session.focusElapsedSeconds = 0;
 
-        session.focusDurationSeconds = 45 * 60;
-        session.breakDurationSeconds = 15 * 60;
-        session.focusSecondsRemaining = 45 * 60;
-        session.breakSecondsRemaining = 15 * 60;
+        loadSavedRhythm();
+
+        session.focusSecondsRemaining = session.focusDurationSeconds;
+        session.breakSecondsRemaining = session.breakDurationSeconds;
 
         root.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
@@ -250,6 +402,15 @@ window.TempoFocusZone = (function() {
         }
     }
 
+    function focusWithoutTask() {
+        session.taskId = null;
+        session.taskName = 'Independent Focus Session';
+        session.nextAction = '';
+        session.subtasks = [];
+        saveSessionToStorage();
+        render();
+    }
+
     // -------------------------------------------------------------------------
     // RHYTHM SELECTION & SETUP
     // -------------------------------------------------------------------------
@@ -291,6 +452,7 @@ window.TempoFocusZone = (function() {
         session.phase = 'focus';
         session.focusSecondsRemaining = session.focusDurationSeconds;
         session.focusElapsedSeconds = 0;
+        session.isPostDayBreak = false;
 
         startFocusTimer();
         startAudio();
@@ -406,8 +568,7 @@ window.TempoFocusZone = (function() {
 
     function handleSubtasksAllDoneChoice(isTaskComplete) {
         if (isTaskComplete) {
-            markSharedTaskComplete();
-            handleFocusBlockComplete();
+            finishActiveTaskEarly();
         } else {
             // Task not yet complete: return to active focus countdown
             session.nextAction = 'Wrap up final details and review.';
@@ -434,53 +595,162 @@ window.TempoFocusZone = (function() {
         }
 
         if (choice === 'mark_done') {
-            markSharedTaskComplete();
-            close();
+            finishActiveTaskEarly();
             return;
         }
 
         if (choice === 'stop_here') {
-            // Task remains in progress/incomplete
-            close();
+            finishFocusEarly();
+            return;
         }
     }
 
-    function markSharedTaskComplete() {
-        if (!session.taskId) return;
+    function markSharedTaskComplete(targetTaskId = null) {
+        const idToMark = targetTaskId || session.taskId;
+        if (!idToMark) return;
 
-        if (window.TempoEmergencyFlow && window.TempoEmergencyFlow.toggleTaskCompleted) {
-            // Ensure task completed flag is set to true
-            const tasks = window.TempoEmergencyFlow.getTasks();
-            let task = tasks.find(t => t.id === session.taskId);
-            if (!task) {
+        if (window.TempoEmergencyFlow) {
+            const tasks = (typeof window.TempoEmergencyFlow.getTasks === 'function') ? window.TempoEmergencyFlow.getTasks() : [];
+            let task = tasks.find(t => t && t.id === idToMark);
+            if (!task && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
                 const plan = window.TempoEmergencyFlow.getConfirmedPlan();
-                const item = plan?.plannedTasks?.find(pt => pt.task.id === session.taskId);
+                const item = plan?.plannedTasks?.find(pt => pt.task && pt.task.id === idToMark);
                 if (item) task = item.task;
             }
 
             if (task) {
                 task.completed = true;
                 task.isInProgress = false;
-                if (window.TempoPlanStore) {
-                    window.TempoPlanStore.updateTaskState(session.taskId, { completed: true, isInProgress: false });
-                }
             }
         }
 
-        if (window.TempoApp) {
+        if (window.TempoPlanStore && typeof window.TempoPlanStore.updateTaskState === 'function') {
+            window.TempoPlanStore.updateTaskState(idToMark, { completed: true, isInProgress: false });
+        }
+
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
             window.TempoApp.showToast(`Task completed! Great job following through.`);
         }
     }
 
     // -------------------------------------------------------------------------
+    // GOAL A: TASK FINISHED BEFORE FOCUS BLOCK ENDS
+    // -------------------------------------------------------------------------
+    function finishActiveTaskEarly() {
+        stopFocusTimer();
+        const ctx = getPlanContext();
+
+        if (!session.taskId) {
+            confirmFinishEarly();
+            return;
+        }
+
+        // Check if there are other unfinished tasks planned for TODAY
+        const otherUnfinishedToday = ctx.todayUnfinished.filter(pt => pt.task.id !== session.taskId);
+
+        if (otherUnfinishedToday.length > 0) {
+            session.phase = 'task_finished_early';
+        } else {
+            session.phase = 'last_task_today';
+        }
+        saveSessionToStorage();
+        render();
+    }
+
+    function continueWithNextTask() {
+        if (session.taskId) {
+            markSharedTaskComplete(session.taskId);
+        }
+
+        const ctx = getPlanContext();
+        // Resolve next unfinished task from today's plan in execution order
+        const nextItem = ctx.todayItems.find(pt => pt.task && pt.task.id !== session.taskId && !pt.task.completed);
+        if (nextItem && nextItem.task) {
+            session.taskId = nextItem.task.id;
+            session.taskName = nextItem.task.name;
+            session.subtasks = nextItem.task.subtasks || [];
+            const firstIncomplete = session.subtasks.find(s => !s.completed);
+            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : 'Begin focused preliminary work block.');
+
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setTaskInProgress === 'function') {
+                window.TempoEmergencyFlow.setTaskInProgress(nextItem.task.id, true);
+            }
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.updateTaskState === 'function') {
+                window.TempoPlanStore.updateTaskState(nextItem.task.id, { isInProgress: true });
+            }
+        }
+
+        // Invariant: Preserve the EXACT remaining timer in current block (do NOT reset)
+        session.phase = 'focus';
+        startFocusTimer();
+        saveSessionToStorage();
+        render();
+    }
+
+    function markDoneAndTakeBreak() {
+        if (session.taskId) {
+            markSharedTaskComplete(session.taskId);
+        }
+        stopFocusTimer();
+        session.phase = 'pre_break_orientation';
+        saveSessionToStorage();
+        render();
+    }
+
+    function finishFocusEarly() {
+        stopFocusTimer();
+        stopBreakTimer();
+        const ctx = getPlanContext();
+
+        // Check if unfinished tasks remain today
+        const unfinishedToday = ctx.todayItems.filter(pt => pt.task && !pt.task.completed);
+
+        if (unfinishedToday.length > 0) {
+            session.phase = 'finish_early_orient';
+            saveSessionToStorage();
+            render();
+        } else {
+            close();
+        }
+    }
+
+    function markLastTaskCompleted() {
+        if (session.taskId) {
+            markSharedTaskComplete(session.taskId);
+        }
+        stopFocusTimer();
+        session.taskId = null;
+        session.phase = 'today_complete';
+        saveSessionToStorage();
+        render();
+    }
+
+    function startPostDayBreak() {
+        startBreakPeriod(true);
+    }
+
+    function openReviewTomorrow() {
+        session.phase = 'review_tomorrow';
+        saveSessionToStorage();
+        render();
+    }
+
+    function startTomorrowTaskEarly(taskId) {
+        session.taskId = taskId;
+        resolveSharedTaskData(taskId);
+        readyForNextFocusBlock();
+    }
+
+    // -------------------------------------------------------------------------
     // BREAK ENGINE & PARENT BREAK TIMER
     // -------------------------------------------------------------------------
-    function startBreakPeriod() {
+    function startBreakPeriod(isPostDay = false) {
         stopFocusTimer();
         session.phase = 'break';
         session.breakSecondsRemaining = session.breakDurationSeconds;
         session.hasUsedBreakExtension = false;
         session.isFinishingAllowedGameRound = false;
+        session.isPostDayBreak = !!isPostDay;
 
         startBreakTimer();
         saveSessionToStorage();
@@ -542,7 +812,6 @@ window.TempoFocusZone = (function() {
 
         // If user is currently playing Gentle Match and is allowed to finish the current round
         if (session.phase === 'break_game' && session.isFinishingAllowedGameRound) {
-            // Keep game active until round ends naturally
             return;
         }
 
@@ -552,20 +821,32 @@ window.TempoFocusZone = (function() {
     }
 
     function selectBreakActivity(activity) {
-        if (activity === 'game') {
+        if (activity === 'game' || activity === 'round_game') {
+            session.breakActivityType = 'round_game';
             initGentleMatch();
             session.phase = 'break_game';
+        } else if (activity === 'non_round_game') {
+            session.breakActivityType = 'non_round_game';
+            session.phase = 'break';
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Enjoy your open-ended game time.");
+            }
         } else if (activity === 'stress') {
-            // Open reusable Stress Relief / Breathing modal while break timer runs in background
+            session.breakActivityType = 'other';
             if (window.TempoStressRelief) {
                 window.TempoStressRelief.openModal();
             }
             session.phase = 'break';
         } else if (activity === 'move') {
+            session.breakActivityType = 'other';
             session.selectedMoveOption = null;
             session.phase = 'break_move';
         } else if (activity === 'just') {
+            session.breakActivityType = 'other';
             session.phase = 'break_just';
+        } else {
+            session.breakActivityType = 'other';
+            session.phase = 'break';
         }
         render();
     }
@@ -586,9 +867,24 @@ window.TempoFocusZone = (function() {
         saveSessionToStorage();
         render();
 
-        if (window.TempoApp) {
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
             window.TempoApp.showToast("Added 5 extra minutes to your break.");
         }
+    }
+
+    function startRoundGrace() {
+        if (session.hasUsedBreakExtension) return;
+
+        session.hasUsedBreakExtension = true;
+        session.phase = 'round_grace';
+        saveSessionToStorage();
+        render();
+    }
+
+    function confirmRoundDone() {
+        session.phase = 'return_transition';
+        saveSessionToStorage();
+        render();
     }
 
     function endBreakEarly() {
@@ -599,12 +895,114 @@ window.TempoFocusZone = (function() {
     }
 
     function readyForNextFocusBlock() {
+        const ctx = getPlanContext();
+        // Resolve next unfinished task from today in execution order
+        const nextItem = ctx.todayItems.find(pt => pt.task && !pt.task.completed);
+        if (nextItem && nextItem.task) {
+            session.taskId = nextItem.task.id;
+            session.taskName = nextItem.task.name;
+            session.subtasks = nextItem.task.subtasks || [];
+            const firstIncomplete = session.subtasks.find(s => !s.completed);
+            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : 'Begin focused preliminary work block.');
+
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setTaskInProgress === 'function') {
+                window.TempoEmergencyFlow.setTaskInProgress(nextItem.task.id, true);
+            }
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.updateTaskState === 'function') {
+                window.TempoPlanStore.updateTaskState(nextItem.task.id, { isInProgress: true });
+            }
+        }
+
         session.phase = 'focus';
         session.focusSecondsRemaining = session.focusDurationSeconds;
+        session.breakSecondsRemaining = session.breakDurationSeconds;
         session.focusElapsedSeconds = 0;
+        session.hasUsedBreakExtension = false;
+        session.isPostDayBreak = false;
 
         startFocusTimer();
         startAudio();
+        saveSessionToStorage();
+        render();
+    }
+
+    // -------------------------------------------------------------------------
+    // GOAL C: CHANGE FOCUS RHYTHM (POST-BREAK CHECKPOINT)
+    // -------------------------------------------------------------------------
+    function openChangeRhythmModal() {
+        const fMin = Math.round(session.focusDurationSeconds / 60);
+        const bMin = Math.round(session.breakDurationSeconds / 60);
+        if (fMin === 25 && bMin === 5) {
+            rhythmModalState.selectedPreset = '25_5';
+        } else if (fMin === 45 && bMin === 15) {
+            rhythmModalState.selectedPreset = '45_15';
+        } else if (fMin === 50 && bMin === 10) {
+            rhythmModalState.selectedPreset = '50_10';
+        } else {
+            rhythmModalState.selectedPreset = 'custom';
+            rhythmModalState.customFocus = fMin;
+            rhythmModalState.customBreak = bMin;
+        }
+        session.phase = 'change_rhythm';
+        saveSessionToStorage();
+        render();
+    }
+
+    function selectRhythmChoice(choice) {
+        rhythmModalState.selectedPreset = choice;
+        render();
+    }
+
+    function cancelChangeRhythm() {
+        session.phase = 'return_transition';
+        saveSessionToStorage();
+        render();
+    }
+
+    function saveRhythmFromModal() {
+        let fMin = 45;
+        let bMin = 15;
+
+        if (rhythmModalState.selectedPreset === '25_5') {
+            fMin = 25;
+            bMin = 5;
+        } else if (rhythmModalState.selectedPreset === '45_15') {
+            fMin = 45;
+            bMin = 15;
+        } else if (rhythmModalState.selectedPreset === '50_10') {
+            fMin = 50;
+            bMin = 10;
+        } else if (rhythmModalState.selectedPreset === 'custom') {
+            const focusInput = document.getElementById('fz-modal-custom-focus');
+            const breakInput = document.getElementById('fz-modal-custom-break');
+            const parsedFocus = focusInput ? parseInt(focusInput.value, 10) : rhythmModalState.customFocus;
+            const parsedBreak = breakInput ? parseInt(breakInput.value, 10) : rhythmModalState.customBreak;
+
+            if (isNaN(parsedFocus) || parsedFocus <= 0 || isNaN(parsedBreak) || parsedBreak <= 0) {
+                if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                    window.TempoApp.showToast("Please enter valid focus and break durations greater than 0.");
+                }
+                return;
+            }
+            fMin = parsedFocus;
+            bMin = parsedBreak;
+            rhythmModalState.customFocus = fMin;
+            rhythmModalState.customBreak = bMin;
+        }
+
+        // Apply strictly to future focus blocks (not mutating current running block)
+        session.focusDurationSeconds = fMin * 60;
+        session.breakDurationSeconds = bMin * 60;
+
+        // Persist rhythm preference across blocks and sessions
+        try {
+            localStorage.setItem('tempo_focus_rhythm', JSON.stringify({
+                focusDurationSeconds: session.focusDurationSeconds,
+                breakDurationSeconds: session.breakDurationSeconds
+            }));
+        } catch (e) {}
+
+        session.phase = 'rhythm_updated';
         saveSessionToStorage();
         render();
     }
@@ -983,6 +1381,8 @@ window.TempoFocusZone = (function() {
                 focusSecondsRemaining: session.focusSecondsRemaining,
                 breakSecondsRemaining: session.breakSecondsRemaining,
                 hasUsedBreakExtension: session.hasUsedBreakExtension,
+                breakActivityType: session.breakActivityType,
+                isPostDayBreak: session.isPostDayBreak,
                 background: session.background,
                 soundType: session.soundType,
                 soundVolume: session.soundVolume,
@@ -1009,6 +1409,8 @@ window.TempoFocusZone = (function() {
                 session.focusSecondsRemaining = data.focusSecondsRemaining || 45 * 60;
                 session.breakSecondsRemaining = data.breakSecondsRemaining || 15 * 60;
                 session.hasUsedBreakExtension = !!data.hasUsedBreakExtension;
+                session.breakActivityType = data.breakActivityType || 'other';
+                session.isPostDayBreak = !!data.isPostDayBreak;
                 session.background = data.background || 'cream';
                 session.soundType = data.soundType || 'none';
                 session.soundVolume = data.soundVolume || 0.5;
@@ -1056,6 +1458,24 @@ window.TempoFocusZone = (function() {
             case 'finish_confirm':
                 contentHtml = renderFinishConfirm(style);
                 break;
+            case 'task_finished_early':
+                contentHtml = renderTaskFinishedEarly(style);
+                break;
+            case 'last_task_today':
+                contentHtml = renderLastTaskToday(style);
+                break;
+            case 'pre_break_orientation':
+                contentHtml = renderPreBreakOrientation(style);
+                break;
+            case 'finish_early_orient':
+                contentHtml = renderFinishEarlyOrient(style);
+                break;
+            case 'today_complete':
+                contentHtml = renderTodayComplete(style);
+                break;
+            case 'review_tomorrow':
+                contentHtml = renderReviewTomorrow(style);
+                break;
             case 'subtasks_all_done':
                 contentHtml = renderSubtasksAllDone(style);
                 break;
@@ -1076,6 +1496,15 @@ window.TempoFocusZone = (function() {
                 break;
             case 'break_ended':
                 contentHtml = renderBreakEnded(style);
+                break;
+            case 'round_grace':
+                contentHtml = renderRoundGrace(style);
+                break;
+            case 'change_rhythm':
+                contentHtml = renderChangeRhythm(style);
+                break;
+            case 'rhythm_updated':
+                contentHtml = renderRhythmUpdated(style);
                 break;
             case 'return_transition':
                 contentHtml = renderReturnTransition(style);
@@ -1259,7 +1688,7 @@ window.TempoFocusZone = (function() {
                 <div class="space-y-1.5">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">FOCUS ZONE</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        ${escapeHTML(session.taskName)}
+                        ${session.taskId ? escapeHTML(session.taskName) : 'No task selected'}
                     </h2>
                 </div>
 
@@ -1270,13 +1699,25 @@ window.TempoFocusZone = (function() {
                             📋
                         </div>
                         <div class="min-w-0">
-                            <h4 class="text-xs font-bold text-[#202124] truncate">${escapeHTML(session.taskName)}</h4>
-                            <p class="text-[11px] text-[#6F6B68] truncate">Next: ${escapeHTML(session.nextAction)}</p>
+                            ${session.taskId ? `
+                                <h4 class="text-xs font-bold text-[#202124] truncate">${escapeHTML(session.taskName)}</h4>
+                                <p class="text-[11px] text-[#6F6B68] truncate">Next: ${escapeHTML(session.nextAction)}</p>
+                            ` : `
+                                <h4 class="text-xs font-bold text-[#202124] truncate">NO TASK</h4>
+                                <p class="text-[11px] text-[#6F6B68] truncate">Just give yourself some focused time</p>
+                            `}
                         </div>
                     </div>
-                    <button type="button" onclick="window.TempoFocusZone.openQuickEntry()" class="text-xs font-bold text-[#FF6B2C] hover:underline px-2 py-1 shrink-0">
-                        Edit
-                    </button>
+                    <div class="flex items-center space-x-2 shrink-0">
+                        <button type="button" onclick="window.TempoFocusZone.openQuickEntry()" class="text-xs font-bold text-[#FF6B2C] hover:underline px-2 py-1">
+                            ${session.taskId ? 'Edit' : 'Choose a task'}
+                        </button>
+                        ${session.taskId ? `
+                            <button type="button" onclick="window.TempoFocusZone.focusWithoutTask()" class="text-xs font-bold text-stone-500 hover:text-stone-800 px-2 py-1 border border-stone-200 rounded-lg hover:bg-stone-50 transition">
+                                Focus without a task
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
 
                 <!-- Focus Rhythm Selector (4 Horizontal Chips) -->
@@ -1436,23 +1877,37 @@ window.TempoFocusZone = (function() {
                 <!-- Task Header -->
                 <div class="space-y-1">
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold ${style.isDark ? 'text-white' : 'text-[#202124]'} tracking-tight">
-                        ${escapeHTML(session.taskName)}
+                        ${session.taskId ? escapeHTML(session.taskName) : 'Independent Focus Session'}
                     </h2>
                 </div>
 
                 <!-- Next Action Pill with Immediate Done Checkmark -->
-                <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full ${style.pillClass} shadow-xs max-w-md mx-auto">
-                    <span class="text-xs font-bold ${style.isDark ? 'text-stone-300' : 'text-stone-700'} truncate">
-                        Next: ${escapeHTML(session.nextAction)}
-                    </span>
-                    ${session.subtasks.length > 0 ? `
-                        <button type="button" onclick="window.TempoFocusZone.completeActiveSubtask()" 
-                                class="w-5 h-5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 transition shadow-2xs"
-                                title="Mark step done">
-                            ✓
+                ${session.taskId ? `
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full ${style.pillClass} shadow-xs max-w-md mx-auto">
+                            <span class="text-xs font-bold ${style.isDark ? 'text-stone-300' : 'text-stone-700'} truncate">
+                                Next: ${escapeHTML(session.nextAction)}
+                            </span>
+                            ${session.subtasks.length > 0 ? `
+                                <button type="button" onclick="window.TempoFocusZone.completeActiveSubtask()" 
+                                        class="w-5 h-5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 transition shadow-2xs"
+                                        title="Mark step done">
+                                    ✓
+                                </button>
+                            ` : ''}
+                        </div>
+                        <button type="button" onclick="window.TempoFocusZone.finishActiveTaskEarly()"
+                                class="px-3.5 py-1 rounded-full text-xs font-bold border border-stone-200 hover:border-[#FF6B2C] bg-white/90 hover:bg-white text-stone-700 hover:text-[#FF6B2C] shadow-2xs transition">
+                            Finish task
                         </button>
-                    ` : ''}
-                </div>
+                    </div>
+                ` : `
+                    <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full ${style.pillClass} shadow-xs max-w-md mx-auto">
+                        <span class="text-xs font-medium ${style.isDark ? 'text-stone-300' : 'text-stone-600'}">
+                            Just giving yourself some focused time
+                        </span>
+                    </div>
+                `}
 
                 <!-- Large Circular Progress Ring -->
                 <div class="relative w-64 h-64 sm:w-72 sm:h-72 mx-auto my-2 flex items-center justify-center select-none">
@@ -1570,6 +2025,12 @@ window.TempoFocusZone = (function() {
                         <span>▶</span>
                         <span>Resume</span>
                     </button>
+                    ${session.taskId ? `
+                        <button type="button" onclick="window.TempoFocusZone.finishActiveTaskEarly()"
+                                class="w-full py-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 font-bold text-sm shadow-sm transition">
+                            Finish task
+                        </button>
+                    ` : ''}
                     <button type="button" onclick="window.TempoFocusZone.confirmFinishEarly()"
                             class="w-full py-3 rounded-2xl ${style.isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-stone-800 hover:bg-stone-900 text-white'} font-bold text-sm shadow-sm transition">
                         Finish session
@@ -2065,10 +2526,10 @@ window.TempoFocusZone = (function() {
     }
 
     // -------------------------------------------------------------------------
-    // VIEW 12: BREAK ENDED (Panel 6 in Mockup)
+    // VIEW 12: BREAK ENDED (Context-Aware Extension)
     // -------------------------------------------------------------------------
     function renderBreakEnded(style) {
-        const canFinishGame = session.gameState && !session.gameState.isCompleted;
+        const isRoundGame = session.breakActivityType === 'round_game';
 
         return `
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
@@ -2077,8 +2538,12 @@ window.TempoFocusZone = (function() {
                 </div>
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">BREAK OVER</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Break time is up.</h3>
-                    <p class="text-xs text-[#6F6B68]">Ready to return to your task?</p>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">
+                        ${session.hasUsedBreakExtension ? 'Your extra 5 minutes are up.' : 'Break time is up 🌿'}
+                    </h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        ${session.hasUsedBreakExtension ? 'Ready to return to your work?' : 'Ready to get back?'}
+                    </p>
                 </div>
 
                 <div class="space-y-2.5 pt-2">
@@ -2086,26 +2551,315 @@ window.TempoFocusZone = (function() {
                     <button type="button" onclick="window.TempoFocusZone.endBreakEarly()"
                             class="btn-primary w-full py-3.5 rounded-2xl font-bold text-sm shadow-md transition flex items-center justify-center space-x-1.5">
                         <span>▶</span>
-                        <span>Focus now</span>
+                        <span>Return to Focus</span>
                     </button>
 
-                    ${canFinishGame ? `
-                        <button type="button" onclick="window.TempoFocusZone.allowFinishCurrentGameRound()"
+                    ${!session.hasUsedBreakExtension && isRoundGame ? `
+                        <button type="button" onclick="window.TempoFocusZone.startRoundGrace()"
                                 class="w-full p-3.5 rounded-2xl bg-white border border-stone-200 hover:border-stone-300 text-stone-700 text-xs font-semibold transition flex items-center justify-between shadow-2xs group">
                             <span>Let me finish this round</span>
                             <span class="text-stone-400 group-hover:translate-x-1 transition-transform">→</span>
                         </button>
                     ` : ''}
 
-                    ${!session.hasUsedBreakExtension ? `
+                    ${!session.hasUsedBreakExtension && !isRoundGame ? `
                         <button type="button" onclick="window.TempoFocusZone.extendBreak5Minutes()"
                                 class="w-full p-3.5 rounded-2xl bg-[#FFF8F2] border border-[#FFD2BA] hover:bg-[#FFE9DC] text-[#B83D08] text-xs font-semibold transition flex items-center justify-between shadow-2xs group">
-                            <span>I need 5 more minutes (once per break)</span>
+                            <span>I need 5 more minutes</span>
                             <span class="text-[#FF6B2C] group-hover:translate-x-1 transition-transform">→</span>
                         </button>
                     ` : ''}
 
-                    <button type="button" onclick="window.TempoFocusZone.close()"
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
+                            class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                        Finish focus for now
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // VIEW 13: POST-BREAK CHECKPOINT (Sections 23, 33, 34, 35)
+    // -------------------------------------------------------------------------
+    function renderReturnTransition(style) {
+        const ctx = getPlanContext();
+        const isTodayComplete = session.isPostDayBreak || ctx.todayUnfinished.length === 0;
+
+        if (isTodayComplete) {
+            const tomorrowFirstItem = ctx.tomorrowItems.length > 0 ? ctx.tomorrowItems[0] : null;
+
+            return `
+                <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                    <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                        🌿
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <p class="text-xs text-[#6F6B68]">You're done with today's plan.</p>
+                    </div>
+
+                    ${tomorrowFirstItem ? `
+                        <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-left space-y-1">
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">Tomorrow starts with:</span>
+                            <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(tomorrowFirstItem.task.name)}</h4>
+                            ${tomorrowFirstItem.scheduledStartTime ? `
+                                <div class="text-xs text-stone-600 pt-0.5 font-medium">${formatTime12H(tomorrowFirstItem.scheduledStartTime)}</div>
+                            ` : ''}
+                        </div>
+                        <p class="text-xs text-stone-500">
+                            If you feel like getting ahead, you can start now — but you don't have to.
+                        </p>
+                    ` : ''}
+
+                    <div class="space-y-2 pt-2">
+                        ${tomorrowFirstItem ? `
+                            <button type="button" onclick="window.TempoFocusZone.openReviewTomorrow()"
+                                    class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                                Review tomorrow
+                            </button>
+                            <button type="button" onclick="window.TempoFocusZone.startTomorrowTaskEarly('${tomorrowFirstItem.task.id}')"
+                                    class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                                Start a task now
+                            </button>
+                        ` : ''}
+                        <button type="button" onclick="window.TempoFocusZone.close()"
+                                class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                            Done
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Another task remains today
+        const nextItem = ctx.todayItems.find(pt => pt.task && !pt.task.completed);
+        const nextTask = nextItem ? nextItem.task : { name: session.taskName, durationLabel: '' };
+        const plannedStartStr = nextItem && nextItem.scheduledStartTime ? formatTime12H(nextItem.scheduledStartTime) : '';
+        const isFutureTask = nextItem && nextItem.scheduledStartTime && isTimeInFuture(nextItem.scheduledStartTime);
+        const focusMin = Math.round(session.focusDurationSeconds / 60);
+        const breakMin = Math.round(session.breakDurationSeconds / 60);
+
+        if (isFutureTask && plannedStartStr) {
+            return `
+                <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                    <div class="space-y-1">
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <p class="text-xs text-[#6F6B68]">
+                            Your next task is planned for <strong>${escapeHTML(plannedStartStr)}</strong>.
+                        </p>
+                    </div>
+
+                    <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08] block">Next task</span>
+                        <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(nextTask.name)}</h4>
+                        ${nextTask.durationLabel ? `
+                            <div class="flex items-center justify-between text-xs text-stone-600 pt-1">
+                                <span>Estimate</span>
+                                <span class="font-semibold text-stone-800">${escapeHTML(nextTask.durationLabel)} focused work</span>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <p class="text-xs text-stone-500">
+                        If you're ready, you can start now — or come back when it's time.
+                    </p>
+
+                    <div class="space-y-2 pt-2">
+                        <button type="button" onclick="window.TempoFocusZone.readyForNextFocusBlock()"
+                                class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                            <span>Start now</span>
+                            <span>→</span>
+                        </button>
+                        <button type="button" onclick="window.TempoFocusZone.openChangeRhythmModal()"
+                                class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                            Change focus rhythm
+                        </button>
+                        <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
+                                class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                            I'll start at ${escapeHTML(plannedStartStr)}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                </div>
+
+                <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-2">
+                    <div>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08] block">UP NEXT</span>
+                        <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(nextTask.name)}</h4>
+                    </div>
+                    ${plannedStartStr ? `
+                        <div class="flex items-center justify-between text-xs text-stone-600 border-t border-stone-200/60 pt-1.5">
+                            <span>Planned start</span>
+                            <span class="font-semibold text-stone-800">${escapeHTML(plannedStartStr)}</span>
+                        </div>
+                    ` : ''}
+                    ${nextTask.durationLabel ? `
+                        <div class="flex items-center justify-between text-xs text-stone-600 border-t border-stone-200/60 pt-1.5">
+                            <span>Estimate</span>
+                            <span class="font-semibold text-stone-800">${escapeHTML(nextTask.durationLabel)} focused work</span>
+                        </div>
+                    ` : ''}
+                    <div class="flex items-center justify-between text-xs text-stone-600 border-t border-stone-200/60 pt-1.5">
+                        <span>Current rhythm</span>
+                        <span class="font-semibold text-stone-800">${focusMin} min focus · ${breakMin} min break</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.readyForNextFocusBlock()"
+                            class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                        <span>Start next focus</span>
+                        <span>→</span>
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.openChangeRhythmModal()"
+                            class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                        Change focus rhythm
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
+                            class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                        Finish focus for now
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // -------------------------------------------------------------------------
+    // NEW RENDER VIEWS (GOALS A, B, C)
+    // -------------------------------------------------------------------------
+
+    // View 14: Task finished with time remaining in current block (Section 3)
+    function renderTaskFinishedEarly(style) {
+        const mins = Math.floor(session.focusSecondsRemaining / 60);
+        const secs = session.focusSecondsRemaining % 60;
+        const timeDisplay = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                    ✓
+                </div>
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">${escapeHTML(session.taskName)} complete ✓</h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        You still have <strong>${timeDisplay}</strong> in this focus block.
+                    </p>
+                    <p class="text-xs text-stone-500 font-medium">What would you like to do?</p>
+                </div>
+
+                <div class="space-y-2.5 pt-2 text-left">
+                    <button type="button" onclick="window.TempoFocusZone.continueWithNextTask()"
+                            class="btn-primary w-full p-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-between shadow-sm group">
+                        <div>
+                            <span class="block text-white font-extrabold">Continue with next task</span>
+                            <span class="text-[11px] font-normal text-white/80">Keep this timer running with your next planned task today.</span>
+                        </div>
+                        <span class="text-white group-hover:translate-x-1 transition-transform font-bold">→</span>
+                    </button>
+
+                    <button type="button" onclick="window.TempoFocusZone.markDoneAndTakeBreak()"
+                            class="w-full p-3.5 rounded-2xl bg-white border border-stone-200 hover:border-stone-300 text-stone-800 text-xs font-semibold transition flex items-center justify-between shadow-2xs group hover:bg-stone-50">
+                        <div>
+                            <span class="block font-bold">Mark as done and take a break</span>
+                            <span class="text-[11px] font-normal text-stone-500">End this block now and recharge with a contained break.</span>
+                        </div>
+                        <span class="text-stone-400 group-hover:translate-x-1 transition-transform">→</span>
+                    </button>
+
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
+                            class="w-full py-2.5 text-xs text-stone-500 hover:text-stone-800 underline text-center">
+                        Finish focus early
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 15: Last task of today completed (Section 8)
+    function renderLastTaskToday(style) {
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                    🌿
+                </div>
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">FINAL TASK FOR TODAY</span>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">You're at the end of today's plan.</h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        "${escapeHTML(session.taskName)}" is the last unfinished task scheduled for today.
+                    </p>
+                </div>
+
+                <div class="space-y-2.5 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.markLastTaskCompleted()"
+                            class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                        <span>✓</span>
+                        <span>Mark as completed</span>
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
+                            class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                        Finish focus early
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 16: Pre-break orientation before entering break (Section 5 & 6)
+    function renderPreBreakOrientation(style) {
+        const ctx = getPlanContext();
+        const nextItem = ctx.todayItems.find(pt => pt.task && pt.task.id !== session.taskId && !pt.task.completed);
+        const nextTaskName = nextItem ? nextItem.task.name : 'Next planned task';
+        const plannedStartStr = nextItem && nextItem.scheduledStartTime ? formatTime12H(nextItem.scheduledStartTime) : '';
+        const isFuture = nextItem && nextItem.scheduledStartTime && isTimeInFuture(nextItem.scheduledStartTime);
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                    ✓
+                </div>
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl font-bold text-[#202124]">Nice work — task is done ✓</h3>
+                    <p class="text-xs text-[#6F6B68]">Take your break first. We'll remind you what comes next afterward.</p>
+                </div>
+
+                <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-1">
+                    ${isFuture && plannedStartStr ? `
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08] block">Your next task:</span>
+                        <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(nextTaskName)}</h4>
+                        <div class="flex items-center justify-between text-xs text-stone-600 pt-1">
+                            <span>Planned start</span>
+                            <span class="font-bold text-stone-800">${escapeHTML(plannedStartStr)}</span>
+                        </div>
+                    ` : `
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08] block">Your next task is ready when you are.</span>
+                        <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(nextTaskName)}</h4>
+                        ${plannedStartStr ? `
+                            <div class="flex items-center justify-between text-xs text-stone-600 pt-1">
+                                <span>Planned for</span>
+                                <span class="font-bold text-stone-800">${escapeHTML(plannedStartStr)}</span>
+                            </div>
+                        ` : ''}
+                    `}
+                </div>
+
+                <div class="space-y-2 pt-1">
+                    <button type="button" onclick="window.TempoFocusZone.startBreakPeriod()"
+                            class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                        Start break (${Math.round(session.breakDurationSeconds / 60)}m) →
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
                             class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
                         Finish for now
                     </button>
@@ -2114,35 +2868,324 @@ window.TempoFocusZone = (function() {
         `;
     }
 
-    // -------------------------------------------------------------------------
-    // VIEW 13: RETURN TO FOCUS TRANSITION
-    // -------------------------------------------------------------------------
-    function renderReturnTransition(style) {
+    // View 17: Finish Early Orientation reminder (Section 7)
+    function renderFinishEarlyOrient(style) {
+        const ctx = getPlanContext();
+        const todayUnfinishedList = ctx.todayItems.filter(pt => pt.task && !pt.task.completed);
+        const nextItem = todayUnfinishedList.length > 0 ? todayUnfinishedList[0] : null;
+        let nextPlannedText = '';
+        if (nextItem) {
+            const timeStr = nextItem.scheduledStartTime ? ` · ${formatTime12H(nextItem.scheduledStartTime)}` : '';
+            nextPlannedText = `${nextItem.task.name}${timeStr}`;
+        }
+
         return `
-            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-6 rounded-3xl ${style.cardClass} text-center">
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">NEXT BLOCK</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Ready for another block?</h3>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">SESSION PAUSED</span>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Focus finished for now.</h3>
+                    <p class="text-xs text-[#6F6B68]">You still have work planned for today:</p>
                 </div>
 
-                <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-1">
-                    <span class="text-[10px] font-bold uppercase text-[#B83D08]">Task: ${escapeHTML(session.taskName)}</span>
-                    <p class="text-xs font-bold text-[#202124]">${escapeHTML(session.nextAction)}</p>
+                <div class="space-y-2 text-left py-1">
+                    ${todayUnfinishedList.map(item => `
+                        <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between text-xs">
+                            <span class="font-bold text-[#202124] truncate pr-2">• ${escapeHTML(item.task.name)}</span>
+                            <span class="text-[11px] font-medium ${item.task.isInProgress ? 'text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200' : 'text-stone-500'} shrink-0">
+                                ${item.task.isInProgress ? 'in progress' : 'not started'}
+                            </span>
+                        </div>
+                    `).join('')}
                 </div>
+
+                ${nextPlannedText ? `
+                    <div class="p-3 bg-[#FFF9F4] border border-[#FFE4D4] rounded-xl text-left text-xs">
+                        <span class="text-[10px] font-bold uppercase text-[#B83D08] block">Next planned</span>
+                        <span class="font-semibold text-stone-800">${escapeHTML(nextPlannedText)}</span>
+                    </div>
+                ` : `
+                    <p class="text-xs text-stone-500">
+                        You still have tasks planned for today. Continue whenever you're ready.
+                    </p>
+                `}
+
+                <div class="space-y-2 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.navigateHomeAndClose()"
+                            class="btn-primary w-full py-3 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                        Return to Home
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.viewTodaysPlanAndClose()"
+                            class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                        View today's plan
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 18: Today's Plan Complete (Section 9)
+    function renderTodayComplete(style) {
+        const ctx = getPlanContext();
+        let tomorrowSummary = null;
+        if (ctx.tomorrowItems.length > 0) {
+            const count = ctx.tomorrowItems.length;
+            const totalMins = ctx.tomorrowItems.reduce((acc, pt) => acc + (pt.task.estimateMinutes || pt.allocatedMinutes || 45), 0);
+            tomorrowSummary = {
+                taskCountStr: `${count} task${count > 1 ? 's' : ''}`,
+                durationStr: formatMinutesFriendly(totalMins)
+            };
+        }
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl font-bold shadow-xs">
+                    🌿
+                </div>
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">DAY COMPLETE</span>
+                    <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Today's plan is complete ✓</h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        You made it through everything you planned for today.
+                    </p>
+                </div>
+
+                ${tomorrowSummary ? `
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-left space-y-1.5">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">Tomorrow</span>
+                        <div class="text-xs font-bold text-stone-800">
+                            ${escapeHTML(tomorrowSummary.taskCountStr)} · ~${escapeHTML(tomorrowSummary.durationStr)} focused work
+                        </div>
+                        <p class="text-[11px] text-stone-600">Would you like to take a quick look at tomorrow's plan?</p>
+                    </div>
+                ` : ''}
+
+                <div class="space-y-2 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.startPostDayBreak()"
+                            class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                        <span>Take a break (${Math.round(session.breakDurationSeconds / 60)}m)</span>
+                        <span>→</span>
+                    </button>
+
+                    ${tomorrowSummary ? `
+                        <button type="button" onclick="window.TempoFocusZone.openReviewTomorrow()"
+                                class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                            Review tomorrow's plan
+                        </button>
+                    ` : ''}
+
+                    <button type="button" onclick="window.TempoFocusZone.close()"
+                            class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                        Done for today
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 19: Preview Tomorrow's Plan (Section 11)
+    function renderReviewTomorrow(style) {
+        const ctx = getPlanContext();
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">PREVIEW</span>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Tomorrow's Plan</h3>
+                </div>
+
+                <div class="space-y-2 text-left py-1 max-h-56 overflow-y-auto pr-1">
+                    ${ctx.tomorrowItems.map(item => `
+                        <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-0.5">
+                            <div class="flex items-center justify-between text-xs font-bold text-[#202124]">
+                                <span class="truncate pr-2">${escapeHTML(item.task.name)}</span>
+                                <span class="text-[10px] font-bold text-[#FF6B2C] uppercase shrink-0">${item.planPositionBadge || 'SCHEDULED'}</span>
+                            </div>
+                            <div class="text-[11px] text-stone-500">
+                                ${item.scheduledStartTime ? `${formatTime12H(item.scheduledStartTime)}${item.scheduledEndTime ? '–' + formatTime12H(item.scheduledEndTime) : ''}` : 'Time flexible'}
+                                ${item.task.durationLabel ? ` · ~${item.task.durationLabel}` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="space-y-2 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.viewTodaysPlanAndClose()"
+                            class="btn-primary w-full py-3 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                        View / Edit Tomorrow's Plan
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.close()"
+                            class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
+                        Done
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 20: Round completion grace state (Section 16)
+    function renderRoundGrace(style) {
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-14 h-14 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+                    🎮
+                </div>
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-purple-700 block">ROUND IN PROGRESS</span>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Finish your round 🎮</h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        Wrap up the round you're already in. Take your time to finish this match.
+                    </p>
+                </div>
+
+                <div class="pt-4">
+                    <button type="button" onclick="window.TempoFocusZone.confirmRoundDone()"
+                            class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                        <span>✓</span>
+                        <span>I'm done</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 21: Change Focus Rhythm Modal (Section 25)
+    function renderChangeRhythm(style) {
+        const selectedPreset = rhythmModalState.selectedPreset;
+        const customFocusVal = rhythmModalState.customFocus;
+        const customBreakVal = rhythmModalState.customBreak;
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="space-y-1">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">PACING</span>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Change focus rhythm</h3>
+                    <p class="text-xs text-[#6F6B68]">Find a pace that works better for you.</p>
+                </div>
+
+                <div class="space-y-2 text-left pt-1">
+                    <label class="p-3.5 rounded-2xl border ${selectedPreset === '25_5' ? 'border-2 border-[#FF6B2C] bg-[#FFF8F2]' : 'border-stone-200 bg-white hover:border-stone-300'} flex items-center justify-between cursor-pointer transition">
+                        <div class="flex items-center space-x-3">
+                            <input type="radio" name="fz_rhythm_choice" value="25_5" ${selectedPreset === '25_5' ? 'checked' : ''} onchange="window.TempoFocusZone.selectRhythmChoice('25_5')" class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                            <div>
+                                <span class="text-xs font-bold text-[#202124] block">25 min focus · 5 min break</span>
+                                <span class="text-[10px] text-stone-500">Pomodoro cadence</span>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="p-3.5 rounded-2xl border ${selectedPreset === '45_15' ? 'border-2 border-[#FF6B2C] bg-[#FFF8F2]' : 'border-stone-200 bg-white hover:border-stone-300'} flex items-center justify-between cursor-pointer transition">
+                        <div class="flex items-center space-x-3">
+                            <input type="radio" name="fz_rhythm_choice" value="45_15" ${selectedPreset === '45_15' ? 'checked' : ''} onchange="window.TempoFocusZone.selectRhythmChoice('45_15')" class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                            <div>
+                                <span class="text-xs font-bold text-[#202124] block">45 min focus · 15 min break</span>
+                                <span class="text-[10px] text-stone-500">Tempo default cadence</span>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="p-3.5 rounded-2xl border ${selectedPreset === '50_10' ? 'border-2 border-[#FF6B2C] bg-[#FFF8F2]' : 'border-stone-200 bg-white hover:border-stone-300'} flex items-center justify-between cursor-pointer transition">
+                        <div class="flex items-center space-x-3">
+                            <input type="radio" name="fz_rhythm_choice" value="50_10" ${selectedPreset === '50_10' ? 'checked' : ''} onchange="window.TempoFocusZone.selectRhythmChoice('50_10')" class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                            <div>
+                                <span class="text-xs font-bold text-[#202124] block">50 min focus · 10 min break</span>
+                                <span class="text-[10px] text-stone-500">Deep work blocks</span>
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="p-3.5 rounded-2xl border ${selectedPreset === 'custom' ? 'border-2 border-[#FF6B2C] bg-[#FFF8F2]' : 'border-stone-200 bg-white hover:border-stone-300'} flex items-center justify-between cursor-pointer transition">
+                        <div class="flex items-center space-x-3">
+                            <input type="radio" name="fz_rhythm_choice" value="custom" ${selectedPreset === 'custom' ? 'checked' : ''} onchange="window.TempoFocusZone.selectRhythmChoice('custom')" class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                            <div>
+                                <span class="text-xs font-bold text-[#202124] block">Custom</span>
+                                <span class="text-[10px] text-stone-500">Set your own focus and break durations</span>
+                            </div>
+                        </div>
+                    </label>
+
+                    ${selectedPreset === 'custom' ? `
+                        <div class="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl flex items-center gap-3 text-xs mt-2">
+                            <div class="flex-1">
+                                <label class="text-[10px] uppercase font-bold text-stone-500 block">Focus</label>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <input id="fz-modal-custom-focus" type="number" min="1" max="180" 
+                                           value="${customFocusVal}"
+                                           class="w-full px-2.5 py-1.5 text-xs border border-stone-300 rounded-lg text-center font-bold bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
+                                    <span class="text-stone-500 font-medium">min</span>
+                                </div>
+                            </div>
+                            <div class="flex-1">
+                                <label class="text-[10px] uppercase font-bold text-stone-500 block">Break</label>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <input id="fz-modal-custom-break" type="number" min="1" max="60" 
+                                           value="${customBreakVal}"
+                                           class="w-full px-2.5 py-1.5 text-xs border border-stone-300 rounded-lg text-center font-bold bg-white focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
+                                    <span class="text-stone-500 font-medium">min</span>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="button" onclick="window.TempoFocusZone.cancelChangeRhythm()"
+                            class="w-1/2 py-3 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="window.TempoFocusZone.saveRhythmFromModal()"
+                            class="btn-primary w-1/2 py-3 rounded-2xl font-bold text-xs shadow-sm transition">
+                        Save rhythm
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // View 22: Focus Rhythm Updated Confirmation (Section 27 & 31)
+    function renderRhythmUpdated(style) {
+        const ctx = getPlanContext();
+        const nextItem = ctx.todayItems.find(pt => pt.task && !pt.task.completed);
+        const nextTask = nextItem ? nextItem.task : null;
+        const focusMin = Math.round(session.focusDurationSeconds / 60);
+        const breakMin = Math.round(session.breakDurationSeconds / 60);
+
+        return `
+            <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                    ✓
+                </div>
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Focus rhythm updated ✓</h3>
+                    <p class="text-xs font-bold text-[#FF6B2C]">
+                        ${focusMin} min focus · ${breakMin} min break
+                    </p>
+                    <p class="text-xs text-[#6F6B68] pt-1">
+                        This changes how your work and breaks are paced. Your task estimates and current plan stay the same.
+                    </p>
+                </div>
+
+                ${nextTask ? `
+                    <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08] block">UP NEXT</span>
+                        <h4 class="text-sm font-bold text-[#202124]">${escapeHTML(nextTask.name)}</h4>
+                        ${nextTask.durationLabel ? `
+                            <div class="flex items-center justify-between text-xs text-stone-600 pt-1">
+                                <span>Estimate</span>
+                                <span class="font-semibold text-stone-800">${escapeHTML(nextTask.durationLabel)} focused work</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
 
                 <div class="space-y-2 pt-2">
                     <button type="button" onclick="window.TempoFocusZone.readyForNextFocusBlock()"
                             class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
-                        <span>Start ${Math.round(session.focusDurationSeconds / 60)} min focus</span>
+                        <span>Start ${focusMin}-min focus</span>
                         <span>→</span>
                     </button>
-                    <button type="button" onclick="window.TempoFocusZone.selectRhythm(session.focusDurationSeconds / 60, session.breakDurationSeconds / 60)"
-                            class="w-full py-2.5 rounded-2xl border border-stone-200 text-xs font-semibold text-stone-700 hover:bg-stone-50 transition">
-                        Adjust duration
-                    </button>
-                    <button type="button" onclick="window.TempoFocusZone.close()"
+                    <button type="button" onclick="window.TempoFocusZone.finishFocusEarly()"
                             class="w-full py-2 text-xs text-stone-500 hover:text-stone-800 underline">
-                        Finish for now
+                        Finish focus for now
                     </button>
                 </div>
             </div>
@@ -2163,6 +3206,7 @@ window.TempoFocusZone = (function() {
         init,
         open,
         openQuickEntry,
+        focusWithoutTask,
         close,
         selectRhythm,
         setCustomRhythm,
@@ -2173,12 +3217,28 @@ window.TempoFocusZone = (function() {
         handleFinishChoice,
         completeActiveSubtask,
         handleSubtasksAllDoneChoice,
+        finishActiveTaskEarly,
+        continueWithNextTask,
+        markDoneAndTakeBreak,
+        finishFocusEarly,
+        markLastTaskCompleted,
+        startPostDayBreak,
+        openReviewTomorrow,
+        startTomorrowTaskEarly,
         startBreakPeriod,
         selectBreakActivity,
         returnToBreakHub,
         extendBreak5Minutes,
+        startRoundGrace,
+        confirmRoundDone,
         endBreakEarly,
         readyForNextFocusBlock,
+        openChangeRhythmModal,
+        selectRhythmChoice,
+        cancelChangeRhythm,
+        saveRhythmFromModal,
+        navigateHomeAndClose,
+        viewTodaysPlanAndClose,
         handleCardClick,
         initGentleMatch,
         allowFinishCurrentGameRound,
@@ -2187,7 +3247,14 @@ window.TempoFocusZone = (function() {
         setVolume,
         toggleMute,
         handleExitClick,
-        render
+        render,
+        getSessionState: () => ({ ...session }),
+        _setSessionForTesting: (patch) => {
+            if (patch && typeof patch === 'object') {
+                Object.assign(session, patch);
+            }
+        },
+        getPlanContext
     };
 })();
 

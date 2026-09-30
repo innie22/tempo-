@@ -52,6 +52,8 @@ window.TempoSupabase = (function() {
     }
 
     async function init() {
+        if (isInitialized && client) return client;
+
         // 1. If configuration not injected via window.TEMPO_CONFIG, fetch safe public config from /api/config
         if (!config.url || !config.publishableKey) {
             try {
@@ -74,7 +76,7 @@ window.TempoSupabase = (function() {
                 isConnected = false;
                 client = null;
                 isInitialized = true;
-                return;
+                return null;
             }
         }
 
@@ -85,7 +87,8 @@ window.TempoSupabase = (function() {
                     auth: {
                         persistSession: true,
                         autoRefreshToken: true,
-                        detectSessionInUrl: true
+                        detectSessionInUrl: true,
+                        storage: window.localStorage
                     }
                 });
                 isConnected = true;
@@ -99,6 +102,7 @@ window.TempoSupabase = (function() {
         }
 
         isInitialized = true;
+        return client;
     }
 
     function getClient() {
@@ -120,6 +124,7 @@ window.TempoSupabase = (function() {
         init,
         getClient,
         hasConnection,
-        getConfig
+        getConfig,
+        isReady: () => isInitialized
     };
 })();

@@ -38,15 +38,28 @@ window.TempoMode = (function() {
         // Load persisted mode safely from localStorage
         try {
             const savedMode = localStorage.getItem('tempo_current_mode');
+            const authState = window.TempoAuth && typeof window.TempoAuth.getAuthState === 'function'
+                ? window.TempoAuth.getAuthState()
+                : 'AUTH_LOADING';
+            const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
+            const hasActivePlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
+
             if (savedMode && Object.values(MODES).includes(savedMode)) {
-                // If unauthenticated and savedMode is not default, normalize to default
-                const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
-                if (savedMode !== MODES.DEFAULT && !isAuthenticated) {
+                // If auth is still loading, NEVER reset saved mode!
+                if (authState === 'AUTH_LOADING') {
+                    currentMode = savedMode;
+                } else if (!isAuthenticated && savedMode !== MODES.DEFAULT) {
+                    // Confirmed anonymous user
                     currentMode = MODES.DEFAULT;
                     localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
                 } else {
                     currentMode = savedMode;
                 }
+            }
+
+            if (hasActivePlan && isAuthenticated && currentMode === MODES.DEFAULT) {
+                currentMode = MODES.EMERGENCY;
+                localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
             }
 
             const savedPending = localStorage.getItem('tempo_pending_mode');
@@ -620,7 +633,7 @@ window.TempoMode = (function() {
                     </div>
 
                     <div class="pt-2 flex flex-wrap items-center gap-3">
-                        <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');"
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                 class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition">
                             Review & update plan →
                         </button>
@@ -687,7 +700,7 @@ window.TempoMode = (function() {
                                     class="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition">
                                 Keep working
                             </button>
-                            <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');" 
+                            <button onclick="window.TempoApp.navigateTo('plan-workspace');" 
                                     class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
                                 Adjust my plan
                             </button>
@@ -738,7 +751,7 @@ window.TempoMode = (function() {
                             ${nextItem ? `<p class="text-[#6F6B68] text-[11px]">${escapeHTML(nextItem.task.name)}</p>` : ''}
                         </div>
                         ${nextItem ? `
-                            <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');"
+                            <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                     class="px-4 py-2 rounded-xl border border-gray-200 bg-white font-semibold text-xs text-gray-700 hover:bg-stone-50 transition self-start sm:self-auto">
                                 View tomorrow →
                             </button>
@@ -774,7 +787,7 @@ window.TempoMode = (function() {
                     </div>
 
                     <div class="pt-2 flex items-center space-x-3">
-                        <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');"
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                 class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
                             View Plan Schedule →
                         </button>
@@ -849,7 +862,7 @@ window.TempoMode = (function() {
                                     <span>${upNextItem.task.isInProgress ? 'Continue Focus' : 'Do now'}</span>
                                     <span>→</span>
                                 </button>
-                                <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('breakdown');"
+                                <button onclick="window.TempoApp.navigateTo('plan-workspace'); window.TempoPlanWorkspace.selectTask('${upNextItem.task.id}');"
                                         class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
                                     View task & breakdown
                                 </button>
@@ -927,7 +940,7 @@ window.TempoMode = (function() {
                         </p>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');"
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                 class="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
                             View / Edit Full Plan →
                         </button>
@@ -948,7 +961,7 @@ window.TempoMode = (function() {
                                         <div class="font-bold text-[#202124]">${escapeHTML(issue.title)}</div>
                                         <div class="text-stone-700">${escapeHTML(issue.message)}</div>
                                     </div>
-                                    <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('plan-review');"
+                                    <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                             class="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-[11px] shrink-0 self-start sm:self-auto transition">
                                         Review Plan
                                     </button>
@@ -1184,6 +1197,7 @@ window.TempoMode = (function() {
         MODES,
         init,
         getMode,
+        getCurrentMode: getMode,
         getPendingMode,
         hasPendingMode,
         getModeDisplayName,

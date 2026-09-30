@@ -163,14 +163,14 @@ window.TempoPlanStore = (function() {
     // INITIALIZATION & AUTH SYNC
     // =========================================================================
 
-    async function init() {
-        if (isInitialized) return;
+    async function init(explicitUserId) {
+        // Allow re-hydrating for explicit user ID (e.g. after login/session restore)
+        const currentUserId = explicitUserId || getUserId();
 
         // Check if guest had an active plan or draft and migrate if user just logged in
         syncGuestToAuthenticated();
 
-        // Preload active plan for current user if available
-        const currentUserId = getUserId();
+        // Preload active plan for current user if available in local cache
         const activeCached = readLocal(getActiveKey(currentUserId, 'emergency'));
         if (activeCached) {
             activePlans['emergency'] = activeCached;
@@ -181,8 +181,17 @@ window.TempoPlanStore = (function() {
             activeDrafts['emergency'] = draftCached;
         }
 
+        // If remote is available, load the authoritative active plan from Supabase
+        if (isRemoteAvailable()) {
+            try {
+                await loadActivePlan('emergency');
+            } catch (err) {
+                console.warn("[TempoPlanStore] Remote active plan load during init warning:", err);
+            }
+        }
+
         isInitialized = true;
-        console.log(`[TempoPlanStore] Initialized. Mode: ${isRemoteAvailable() ? 'Supabase Remote' : 'Local Fallback'}`);
+        console.log(`[TempoPlanStore] Initialized for user: ${currentUserId}. Remote: ${isRemoteAvailable()}`);
     }
 
     function syncGuestToAuthenticated() {
@@ -234,15 +243,36 @@ window.TempoPlanStore = (function() {
         if (isRemoteAvailable()) {
             const supabase = getSupabase();
             try {
-                // Upsert into public.plans table with status 'draft'
-                await supabase.from('plans').upsert({
-                    user_id: userId,
-                    plan_type: planType,
-                    status: 'draft',
-                    title: `${planType === 'emergency' ? 'Emergency' : 'Action'} Plan (Draft)`,
-                    metadata: draftToStore,
-                    updated_at: new Date().toISOString()
-                }, { onConflict: 'user_id, plan_type, status' }).select();
+                // Check if existing draft exists in Supabase
+                const { data: existingDrafts } = await supabase
+                    .from('plans')
+                    .select('id')
+                    .eq('user_id', userId)
+                    .eq('plan_type', planType)
+                    .eq('status', 'draft')
+                    .limit(1);
+
+                if (existingDrafts && existingDrafts.length > 0) {
+                    await supabase
+                        .from('plans')
+                        .update({
+                            title: `${planType === 'emergency' ? 'Emergency' : 'Action'} Plan (Draft)`,
+                            metadata: draftToStore,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', existingDrafts[0].id);
+                } else {
+                    await supabase
+                        .from('plans')
+                        .insert({
+                            user_id: userId,
+                            plan_type: planType,
+                            status: 'draft',
+                            title: `${planType === 'emergency' ? 'Emergency' : 'Action'} Plan (Draft)`,
+                            metadata: draftToStore,
+                            updated_at: new Date().toISOString()
+                        });
+                }
             } catch (err) {
                 // Log warning and keep working with local cache
                 console.warn("[TempoPlanStore] Remote draft autosave warning (local cache preserved):", err);
@@ -312,124 +342,183 @@ window.TempoPlanStore = (function() {
         const userId = getUserId();
         const activeKey = getActiveKey(userId, planType);
 
+        // Enforce durable save guarantee: if user is authenticated, Supabase MUST be available!
+        if (userId !== 'guest' && !userId.startsWith('local_student_')) {
+            if (!isRemoteAvailable()) {
+                throw new Error("Cannot save plan: Supabase database connection is not available for this account.");
+            }
+        }
+
         // Ensure title & timestamps
+        const planId = planData.id || planData.planId || `plan_${planType}_${Date.now()}`;
+        const tasks = planData.tasks || (Array.isArray(planData.plannedTasks) ? planData.plannedTasks.map(pt => pt.task).filter(Boolean) : []);
         const fullPlan = {
-            id: planData.id || `plan_${planType}_${Date.now()}`,
+            id: planId,
+            planId: planId,
             planType,
             status: 'active',
             title: planData.title || 'Emergency Plan',
             totalPlannedMinutes: planData.totalPlannedMinutes || 0,
+            tasks,
             plannedTasks: planData.plannedTasks || [],
             unallocatedTasks: planData.unallocatedTasks || [],
+            unarrangedTasks: planData.unarrangedTasks || [],
             availabilityDays: planData.availabilityDays || [],
             createdAt: planData.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
-        // 1. Immediately cache in memory and localStorage (zero latency)
-        activePlans[planType] = fullPlan;
-        writeLocal(activeKey, fullPlan);
-
-        // 2. Clear any active draft since the plan is now finalized
-        clearDraft(planType);
-
-        // 3. Remote persistence in Supabase
+        // 1. Remote persistence in Supabase (MANDATORY for authenticated accounts)
         if (isRemoteAvailable()) {
             const supabase = getSupabase();
-            try {
-                // A. Upsert Shared Tasks
-                const allTasks = [];
-                const allSubtasks = [];
+            
+            // A. Upsert Shared Tasks (deduplicated by id)
+            const allTasksMap = new Map();
+            const allSubtasksMap = new Map();
 
-                if (Array.isArray(fullPlan.plannedTasks)) {
-                    fullPlan.plannedTasks.forEach(item => {
-                        if (item && item.task) {
-                            allTasks.push(item.task);
-                            if (Array.isArray(item.task.subtasks)) {
-                                item.task.subtasks.forEach((sub, sIdx) => {
-                                    allSubtasks.push({ subtask: sub, taskId: item.task.id, position: sIdx });
-                                });
-                            }
+            if (Array.isArray(planData.tasks)) {
+                planData.tasks.forEach(task => {
+                    if (task && task.id) {
+                        allTasksMap.set(task.id, task);
+                        if (Array.isArray(task.subtasks)) {
+                            task.subtasks.forEach((sub, sIdx) => {
+                                if (sub && sub.id) {
+                                    allSubtasksMap.set(sub.id, mapModelToDbSubtask(sub, task.id, sIdx));
+                                }
+                            });
                         }
-                    });
+                    }
+                });
+            }
+
+            if (Array.isArray(fullPlan.plannedTasks)) {
+                fullPlan.plannedTasks.forEach(item => {
+                    if (item && item.task && item.task.id) {
+                        allTasksMap.set(item.task.id, item.task);
+                        if (Array.isArray(item.task.subtasks)) {
+                            item.task.subtasks.forEach((sub, sIdx) => {
+                                if (sub && sub.id) {
+                                    allSubtasksMap.set(sub.id, mapModelToDbSubtask(sub, item.task.id, sIdx));
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+
+            if (Array.isArray(fullPlan.unallocatedTasks)) {
+                fullPlan.unallocatedTasks.forEach(task => {
+                    if (task && task.id) allTasksMap.set(task.id, task);
+                });
+            }
+
+            if (Array.isArray(fullPlan.unarrangedTasks)) {
+                fullPlan.unarrangedTasks.forEach(task => {
+                    if (task && task.id) allTasksMap.set(task.id, task);
+                });
+            }
+
+            if (!fullPlan.tasks || fullPlan.tasks.length === 0) {
+                fullPlan.tasks = Array.from(allTasksMap.values());
+            }
+
+            // Upsert tasks
+            const dbTasks = Array.from(allTasksMap.values()).map(t => mapModelToDbTask(t, userId));
+            if (dbTasks.length > 0) {
+                const { error: tasksErr } = await supabase.from('tasks').upsert(dbTasks, { onConflict: 'id' });
+                if (tasksErr) {
+                    console.error("[TempoPlanStore] Tasks upsert error:", tasksErr);
+                    throw tasksErr;
                 }
+            }
 
-                if (Array.isArray(fullPlan.unallocatedTasks)) {
-                    fullPlan.unallocatedTasks.forEach(task => {
-                        if (task) allTasks.push(task);
-                    });
+            // Upsert subtasks
+            const dbSubtasks = Array.from(allSubtasksMap.values());
+            if (dbSubtasks.length > 0) {
+                const { error: subtasksErr } = await supabase.from('subtasks').upsert(dbSubtasks, { onConflict: 'id' });
+                if (subtasksErr) {
+                    console.error("[TempoPlanStore] Subtasks upsert error:", subtasksErr);
+                    throw subtasksErr;
                 }
+            }
 
-                // Upsert tasks
-                if (allTasks.length > 0) {
-                    const dbTasks = allTasks.map(t => mapModelToDbTask(t, userId));
-                    await supabase.from('tasks').upsert(dbTasks, { onConflict: 'id' });
-                }
+            // B. Archive previous active plans of this type
+            await supabase
+                .from('plans')
+                .update({ status: 'archived', updated_at: new Date().toISOString() })
+                .eq('user_id', userId)
+                .eq('plan_type', planType)
+                .eq('status', 'active');
 
-                // Upsert subtasks
-                if (allSubtasks.length > 0) {
-                    const dbSubtasks = allSubtasks.map(item => mapModelToDbSubtask(item.subtask, item.taskId, item.position));
-                    await supabase.from('subtasks').upsert(dbSubtasks, { onConflict: 'id' });
-                }
+            // Insert new active plan
+            const { data: newPlanData, error: planError } = await supabase
+                .from('plans')
+                .insert({
+                    user_id: userId,
+                    plan_type: planType,
+                    status: 'active',
+                    title: fullPlan.title,
+                    metadata: {
+                        totalPlannedMinutes: fullPlan.totalPlannedMinutes,
+                        unallocatedTasks: fullPlan.unallocatedTasks,
+                        unarrangedTasks: fullPlan.unarrangedTasks,
+                        availabilityDays: fullPlan.availabilityDays
+                    },
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
 
-                // B. Upsert Plan Record
-                // First archive previous active plans of this type to maintain single active plan invariant
-                await supabase
-                    .from('plans')
-                    .update({ status: 'archived', updated_at: new Date().toISOString() })
-                    .eq('user_id', userId)
-                    .eq('plan_type', planType)
-                    .eq('status', 'active');
+            if (planError || !newPlanData) {
+                console.error("[TempoPlanStore] Plan insert error:", planError);
+                throw (planError || new Error("Failed to insert active plan in Supabase"));
+            }
 
-                // Insert the new active plan
-                const { data: newPlanData, error: planError } = await supabase
-                    .from('plans')
-                    .insert({
-                        user_id: userId,
-                        plan_type: planType,
-                        status: 'active',
-                        title: fullPlan.title,
-                        metadata: {
-                            totalPlannedMinutes: fullPlan.totalPlannedMinutes,
-                            unallocatedTasks: fullPlan.unallocatedTasks,
-                            availabilityDays: fullPlan.availabilityDays
-                        },
-                        updated_at: new Date().toISOString()
-                    })
-                    .select()
-                    .single();
+            fullPlan.id = newPlanData.id;
 
-                if (!planError && newPlanData) {
-                    fullPlan.id = newPlanData.id;
-                    activePlans[planType] = fullPlan;
-                    writeLocal(activeKey, fullPlan);
-
-                    // C. Insert Plan Items for ordering & scheduling
-                    if (Array.isArray(fullPlan.plannedTasks) && fullPlan.plannedTasks.length > 0) {
-                        const dbPlanItems = fullPlan.plannedTasks.map((item, index) => ({
+            // C. Insert Plan Items for ordering & scheduling
+            if (Array.isArray(fullPlan.plannedTasks) && fullPlan.plannedTasks.length > 0) {
+                const seenTaskIds = new Set();
+                const dbPlanItems = [];
+                fullPlan.plannedTasks.forEach((item, index) => {
+                    if (item && item.task && item.task.id && !seenTaskIds.has(item.task.id)) {
+                        seenTaskIds.add(item.task.id);
+                        dbPlanItems.push({
                             plan_id: newPlanData.id,
                             task_id: item.task.id,
                             position: index,
-                            scheduled_date: item.date || null,
+                            scheduled_date: item.dayDate || item.date || null,
                             scheduled_day_label: item.dayLabel || null,
                             scheduled_start: item.startTime || null,
                             scheduled_end: item.endTime || null,
-                            start_minutes: item.startMinutes || null,
-                            end_minutes: item.endMinutes || null,
+                            start_minutes: item.startMin !== undefined ? item.startMin : (item.startMinutes || null),
+                            end_minutes: item.endMin !== undefined ? item.endMin : (item.endMinutes || null),
                             execution_badge: item.executionBadge || (index === 0 ? 'UP NEXT' : (index === 1 ? 'THEN' : 'LATER')),
                             is_over_capacity: !!item.isOverCapacity,
                             has_deadline_conflict: !!item.hasDeadlineConflict,
                             updated_at: new Date().toISOString()
-                        }));
+                        });
+                    }
+                });
 
-                        await supabase.from('plan_items').insert(dbPlanItems);
+                if (dbPlanItems.length > 0) {
+                    const { error: itemsError } = await supabase.from('plan_items').insert(dbPlanItems);
+                    if (itemsError) {
+                        console.error("[TempoPlanStore] Plan items insert error:", itemsError);
+                        throw itemsError;
                     }
                 }
-                console.log("[TempoPlanStore] Active plan saved successfully to Supabase & local cache.");
-            } catch (err) {
-                console.warn("[TempoPlanStore] Error persisting plan remotely (local cache intact):", err);
             }
+
+            console.log("[TempoPlanStore] Active plan saved durably to Supabase. ID:", fullPlan.id);
         }
+
+        // 2. Cache in memory and localStorage once durable save has succeeded (or in local dev)
+        activePlans[planType] = fullPlan;
+        writeLocal(activeKey, fullPlan);
+
+        // 3. Clear active draft
+        clearDraft(planType);
 
         return fullPlan;
     }
@@ -450,84 +539,108 @@ window.TempoPlanStore = (function() {
                     .order('updated_at', { ascending: false })
                     .limit(1);
 
-                if (!planErr && planRows && planRows.length > 0) {
-                    const planRow = planRows[0];
+                if (!planErr) {
+                    if (planRows && planRows.length > 0) {
+                        const planRow = planRows[0];
 
-                    // Fetch plan items
-                    const { data: itemRows } = await supabase
-                        .from('plan_items')
-                        .select('*')
-                        .eq('plan_id', planRow.id)
-                        .order('position', { ascending: true });
-
-                    const taskIds = (itemRows || []).map(pi => pi.task_id);
-
-                    // Fetch tasks
-                    let taskMap = {};
-                    if (taskIds.length > 0) {
-                        const { data: taskRows } = await supabase
-                            .from('tasks')
+                        // Fetch plan items
+                        const { data: itemRows } = await supabase
+                            .from('plan_items')
                             .select('*')
-                            .in('id', taskIds);
-
-                        // Fetch subtasks
-                        const { data: subtaskRows } = await supabase
-                            .from('subtasks')
-                            .select('*')
-                            .in('task_id', taskIds)
+                            .eq('plan_id', planRow.id)
                             .order('position', { ascending: true });
 
-                        const subtaskMap = {};
-                        (subtaskRows || []).forEach(sub => {
-                            if (!subtaskMap[sub.task_id]) subtaskMap[sub.task_id] = [];
-                            subtaskMap[sub.task_id].push(sub);
+                        const taskIds = (itemRows || []).map(pi => pi.task_id);
+
+                        // Fetch tasks
+                        let taskMap = {};
+                        if (taskIds.length > 0) {
+                            const { data: taskRows } = await supabase
+                                .from('tasks')
+                                .select('*')
+                                .in('id', taskIds);
+
+                            // Fetch subtasks
+                            const { data: subtaskRows } = await supabase
+                                .from('subtasks')
+                                .select('*')
+                                .in('task_id', taskIds)
+                                .order('position', { ascending: true });
+
+                            const subtaskMap = {};
+                            (subtaskRows || []).forEach(sub => {
+                                if (!subtaskMap[sub.task_id]) subtaskMap[sub.task_id] = [];
+                                subtaskMap[sub.task_id].push(sub);
+                            });
+
+                            (taskRows || []).forEach(t => {
+                                taskMap[t.id] = mapDbTaskToModel(t, subtaskMap[t.id] || []);
+                            });
+                        }
+
+                        // Reconstruct plannedTasks array in sequence
+                        const plannedTasks = (itemRows || []).map(pi => {
+                            const taskModel = taskMap[pi.task_id] || { id: pi.task_id, name: 'Untitled Task', subtasks: [] };
+                            return {
+                                task: taskModel,
+                                dayDate: pi.scheduled_date,
+                                date: pi.scheduled_date,
+                                dayLabel: pi.scheduled_day_label,
+                                startTime: pi.scheduled_start,
+                                endTime: pi.scheduled_end,
+                                startMin: pi.start_minutes,
+                                endMin: pi.end_minutes,
+                                startMinutes: pi.start_minutes,
+                                endMinutes: pi.end_minutes,
+                                executionBadge: pi.execution_badge || 'UP NEXT',
+                                isOverCapacity: !!pi.is_over_capacity,
+                                hasDeadlineConflict: !!pi.has_deadline_conflict
+                            };
                         });
 
-                        (taskRows || []).forEach(t => {
-                            taskMap[t.id] = mapDbTaskToModel(t, subtaskMap[t.id] || []);
-                        });
-                    }
-
-                    // Reconstruct plannedTasks array in sequence
-                    const plannedTasks = (itemRows || []).map(pi => {
-                        const taskModel = taskMap[pi.task_id] || { id: pi.task_id, name: 'Untitled Task', subtasks: [] };
-                        return {
-                            task: taskModel,
-                            date: pi.scheduled_date,
-                            dayLabel: pi.scheduled_day_label,
-                            startTime: pi.scheduled_start,
-                            endTime: pi.scheduled_end,
-                            startMinutes: pi.start_minutes,
-                            endMinutes: pi.end_minutes,
-                            executionBadge: pi.execution_badge || 'UP NEXT',
-                            isOverCapacity: !!pi.is_over_capacity,
-                            hasDeadlineConflict: !!pi.has_deadline_conflict
+                        const remotePlan = {
+                            id: planRow.id,
+                            planId: planRow.id,
+                            planType: planRow.plan_type,
+                            status: 'active',
+                            title: planRow.title,
+                            totalPlannedMinutes: planRow.metadata?.totalPlannedMinutes || 0,
+                            tasks: Object.values(taskMap),
+                            plannedTasks,
+                            unallocatedTasks: planRow.metadata?.unallocatedTasks || [],
+                            unarrangedTasks: planRow.metadata?.unarrangedTasks || [],
+                            availabilityDays: planRow.metadata?.availabilityDays || [],
+                            createdAt: planRow.created_at,
+                            updatedAt: planRow.updated_at
                         };
-                    });
 
-                    const remotePlan = {
-                        id: planRow.id,
-                        planType: planRow.plan_type,
-                        status: 'active',
-                        title: planRow.title,
-                        totalPlannedMinutes: planRow.metadata?.totalPlannedMinutes || 0,
-                        plannedTasks,
-                        unallocatedTasks: planRow.metadata?.unallocatedTasks || [],
-                        availabilityDays: planRow.metadata?.availabilityDays || [],
-                        createdAt: planRow.created_at,
-                        updatedAt: planRow.updated_at
-                    };
-
-                    activePlans[planType] = remotePlan;
-                    writeLocal(getActiveKey(userId, planType), remotePlan);
-                    return remotePlan;
+                        activePlans[planType] = remotePlan;
+                        writeLocal(getActiveKey(userId, planType), remotePlan);
+                        return remotePlan;
+                    } else {
+                        // Remote database confirmed: No active plan exists for this authenticated user
+                        activePlans[planType] = null;
+                        writeLocal(getActiveKey(userId, planType), null);
+                        return null;
+                    }
+                } else {
+                    console.warn("[TempoPlanStore] Remote plan query error, using local fallback cache:", planErr);
                 }
             } catch (err) {
                 console.warn("[TempoPlanStore] Error querying remote active plan, falling back to local:", err);
             }
         }
 
+        if (localPlan && (!localPlan.tasks || localPlan.tasks.length === 0) && Array.isArray(localPlan.plannedTasks)) {
+            localPlan.tasks = localPlan.plannedTasks.map(pt => pt.task).filter(Boolean);
+        }
+
         return localPlan || null;
+    }
+
+    function clearInMemoryCache() {
+        activePlans = {};
+        activeDrafts = {};
     }
 
     async function archiveActivePlan(planType = 'emergency') {
@@ -624,6 +737,9 @@ window.TempoPlanStore = (function() {
                 if ('name' in updates) dbUpdates.name = updates.name;
                 if ('durationMinutes' in updates) dbUpdates.duration_minutes = updates.durationMinutes;
                 if ('durationLabel' in updates) dbUpdates.duration_label = updates.durationLabel;
+                if ('hasDeadline' in updates) dbUpdates.has_deadline = !!updates.hasDeadline;
+                if ('deadlineDate' in updates) dbUpdates.deadline_date = updates.deadlineDate || null;
+                if ('deadlineTime' in updates) dbUpdates.deadline_time = updates.deadlineTime || null;
 
                 await supabase
                     .from('tasks')
@@ -700,6 +816,7 @@ window.TempoPlanStore = (function() {
         // Draft APIs
         saveDraft,
         loadDraft,
+        getDraft: (planType = 'emergency') => activeDrafts[planType] || readLocal(getDraftKey(getUserId(), planType)),
         clearDraft,
         hasDraft,
         // Active Plan APIs
@@ -708,6 +825,7 @@ window.TempoPlanStore = (function() {
         archiveActivePlan,
         hasActivePlan,
         getActivePlan,
+        clearInMemoryCache,
         // Entity Mutation APIs
         updateTaskState,
         updateSubtaskState

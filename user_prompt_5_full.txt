@@ -1,0 +1,1038 @@
+<USER_REQUEST>
+Refine ONLY the generated Emergency Plan / Planning experience.
+
+This task introduces the intended Tempo planning model and improves user control over the generated timeline.
+
+MAIN CHANGES:
+
+1. Replace arrow-based task reordering with drag-and-drop.
+2. Dragging a task changes execution order AND recalculates the affected timeline.
+3. Timeline recalculation must respect:
+   - user availability
+   - task estimates
+   - 45/15 work rhythm
+   - recovery time between completed tasks
+   - deadlines
+4. Add "Do this task later".
+5. Allow choosing another existing availability period.
+6. Allow adding availability directly from that scheduling modal.
+7. Add "I'll figure it out later".
+8. Introduce UNARRANGED tasks as distinct from arranged tasks labelled LATER.
+
+Do NOT broadly redesign the Planning page.
+
+==================================================
+1. TEMPO PLANNING MODEL — SOURCE OF TRUTH
+==================================================
+
+Tempo planning uses these user inputs:
+
+TASK
+What needs to be done?
+
+DEADLINE
+When must it be completed?
+
+ESTIMATE
+How much focused work does the user expect this task to require?
+
+AVAILABILITY
+When can the user work?
+
+EXECUTION ORDER
+In what order does the user want to work on tasks?
+
+Tempo converts these inputs into a realistic TIMELINE.
+
+Conceptually:
+
+Tasks
++
+Deadlines
++
+Focused-work estimates
++
+Availability
++
+Execution order
++
+45/15 work rhythm
++
+recovery between completed tasks
+=
+PLANNED TIMELINE
+
+IMPORTANT:
+
+The generated timeline is an OUTPUT.
+
+It is not immutable user input.
+
+When the user explicitly changes execution order, Tempo should recalculate the affected timeline.
+
+==================================================
+2. ESTIMATE MEANS FOCUSED WORK
+==================================================
+
+A task estimate represents expected FOCUSED WORK duration.
+
+Example:
+
+Task A
+Estimate: 2 hours
+
+This does NOT mean:
+
+"Reserve one continuous 2-hour calendar block."
+
+Instead Tempo may convert 2 hours of focused work into:
+
+45 min focus
+15 min break
+
+45 min focus
+15 min break
+
+30 min final focus
+
+Total focused work:
+120 minutes
+
+The breaks are planning overhead added by Tempo.
+
+Do NOT count break time as task focused-work estimate.
+
+Do NOT silently change the estimate because breaks are added.
+
+==================================================
+3. 45 / 15 RHYTHM
+==================================================
+
+Use the Tempo default planning rhythm:
+
+45 minutes focused work
+15 minutes break
+
+for longer work.
+
+The final focus segment may be shorter.
+
+Example:
+
+Estimate = 1h 30m
+
+45 focus
+15 break
+45 focus
+
+Example:
+
+Estimate = 2h
+
+45 focus
+15 break
+45 focus
+15 break
+30 focus
+
+Do NOT add an unnecessary 15-minute break after the task has already finished.
+
+==================================================
+4. RECOVERY BETWEEN COMPLETED TASKS
+==================================================
+
+After finishing one task and before beginning the next task, Tempo should provide approximately:
+
+30 minutes recovery
+
+This is distinct from the normal 15-minute within-task break.
+
+Conceptually:
+
+Task A
+
+45 focus
+15 break
+45 focus
+
+TASK A COMPLETE
+
+30 min recovery
+
+Task B begins
+
+45 focus
+...
+
+Avoid stacking:
+
+15-minute within-task break
++
+30-minute recovery
+
+after the final focus block of a completed task.
+
+Once the task finishes, transition into the between-task recovery period.
+
+==================================================
+5. AVAILABILITY IS A WORK WINDOW
+==================================================
+
+Availability means:
+
+"The user CAN work during this period."
+
+It does NOT mean:
+
+"This exact block belongs to one specific task."
+
+Example:
+
+User availability:
+
+6:00 PM – 12:00 AM
+
+Tempo can use that continuous window to arrange:
+
+focus
+break
+focus
+recovery
+next task
+break
+etc.
+
+==================================================
+6. NORMALIZE COMPATIBLE AVAILABILITY
+==================================================
+
+If availability blocks are contiguous and compatible, treat them as a continuous planning window.
+
+Example:
+
+6:00–8:00
+8:00–10:00
+10:00–12:00
+
+may be normalized for planning purposes as:
+
+6:00–12:00
+
+Do NOT duplicate capacity.
+
+If blocks overlap, do not double-count overlapping time.
+
+If there is a genuine gap:
+
+6:00–8:00
+9:00–12:00
+
+do NOT merge across 8:00–9:00.
+
+The user is unavailable during that gap.
+
+Preserve the underlying availability records.
+
+Normalization is for planning calculation only.
+
+==================================================
+7. REMOVE ARROW NAVIGATION
+==================================================
+
+Current arranged task cards use controls such as:
+
+▲
+▼
+
+Remove these arrow-based execution-order controls.
+
+Replace them with drag-and-drop.
+
+Preserve other relevant task actions.
+
+==================================================
+8. DRAG AFFORDANCE
+==================================================
+
+Provide a subtle drag handle on arranged task cards.
+
+For example:
+
+⋮⋮
+
+or an equivalent Tempo-compatible drag indicator.
+
+User interaction:
+
+hold task
+→ drag
+→ insertion position appears
+→ drop
+→ new execution order becomes explicit user preference
+
+Provide clear drop feedback without flashy animation.
+
+==================================================
+9. DRAG = USER OVERRIDE OF EXECUTION ORDER
+==================================================
+
+This is CRITICAL.
+
+Dragging a task is not merely visual card sorting.
+
+It means:
+
+"I want to do this task before/after this other task."
+
+Therefore:
+
+after a valid drop, update execution order and recalculate the AFFECTED timeline.
+
+Example:
+
+Available:
+6 PM – 12 AM
+
+Task A:
+2h focused work
+
+Task B:
+1.5h focused work
+
+Original:
+
+B
+then A
+
+User drags A above B.
+
+New explicit order:
+
+A
+then B
+
+Tempo must rebuild the affected schedule according to that order.
+
+==================================================
+10. EXAMPLE EXPECTED REFLOW
+==================================================
+
+After A is moved before B:
+
+Task A
+Estimate 2h focused work
+
+Possible timeline:
+
+6:00–6:45
+A focus
+
+6:45–7:00
+Break
+
+7:00–7:45
+A focus
+
+7:45–8:00
+Break
+
+8:00–8:30
+A focus
+
+TASK A COMPLETE
+
+8:30–9:00
+Recovery
+
+Task B
+Estimate 1.5h focused work
+
+9:00–9:45
+B focus
+
+9:45–10:00
+Break
+
+10:00–10:45
+B focus
+
+TASK B COMPLETE
+
+This fits inside:
+
+6 PM – 12 AM
+
+Therefore:
+
+accept the new order and timeline without asking for unnecessary confirmation.
+
+==================================================
+11. REFLOW, NOT FULL REGENERATION
+==================================================
+
+Dragging should recalculate the smallest relevant portion of the timeline.
+
+Do NOT automatically regenerate the entire Emergency Plan from scratch.
+
+Preserve unaffected days/tasks where possible.
+
+Conceptually:
+
+USER CHANGES EXECUTION ORDER
+→ recalculate affected task sequence
+→ preserve unrelated plan sections
+
+Do NOT rerun prioritization and override the user's explicit new order.
+
+==================================================
+12. WHAT REFLOW MAY CHANGE
+==================================================
+
+Reflow MAY change:
+
+- scheduled start time
+- scheduled end time
+- focus-block placement
+- break placement
+- recovery placement
+- DO THIS / THEN / LATER presentation labels as required by the new order
+
+because these are timeline outputs.
+
+==================================================
+13. WHAT REFLOW MUST NOT CHANGE
+==================================================
+
+Reflow must NOT silently change:
+
+- task name
+- taskId
+- deadline
+- task estimate
+- importance
+- consequence
+- flexibility
+- subtasks
+- task completion
+- availability entered by the user
+
+These are inputs/shared task data.
+
+==================================================
+14. DEADLINE CONFLICT AFTER DRAG
+==================================================
+
+User execution order is allowed to override Tempo's recommendation.
+
+Example:
+
+Task B has an earlier deadline.
+
+Tempo recommended:
+
+B → A
+
+User intentionally changes:
+
+A → B
+
+If the recalculated timeline creates deadline risk:
+
+respect the user's order but show a clear warning.
+
+Example:
+
+Deadline risk
+
+With this order, Task B may finish after its deadline.
+
+Do NOT silently move B back above A.
+
+Do NOT silently change the deadline.
+
+==================================================
+15. AVAILABILITY CONFLICT AFTER DRAG
+==================================================
+
+If the new timeline no longer fits existing availability:
+
+do NOT:
+
+- shorten task estimates
+- invent availability
+- extend availability automatically
+- remove tasks
+- silently move tasks to another day
+
+Show a clear conflict.
+
+Example:
+
+This order needs more time than your current availability.
+
+Then allow the user to resolve it using existing/new controls such as:
+
+- Do this task later
+- add availability
+- rearrange again
+- leave a task Unarranged
+
+Do not block the user from understanding the consequence of their chosen order.
+
+==================================================
+16. ADD "DO THIS TASK LATER"
+==================================================
+
+Add a lightweight action on ARRANGED task cards:
+
+Do this task later
+
+Meaning:
+
+"I don't want to work on this task in its current planned position/day."
+
+This is NOT equivalent to:
+
+- drag down
+- LATER label
+- complete task
+- delete task
+
+Clicking it opens a Tempo scheduling modal.
+
+==================================================
+17. WHY "DO THIS TASK LATER" EXISTS
+==================================================
+
+Availability is capacity, not a command to fill every minute.
+
+Example:
+
+Today:
+Sep 30
+
+Task C deadline:
+Oct 3
+
+User has enough availability today for Tempo to technically schedule Task C.
+
+But the user may prefer not to do Task C today.
+
+Tempo should allow this.
+
+Do not assume:
+
+"User is available until midnight"
+
+means:
+
+"User wants every future task scheduled today."
+
+==================================================
+18. SCHEDULING MODAL
+==================================================
+
+Clicking:
+
+Do this task later
+
+opens a Tempo modal.
+
+Suggested structure:
+
+When would you like to do this?
+
+Biology Chapter 6 Notes
+Due Oct 3 · 9:00 PM
+Estimate 1h
+
+YOUR AVAILABLE TIME
+
+○ Oct 1
+  9:00 AM – 12:00 PM
+
+○ Oct 1
+  2:00 PM – 5:00 PM
+
+○ Oct 2
+  7:00 PM – 9:00 PM
+
++ Add available time
+
+I'll figure it out later
+
+Cancel                 Schedule task
+
+All task/date/availability data must be dynamic.
+
+==================================================
+19. EXISTING AVAILABILITY
+==================================================
+
+Reuse availability already entered during:
+
+Available Time
+
+Do NOT create another availability dataset.
+
+Show relevant availability windows clearly.
+
+If availability is partially occupied by other arranged work:
+
+calculate/display usable remaining capacity accurately.
+
+Do NOT silently double-book tasks.
+
+==================================================
+20. SCHEDULING INTO ANOTHER AVAILABILITY WINDOW
+==================================================
+
+When the user chooses another availability period:
+
+use the SAME task/taskId.
+
+Remove its old scheduled placement.
+
+Place it into the chosen planning window.
+
+Then use the same Tempo planning rhythm to determine its realistic placement:
+
+estimate
++
+45/15
++
+recovery where relevant
+
+Do NOT simply paste the estimate as one continuous calendar block if the task requires multiple focus blocks.
+
+==================================================
+21. ADD AVAILABLE TIME FROM MODAL
+==================================================
+
+Include:
+
++ Add available time
+
+Clicking it reveals a small inline editor inside the scheduling modal.
+
+Allow:
+
+Date
+Start time
+End time
+
+Example:
+
+ADD AVAILABLE TIME
+
+Date
+[ Oct 2 ]
+
+From
+[ 6:00 PM ]
+
+To
+[ 10:00 PM ]
+
+Cancel        Add time
+
+Use the SAME availability model and validation used by Emergency Plan setup.
+
+Do NOT send the user back through the setup wizard.
+
+After saving:
+
+- update shared availability
+- normalize planning windows as appropriate
+- refresh available choices immediately
+- allow the new time to be selected
+
+==================================================
+22. "I'LL FIGURE IT OUT LATER"
+==================================================
+
+Add:
+
+I'll figure it out later
+
+This means:
+
+"I still need to do this task, but I don't want to decide when right now."
+
+When clicked:
+
+remove the task's current scheduled placement.
+
+Keep the SAME task in the Emergency Plan.
+
+Set its plan scheduling state to:
+
+UNARRANGED
+
+Do NOT:
+
+- delete task
+- mark complete
+- archive task
+- label it LATER
+- erase deadline
+- erase estimate
+- erase subtasks
+
+==================================================
+23. LATER ≠ UNARRANGED
+==================================================
+
+This distinction is CRITICAL.
+
+LATER:
+
+- task is arranged
+- task has execution position
+- task has scheduled time
+- user knows when it is planned
+- "LATER" is a presentation label within the arranged plan
+
+UNARRANGED:
+
+- task belongs to Eplan
+- task still needs work
+- task keeps all task data
+- task currently has NO scheduled time
+- user has not decided when to do it
+
+Never use LATER as a synonym for Unarranged.
+
+==================================================
+24. UNARRANGED SECTION
+==================================================
+
+Show Unarranged tasks in a dedicated section AFTER the arranged timeline.
+
+Example:
+
+UNARRANGED
+
+These tasks are still part of your plan,
+but you haven't decided when to do them yet.
+
+Biology Chapter 6 Notes
+
+Due Oct 3 · 9:00 PM
+Estimate 1h
+
+Schedule task →
+
+Keep cards compact.
+
+Do not visually treat them as errors.
+
+Unarranged is a valid user choice.
+
+==================================================
+25. SCHEDULE AN UNARRANGED TASK
+==================================================
+
+Click:
+
+Schedule task
+
+on an Unarranged task.
+
+Open the SAME scheduling modal.
+
+Allow:
+
+- select existing availability
+- add availability
+- Cancel
+
+Once scheduled:
+
+remove it from Unarranged
+→ add it to arranged timeline
+→ recalculate affected timeline
+→ retain same task/taskId
+
+==================================================
+26. DEADLINE-AWARE MANUAL SCHEDULING
+==================================================
+
+Scheduling modal must show deadline.
+
+If user chooses time after deadline:
+
+show clear warning.
+
+Example:
+
+This time is after the task's deadline.
+
+Do not silently choose another period.
+
+Do not silently modify deadline.
+
+Follow existing user-override behavior.
+
+==================================================
+27. SHARED TASK VS PLAN ITEM
+==================================================
+
+Preserve architecture separation.
+
+TASK contains shared task facts:
+
+- taskId
+- name
+- deadline
+- estimate
+- execution status
+- importance
+- consequence
+- flexibility
+- subtasks
+
+PLAN ITEM contains plan-specific information:
+
+- planId
+- taskId
+- execution order
+- scheduled placement
+- scheduling state
+- plan presentation metadata
+
+Do not duplicate Task because its schedule changes.
+
+==================================================
+28. PERSISTENCE
+==================================================
+
+Use the existing shared persistence layer.
+
+Persist:
+
+- user-overridden execution order
+- recalculated scheduled placement
+- arranged/unarranged state
+- newly added availability
+
+After reload:
+
+dragged order should remain.
+
+Rescheduled task should remain on chosen day.
+
+Unarranged task should remain Unarranged.
+
+New availability should remain available.
+
+Do NOT create a competing local-only persistence system.
+
+If durable persistence is not ready:
+
+report these tests as pending.
+
+==================================================
+29. VISUAL DESIGN
+==================================================
+
+Preserve the current Planning visual design.
+
+Do NOT redesign the page.
+
+Main visual changes:
+
+- remove ▲ / ▼
+- add subtle drag handle
+- add Do this task later
+- add scheduling modal
+- add inline Add availability
+- add Unarranged section
+
+Use existing Tempo design system.
+
+==================================================
+30. DO NOT TOUCH
+==================================================
+
+Do NOT modify:
+
+- Reality Check
+- Prioritize input logic
+- task estimate values
+- deadline values
+- Availability setup UI except shared data updates
+- Breakdown
+- Focus Zone
+- completion screen
+- mode architecture
+- Change Mode
+- Recovery Mode
+- Unclear Mode
+- auth
+- SOS
+- Plan Workspace implementation
+
+Do NOT broadly rewrite Emergency Plan generation.
+
+Only add/refine the scheduling/reflow behavior required here.
+
+Do not commit.
+Do not push.
+Do not deploy.
+
+==================================================
+31. VERIFICATION
+==================================================
+
+TEST A — DRAG + REFLOW
+
+Create:
+
+Availability:
+6 PM – 12 AM
+
+Task A:
+Estimate 2h
+
+Task B:
+Estimate 1.5h
+
+Initial order:
+B → A
+
+Drag A above B.
+
+Verify:
+
+1. Arrow controls are gone.
+2. Drag works.
+3. Order becomes A → B.
+4. A is scheduled first.
+5. B follows A.
+6. 45/15 rhythm is respected.
+7. Approximately 30m recovery occurs between completed A and B.
+8. Both fit inside availability where mathematically possible.
+9. Estimate A remains 2h.
+10. Estimate B remains 1.5h.
+11. Deadlines remain unchanged.
+12. No duplicate tasks.
+
+TEST B — DEADLINE CONFLICT
+
+13. Create/reorder tasks so user-selected order causes a deadline risk.
+14. User order remains.
+15. Deadline warning appears.
+16. Tempo does not silently restore its preferred order.
+
+TEST C — AVAILABILITY CONFLICT
+
+17. Create an order that cannot fit available capacity.
+18. Tempo reports insufficient availability.
+19. Tempo does not shorten estimates.
+20. Tempo does not invent availability.
+21. Tempo does not silently move task to another day.
+
+TEST D — DO THIS TASK LATER
+
+22. Use a task with a future deadline currently scheduled today.
+23. Click Do this task later.
+24. Scheduling modal opens.
+25. Correct task/deadline/estimate appear.
+26. Existing availability appears.
+
+TEST E — RESCHEDULE
+
+27. Choose future availability.
+28. Schedule task.
+29. Old placement disappears.
+30. New placement appears.
+31. Timeline around affected tasks recalculates appropriately.
+32. Same taskId remains.
+
+TEST F — ADD AVAILABILITY
+
+33. Open scheduling modal.
+34. Add new available time.
+35. New availability is saved to shared availability.
+36. It appears immediately.
+37. Select it.
+38. Task schedules successfully.
+
+TEST G — UNARRANGED
+
+39. Click Do this task later.
+40. Choose I'll figure it out later.
+41. Task leaves arranged timeline.
+42. Task appears under UNARRANGED.
+43. No scheduled time remains.
+44. Deadline remains.
+45. Estimate remains.
+46. Subtasks remain.
+47. Task is not completed.
+48. Task is NOT labelled LATER.
+
+TEST H — REARRANGE UNARRANGED
+
+49. Click Schedule task.
+50. Same scheduling modal opens.
+51. Choose availability.
+52. Task leaves Unarranged.
+53. Task returns to arranged timeline.
+54. Timeline recalculates.
+55. Same taskId remains.
+
+TEST I — AVAILABILITY NORMALIZATION
+
+56. Add contiguous availability blocks.
+57. Planner can use them as continuous capacity.
+58. No overlapping capacity is double-counted.
+59. Genuine gaps remain unavailable.
+
+TEST J — PERSISTENCE
+
+60. If durable persistence is available:
+    drag → reload → order remains.
+
+61. Reschedule → reload → placement remains.
+
+62. Unarranged → reload → remains Unarranged.
+
+63. Add availability → reload → availability remains.
+
+64. If durable persistence is not ready:
+    report these tests as pending.
+
+==================================================
+32. FINAL REPORT
+==================================================
+
+Report ONLY:
+
+1. Files changed.
+2. How the planning model interprets estimate and availability.
+3. How 45/15 is applied.
+4. How between-task recovery is applied.
+5. Availability normalization behavior.
+6. Drag-and-drop behavior.
+7. What gets recalculated after drag.
+8. What remains unchanged after drag.
+9. Deadline conflict behavior.
+10. Availability conflict behavior.
+11. Do this task later behavior.
+12. Scheduling modal behavior.
+13. Add available time behavior.
+14. UNARRANGED implementation.
+15. How LATER differs from UNARRANGED.
+16. Shared task/taskId behavior.
+17. Persistence status.
+18. Verification results.
+19. Anything not yet verifiable.
+
+Do not make unrelated improvements.
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-30T16:59:14+07:00.
+</ADDITIONAL_METADATA>
