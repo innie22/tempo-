@@ -496,7 +496,9 @@
     }
 
     function refreshRecoveryHomeIfActive() {
-        if (window.TempoMode && typeof window.TempoMode.getMode === 'function') {
+        if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+            window.TempoMode.renderActiveModeHome();
+        } else if (window.TempoMode && typeof window.TempoMode.getMode === 'function') {
             if (window.TempoMode.getMode() === 'recovery') {
                 window.TempoMode.renderRmodeHome();
             }

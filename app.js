@@ -339,7 +339,7 @@ window.TempoApp = (function() {
             { name: 'Self-check', category: 'Tool', desc: 'Track your stress signals and wellbeing habits across 6 dimensions.', action: () => { navigateTo('stress-check'); } },
             { name: 'Urgent Mode (Deadline Triage)', category: 'Tool', desc: 'Academic triage: unfreeze panic and extract the ONE next action.', action: () => { navigateTo('emergency'); } },
             { name: 'Routine & Habit Tracker', category: 'Tool', desc: 'Build gentle, non-punitive habits and daily routine blocks.', action: () => { navigateTo('routine'); } },
-            { name: 'SOS Safety Support', category: 'Safety', desc: '24/7 Lifeline (988), Crisis Text Line (741741), and urgent safety help.', action: () => { window.TempoEmergencySupport.openSOS(); } }
+            { name: 'SOS Safety Support', category: 'Safety', desc: 'Emergency Medical Support (115), HOPE Suicide Prevention Hotline (0865 044 400), and urgent safety help.', action: () => { window.TempoEmergencySupport.openSOS(); } }
         ];
 
         tools.forEach(t => {

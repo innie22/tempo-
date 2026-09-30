@@ -13,30 +13,26 @@ window.TempoEmergencySupport = (function() {
     let currentGroundingIndex = 0; // 0: surroundings, 1: slow breathing, 2: move toward safety
     let breathingInterval = null;
 
-    // Configurable Institution & Regional Support Information
+    // Configurable Support Information (Centralized per Tempo Handbook)
     const supportConfig = {
-        institutionName: 'University Wellbeing Network',
-        crisisLine: {
-            title: '988 Suicide & Crisis Lifeline',
-            phone: '988',
-            actionText: 'Call or Text 988',
-            availability: '24/7 • Free • Confidential',
-            details: 'Trained crisis counselors available nationwide by phone or text.'
+        emergencyMedical: {
+            title: 'Emergency Medical Support',
+            phone: '115',
+            callHref: 'tel:115',
+            details: "If you're at immediate risk of hurting yourself or you're in immediate danger."
         },
-        crisisText: {
-            title: 'Crisis Text Line',
-            action: 'Text HOME to 741741',
-            availability: '24/7 • Free • Confidential',
-            details: 'Connect with a volunteer crisis counselor via SMS anytime.'
+        crisisHotline: {
+            title: 'HOPE — Suicide Prevention Hotline',
+            phone: '0865 044 400',
+            callHref: 'tel:0865044400',
+            details: "If you're in crisis, having thoughts of hurting yourself, or need someone to support you right now."
         },
-        campusSupport: {
-            title: 'Campus Urgent Wellbeing Center',
-            phone: '(555) 019-2831',
-            location: 'Student Health Center, Room 204',
-            operatingHours: 'Mon–Fri: 9:00 AM – 5:00 PM',
-            isOnlineNow: false, // Realistic check
-            offlineNotice: 'The support team is currently offline.'
-        },
+        waitingGuidance: [
+            'Stay with someone you trust.',
+            'Move somewhere safer.',
+            'Create distance from anything that could hurt you.'
+        ],
+        closingReassurance: "You don't need to solve everything right now. For now, just focus on staying safe.",
         trustedPersonTemplate: "Hey, I'm having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?"
     };
 
@@ -119,7 +115,7 @@ window.TempoEmergencySupport = (function() {
         if (successEl) successEl.classList.remove('hidden');
 
         if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-            window.TempoApp.showToast("Message received for office hours. For immediate help, call or text 988.");
+            window.TempoApp.showToast("Message received for office hours. For immediate help, call 115 or HOPE (0865 044 400).");
         }
     }
 
@@ -140,7 +136,7 @@ window.TempoEmergencySupport = (function() {
 
     function closeModal(force = false) {
         if (!force && isSafetyMode) {
-            if (typeof window.confirm === 'function' && !window.confirm("You are currently in Safety Support. Are you sure you want to exit? Remember, 988 is available 24/7.")) {
+            if (typeof window.confirm === 'function' && !window.confirm("You are currently in Safety Support. Are you sure you want to exit? Remember, 115 and HOPE (0865 044 400) are available.")) {
                 return;
             }
         }
@@ -277,14 +273,18 @@ window.TempoEmergencySupport = (function() {
                     <div class="p-5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3">
                         <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Grounding 3 of 3 • Move Toward Safety</span>
                         <h4 class="font-heading text-lg font-bold text-gray-900">Move Toward Space & Safety</h4>
-                        <p class="text-sm text-gray-700 leading-relaxed">
-                            Take a moment to protect your immediate surroundings:
+                        <p class="text-sm text-gray-700 leading-relaxed font-medium">
+                            While you're waiting for support:
                         </p>
-                        <ul class="text-xs text-gray-700 space-y-2 list-disc list-inside">
-                            <li>Move to a place where other people are present (living room, hallway, library).</li>
-                            <li>Contact someone you trust with a simple message.</li>
-                            <li>Create distance from anything you might use to hurt yourself.</li>
+                        <ul class="text-xs text-gray-700 space-y-1.5 list-disc list-inside font-medium">
+                            <li>Stay with someone you trust.</li>
+                            <li>Move somewhere safer.</li>
+                            <li>Create distance from anything that could hurt you.</li>
                         </ul>
+                        <div class="pt-2 border-t border-amber-200/70 text-xs text-amber-900 space-y-0.5">
+                            <p class="font-semibold">You don't need to solve everything right now.</p>
+                            <p>For now, just focus on staying safe.</p>
+                        </div>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
@@ -292,9 +292,9 @@ window.TempoEmergencySupport = (function() {
                             <span>💬</span>
                             <span>Contact someone I trust</span>
                         </button>
-                        <button type="button" onclick="window.TempoEmergencySupport.openHumanDrawer()" class="p-3 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold text-center transition flex items-center justify-center space-x-1.5">
+                        <button type="button" onclick="window.TempoEmergencySupport.openHumanDrawer()" class="p-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold text-center transition flex items-center justify-center space-x-1.5 shadow-sm" title="Get immediate help">
                             <span>📞</span>
-                            <span>Get immediate help</span>
+                            <span>Get support now →</span>
                         </button>
                     </div>
 

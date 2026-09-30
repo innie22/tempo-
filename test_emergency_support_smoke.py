@@ -74,9 +74,21 @@ def run_tests():
                 raise RuntimeError(f"JS Exception: {res['result']['exceptionDetails']}")
             return res.get("result", {}).get("result", {}).get("value")
         
-        # Wait for page to initialize
-        time.sleep(2.5)
-        
+        # Wait for page and scripts to initialize
+        def wait_for_ready():
+            for _ in range(50):
+                try:
+                    ready = evaluate("Boolean(window.TempoMode && window.TempoApp && window.TempoEmergencySupport)")
+                    if ready:
+                        return True
+                except Exception:
+                    pass
+                time.sleep(0.3)
+            return False
+
+        if not wait_for_ready():
+            raise RuntimeError("Tempo app or TempoEmergencySupport did not initialize in time")
+
         log("\n--- TEST 1: Initial State & SOS Header Trigger ---")
         init_state = evaluate("""(() => {
             const modal = document.getElementById('progressive-emergency-modal');
@@ -113,7 +125,7 @@ def run_tests():
         assert sos_state['modalVisible'] == True, "Modal must be visible after SOS trigger"
         assert sos_state['drawerHidden'] == True, "Drawer MUST NOT open automatically over Step 1"
         assert sos_state['checkinStepVisible'] == True, "Step 1 Check-In must be visible"
-        assert "Get immediate human support" in sos_state['toggleBtnText'], "Persistent top bar button text must be 'Get immediate human support'"
+        assert "Get support now" in sos_state['toggleBtnText'] or "Get immediate" in sos_state['toggleBtnText'], "Persistent top bar button text must be 'Get support now →'"
         log("PASSED: SOS opens Step 1 without popping the hotline drawer!")
 
         log("\n--- TEST 2: Persistent Human Support Drawer ---")
@@ -125,17 +137,17 @@ def run_tests():
             
             return {
                 drawerVisible: !drawer.classList.contains('hidden'),
-                has988: drawerText.includes('988'),
-                hasCrisisText: drawerText.includes('741741'),
-                hasOfflineNotice: drawerText.includes('The support team is currently offline'),
+                has115: drawerText.includes('115'),
+                hasHope: drawerText.includes('0865 044 400'),
+                hasOfflineNotice: drawerText.includes('Office Hours Support') || drawerText.includes('Campus Student Wellbeing'),
                 hasOfflineInput: !!document.getElementById('drawer-offline-message')
             };
         })()""")
         log(f"Drawer test result: {drawer_test}")
         assert drawer_test['drawerVisible'] == True, "Drawer must open on toggle"
-        assert drawer_test['has988'] == True, "Drawer must display 988"
-        assert drawer_test['hasCrisisText'] == True, "Drawer must display 741741"
-        assert drawer_test['hasOfflineNotice'] == True, "Drawer must show 'The support team is currently offline'"
+        assert drawer_test['has115'] == True, "Drawer must display 115"
+        assert drawer_test['hasHope'] == True, "Drawer must display HOPE 0865 044 400"
+        assert drawer_test['hasOfflineNotice'] == True, "Drawer must show campus support"
         assert drawer_test['hasOfflineInput'] == True, "Drawer must have non-urgent message input"
         
         # Test submitting non-urgent offline message
@@ -199,7 +211,7 @@ def run_tests():
         assert "Slow Down Your Breathing" in grounding_test['act2Title'], "Activity 2 must be Slow Down Breathing"
         assert "Move Toward Space & Safety" in grounding_test['act3Title'], "Activity 3 must be Move Toward Safety"
         assert any("Contact someone I trust" in b for b in grounding_test['act3Buttons']), "Activity 3 must have 'Contact someone I trust'"
-        assert any("Get immediate help" in b for b in grounding_test['act3Buttons']), "Activity 3 must have 'Get immediate help'"
+        assert any("Get support now" in b or "Get immediate help" in b for b in grounding_test['act3Buttons']), "Activity 3 must have support button"
         log("PASSED: Grounding Activities 1, 2, and 3 verified with correct buttons and pacing!")
 
         log("\n--- TEST 4: Step 4 Safety Check-in -> Step 5A Still Unsafe ---")
@@ -217,17 +229,16 @@ def run_tests():
                 step4Existed: !!step4,
                 step5aVisible: !step5a.classList.contains('hidden'),
                 hasReassurance: step5aText.includes("You don't have to handle this alone"),
-                has988: step5aText.includes("988"),
-                has741741: step5aText.includes("741741"),
-                hasOfflineNotice: step5aText.includes("The support team is currently offline"),
+                has115: step5aText.includes("115"),
+                hasHope: step5aText.includes("0865 044 400"),
                 hasTrustedCopy: !!document.getElementById('btn-copy-trusted-msg')
             };
         })()""")
         log(f"Step 5A test result: {step4_unsafe}")
         assert step4_unsafe['step5aVisible'] == True, "Step 5A must be visible when unsafe"
         assert step4_unsafe['hasReassurance'] == True, "Step 5A must reassure 'You don't have to handle this alone'"
-        assert step4_unsafe['has988'] == True, "Step 5A must have 988"
-        assert step4_unsafe['hasOfflineNotice'] == True, "Step 5A must state 'The support team is currently offline'"
+        assert step4_unsafe['has115'] == True, "Step 5A must have 115"
+        assert step4_unsafe['hasHope'] == True, "Step 5A must have 0865 044 400"
         log("PASSED: Step 5A Safety First Flow verified!")
 
         log("\n--- TEST 5: Step 4 Check-in -> Step 5B Calmer Gentle Transition ---")

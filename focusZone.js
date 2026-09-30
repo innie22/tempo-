@@ -273,6 +273,7 @@ window.TempoFocusZone = (function() {
         stopAudio();
 
         session.isOpen = true;
+        session.isStandaloneBreak = false;
         session.hasUsedBreakExtension = false;
         session.isFinishingAllowedGameRound = false;
         session.breakActivityType = 'other';
@@ -322,6 +323,7 @@ window.TempoFocusZone = (function() {
         stopAudio();
 
         session.isOpen = true;
+        session.isStandaloneBreak = false;
         session.phase = 'quick_entry';
         session.taskId = null;
         session.taskName = 'Independent Focus Session';
@@ -350,6 +352,7 @@ window.TempoFocusZone = (function() {
         stopAudio();
 
         session.isOpen = false;
+        session.isStandaloneBreak = false;
         session.phase = 'setup';
 
         const root = getRoot();
@@ -744,7 +747,40 @@ window.TempoFocusZone = (function() {
     // -------------------------------------------------------------------------
     // BREAK ENGINE & PARENT BREAK TIMER
     // -------------------------------------------------------------------------
+    function openStandaloneBreak() {
+        const root = getRoot();
+        stopFocusTimer();
+        stopBreakTimer();
+        stopAudio();
+
+        loadSavedRhythm();
+
+        session.isOpen = true;
+        session.isStandaloneBreak = true;
+        session.taskId = null;
+        session.taskName = 'Recovery Break';
+        session.nextAction = '';
+        session.subtasks = [];
+        session.phase = 'break';
+        session.hasUsedBreakExtension = false;
+        session.isFinishingAllowedGameRound = false;
+        session.isPostDayBreak = false;
+        session.breakActivityType = 'other';
+        session.breakSecondsRemaining = session.breakDurationSeconds;
+
+        root.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+
+        startBreakTimer();
+        render();
+    }
+
     function startBreakPeriod(isPostDay = false) {
+        const root = getRoot();
+        session.isOpen = true;
+        root.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+
         stopFocusTimer();
         session.phase = 'break';
         session.breakSecondsRemaining = session.breakDurationSeconds;
@@ -889,6 +925,10 @@ window.TempoFocusZone = (function() {
 
     function endBreakEarly() {
         stopBreakTimer();
+        if (session.isStandaloneBreak) {
+            close();
+            return;
+        }
         session.phase = 'return_transition';
         saveSessionToStorage();
         render();
@@ -2257,13 +2297,21 @@ window.TempoFocusZone = (function() {
         const breakOffset = circumference * (1 - progress);
 
         return `
-            <div class="tempo-card w-full max-w-xl p-6 sm:p-8 space-y-6 rounded-3xl ${style.cardClass} text-center">
+            <div class="tempo-card relative w-full max-w-xl p-6 sm:p-8 space-y-6 rounded-3xl ${style.cardClass} text-center">
+                ${session.isStandaloneBreak ? `
+                    <button type="button" onclick="window.TempoFocusZone.close()"
+                            class="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-2 rounded-full hover:bg-stone-100 transition"
+                            title="Close break">
+                        ✕
+                    </button>
+                ` : ''}
+
                 <!-- Title & Intro -->
                 <div class="space-y-1">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECOVERY BREAK</span>
-                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">Break</h2>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">${session.isStandaloneBreak ? 'TEMPO BREAK' : 'RECOVERY BREAK'}</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">${session.isStandaloneBreak ? 'Take a Break' : 'Break'}</h2>
                     <p class="text-xs text-[#6F6B68] max-w-sm mx-auto">
-                        Nice. One focus block done. Take a few minutes away from the task.
+                        ${session.isStandaloneBreak ? 'Take a few minutes to rest, stretch, or breathe.' : 'Nice. One focus block done. Take a few minutes away from the task.'}
                     </p>
                 </div>
 
@@ -2338,10 +2386,17 @@ window.TempoFocusZone = (function() {
 
                 <!-- Ready to Focus CTA -->
                 <div class="pt-2">
-                    <button type="button" onclick="window.TempoFocusZone.endBreakEarly()"
-                            class="btn-primary px-8 py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
-                        I'm ready to focus →
-                    </button>
+                    ${session.isStandaloneBreak ? `
+                        <button type="button" onclick="window.TempoFocusZone.close()"
+                                class="btn-primary px-8 py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                            Finish break & return →
+                        </button>
+                    ` : `
+                        <button type="button" onclick="window.TempoFocusZone.endBreakEarly()"
+                                class="btn-primary px-8 py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                            I'm ready to focus →
+                        </button>
+                    `}
                 </div>
             </div>
         `;
@@ -2512,10 +2567,17 @@ window.TempoFocusZone = (function() {
                 </div>
 
                 <div class="pt-2 flex flex-col gap-2.5">
-                    <button type="button" onclick="window.TempoFocusZone.endBreakEarly()"
-                            class="px-5 py-2.5 rounded-xl border border-stone-300 hover:bg-stone-50 text-xs font-bold text-stone-800 transition">
-                        I'm ready to focus →
-                    </button>
+                    ${session.isStandaloneBreak ? `
+                        <button type="button" onclick="window.TempoFocusZone.close()"
+                                class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-xs transition">
+                            Finish break & return →
+                        </button>
+                    ` : `
+                        <button type="button" onclick="window.TempoFocusZone.endBreakEarly()"
+                                class="px-5 py-2.5 rounded-xl border border-stone-300 hover:bg-stone-50 text-xs font-bold text-stone-800 transition">
+                            I'm ready to focus →
+                        </button>
+                    `}
                     <button type="button" onclick="window.TempoFocusZone.returnToBreakHub()"
                             class="text-xs text-stone-500 hover:text-stone-800 underline">
                         Back to break options
@@ -2530,6 +2592,41 @@ window.TempoFocusZone = (function() {
     // -------------------------------------------------------------------------
     function renderBreakEnded(style) {
         const isRoundGame = session.breakActivityType === 'round_game';
+
+        if (session.isStandaloneBreak) {
+            return `
+                <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+                        🌿
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">BREAK COMPLETE</span>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">
+                            Break time is up 🌿
+                        </h3>
+                        <p class="text-xs text-[#6F6B68]">
+                            Take this refreshed momentum back into your day.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2.5 pt-2">
+                        <button type="button" onclick="window.TempoFocusZone.close()"
+                                class="btn-primary w-full py-3.5 rounded-2xl font-bold text-sm shadow-md transition flex items-center justify-center space-x-1.5">
+                            <span>✓</span>
+                            <span>Finish break & return</span>
+                        </button>
+
+                        ${!session.hasUsedBreakExtension && !isRoundGame ? `
+                            <button type="button" onclick="window.TempoFocusZone.extendBreak5Minutes()"
+                                    class="w-full p-3.5 rounded-2xl bg-[#FFF8F2] border border-[#FFD2BA] hover:bg-[#FFE9DC] text-[#B83D08] text-xs font-semibold transition flex items-center justify-between shadow-2xs group">
+                                <span>I need 5 more minutes</span>
+                                <span class="text-[#FF6B2C] group-hover:translate-x-1 transition-transform">→</span>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
 
         return `
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
@@ -2583,6 +2680,26 @@ window.TempoFocusZone = (function() {
     // VIEW 13: POST-BREAK CHECKPOINT (Sections 23, 33, 34, 35)
     // -------------------------------------------------------------------------
     function renderReturnTransition(style) {
+        if (session.isStandaloneBreak) {
+            return `
+                <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
+                    <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl font-bold">
+                        🌿
+                    </div>
+                    <div class="space-y-1">
+                        <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <p class="text-xs text-[#6F6B68]">Take this refreshed momentum back into your day.</p>
+                    </div>
+                    <div class="pt-2">
+                        <button type="button" onclick="window.TempoFocusZone.close()"
+                                class="btn-primary w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition">
+                            Finish break & return →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
         const ctx = getPlanContext();
         const isTodayComplete = session.isPostDayBreak || ctx.todayUnfinished.length === 0;
 
@@ -3206,6 +3323,7 @@ window.TempoFocusZone = (function() {
         init,
         open,
         openQuickEntry,
+        openStandaloneBreak,
         focusWithoutTask,
         close,
         selectRhythm,

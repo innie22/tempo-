@@ -225,161 +225,8 @@
             <!-- Dynamic Unclear Mode Home Container (Populated by window.TempoMode) -->
             <div id="umode-home-content" class="hidden space-y-6"></div>
 
-            <!-- Default Neutral Dmode Home Container -->
-            <div id="dmode-home-content" class="space-y-10">
-                <!-- Top Grid: Left Routing Hero (~70%) + Right Community Preview (~30%) -->
-            <div class="grid grid-cols-1 lg:grid-cols-10 gap-6 items-stretch">
-                <!-- LEFT: Main Routing Hero (approx 70% / 7 cols) -->
-                <div class="lg:col-span-7 hero-warm-card border border-[#E8E4E1] rounded-3xl p-8 sm:p-10 md:p-12 flex flex-col justify-between shadow-sm">
-                    <div class="space-y-4 max-w-xl relative z-10">
-                        <!-- Small Label -->
-                        <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">WELCOME TO TEMPO</span>
-                        
-                        <!-- Main Heading -->
-                        <h2 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#202124] tracking-tight leading-tight">
-                            What do you need<br>right now?
-                        </h2>
-                        
-                        <!-- Supporting Copy -->
-                        <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed">
-                            You don't need to figure it out alone. Tell Tempo your current situation, and we'll help you find the next step.
-                        </p>
-                        
-                        <!-- Primary CTA Button -->
-                        <div class="pt-3">
-                            <button id="btn-hero-figure-start" 
-                                    class="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm sm:text-base shadow-md inline-flex items-center space-x-2.5 transition">
-                                <span>Help me figure out where to start</span>
-                                <span class="text-lg leading-none">→</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Supporting Information Underneath -->
-                    <div class="pt-8 mt-6 border-t border-gray-100 flex flex-wrap items-center gap-6 text-xs text-[#6F6B68] relative z-10">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-base text-[#FF6B2C]">🕒</span>
-                            <span class="font-medium text-[#202124]">Takes less than 1 minute</span>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-base text-[#FF6B2C]">🛡️</span>
-                            <span class="font-medium text-[#202124]">Personalized guidance</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- RIGHT: Small Tempo Community Preview (approx 30% / 3 cols) -->
-                <div class="lg:col-span-3 bg-white border border-[#E8E4E1] rounded-3xl p-5 space-y-4 shadow-sm flex flex-col justify-between">
-                    <div class="space-y-3">
-                        <!-- Community Header -->
-                        <div class="flex items-center justify-between pb-1">
-                            <div class="flex items-center space-x-2">
-                                <span class="text-base text-[#FF6B2C]">💬</span>
-                                <h3 class="font-heading text-xs sm:text-sm font-bold text-[#202124]">From the Tempo community</h3>
-                            </div>
-                            <button id="btn-see-all-posts" class="text-xs font-bold text-[#FF6B2C] hover:underline flex items-center space-x-1">
-                                <span>See all</span>
-                                <span>→</span>
-                            </button>
-                        </div>
-
-                        <!-- Posts List Container (Populated by communityPosts.js) -->
-                        <div id="homepage-community-posts-list" class="space-y-3">
-                            <!-- Social peer posts injected here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Quick Tools Section -->
-            <div class="space-y-4 pt-2">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">Quick Tools</h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68]">Simple tools to help you feel better and get through your day.</p>
-                    </div>
-                    <button onclick="document.getElementById('nav-btn-quick-tools').click()" class="text-xs font-bold text-[#FF6B2C] hover:underline flex items-center space-x-1">
-                        <span>View all tools</span>
-                        <span>→</span>
-                    </button>
-                </div>
-
-                <!-- 4 Cards Grid (4 cols desktop, 2x2 tablet, 1-2 mobile) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <!-- Card 1: Focus Zone -->
-                    <div onclick="if(window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode();" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
-                        <div class="space-y-3">
-                            <div class="quick-tool-icon-circle">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Focus Zone</h4>
-                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Focus with intentional breaks. Default 45 min focus / 15 min rest.</p>
-                            </div>
-                        </div>
-                        <div class="flex justify-end pt-1">
-                            <div class="quick-tool-arrow-btn">→</div>
-                        </div>
-                    </div>
-
-                    <!-- Card 2: Breathing -->
-                    <div onclick="window.TempoTriage.openBoxBreathingModal()" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
-                        <div class="space-y-3">
-                            <div class="quick-tool-icon-circle">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Breathing</h4>
-                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">A quick breathing exercise to calm your mind.</p>
-                            </div>
-                        </div>
-                        <div class="flex justify-end pt-1">
-                            <div class="quick-tool-arrow-btn">→</div>
-                        </div>
-                    </div>
-
-                    <!-- Card 3: Quick Stress Relief -->
-                    <div onclick="window.TempoStressRelief.openModal()" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
-                        <div class="space-y-3">
-                            <div class="quick-tool-icon-circle">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Quick Stress Relief</h4>
-                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Feel overwhelmed? Try a simple action to ease stress in a few minutes.</p>
-                            </div>
-                        </div>
-                        <div class="flex justify-end pt-1">
-                            <div class="quick-tool-arrow-btn">→</div>
-                        </div>
-                    </div>
-
-                    <!-- Card 4: Self-check -->
-                    <div onclick="window.TempoApp.navigateTo('stress-check')" class="quick-tool-card p-5 cursor-pointer flex flex-col justify-between space-y-4 group">
-                        <div class="space-y-3">
-                            <div class="quick-tool-icon-circle">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h4 class="font-heading text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Self-check</h4>
-                                <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">Track your stress signals and wellbeing habits.</p>
-                            </div>
-                        </div>
-                        <div class="flex justify-end pt-1">
-                            <div class="quick-tool-arrow-btn">→</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            </div>
+            <!-- Default Neutral Dmode Home Container (Populated dynamically by window.TempoMode) -->
+            <div id="dmode-home-content" class="space-y-6 sm:space-y-8"></div>
         </section>
 
 
@@ -847,23 +694,25 @@
                 <!-- Right 1 Col: Urgent Helplines & Confidentiality -->
                 <div class="space-y-6">
                     <div class="tempo-card p-6 space-y-4 border-amber-200 bg-amber-50/30">
-                        <div class="flex items-center space-x-2 text-amber-800">
-                            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="flex items-center space-x-2 text-rose-700">
+                            <svg class="w-5 h-5 shrink-0 text-[#D92D20]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
-                            <h4 class="font-heading text-sm font-bold">24/7 Immediate Crisis Support</h4>
+                            <h4 class="font-heading text-sm font-bold text-gray-900">SOS · Immediate Support</h4>
                         </div>
                         <p class="text-xs text-gray-700 leading-relaxed">
-                            If you or someone you know is in immediate danger or experiencing overwhelming clinical distress, please reach out to these free, confidential resources:
+                            If you or someone you know is in immediate danger or in crisis, please reach out to these immediate resources:
                         </p>
                         <div class="space-y-2 text-xs">
-                            <div class="p-2.5 bg-white rounded-lg border border-amber-200 font-medium">
-                                <div class="text-amber-900 font-bold">National Suicide & Crisis Lifeline</div>
-                                <div class="text-gray-600">Dial or Text <strong>988</strong> (Free 24/7)</div>
+                            <div class="p-2.5 bg-white rounded-xl border border-rose-200 font-medium">
+                                <div class="text-[#D92D20] font-bold">Emergency Medical Support</div>
+                                <div class="text-gray-700 font-bold text-sm">115</div>
+                                <div class="text-gray-500 text-[11px]">If you're at immediate risk of hurting yourself or in danger.</div>
                             </div>
-                            <div class="p-2.5 bg-white rounded-lg border border-amber-200 font-medium">
-                                <div class="text-amber-900 font-bold">Crisis Text Line</div>
-                                <div class="text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong></div>
+                            <div class="p-2.5 bg-white rounded-xl border border-gray-200 font-medium">
+                                <div class="text-gray-900 font-bold">HOPE — Suicide Prevention Hotline</div>
+                                <div class="text-gray-800 font-bold text-sm">0865 044 400</div>
+                                <div class="text-gray-500 text-[11px]">If you're in crisis, having thoughts of hurting yourself, or need support.</div>
                             </div>
                         </div>
                     </div>
@@ -1159,7 +1008,7 @@
                 <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start space-x-3 text-xs text-emerald-950">
                     <span class="text-lg">🌿</span>
                     <div>
-                        <strong class="font-bold">Peer Support Safety Protocols:</strong> Provide compassionate, non-judgmental active listening. Never diagnose mental health conditions, prescribe medication, or offer clinical treatment. If a student indicates crisis or self-harm, immediately direct them to campus emergency contacts and 988.
+                        <strong class="font-bold">Peer Support Safety Protocols:</strong> Provide compassionate, non-judgmental active listening. Never diagnose mental health conditions, prescribe medication, or offer clinical treatment. If a student indicates crisis or self-harm, immediately direct them to campus emergency contacts, 115, and HOPE (0865 044 400).
                     </div>
                 </div>
 
@@ -1410,27 +1259,27 @@
                 <div class="flex items-center space-x-2">
                     <span class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-bold text-sm">⚡</span>
                     <div>
-                        <h3 class="font-heading text-base font-bold text-gray-900 leading-tight">Emergency Support</h3>
-                        <p class="text-[11px] text-gray-500">Progressive Grounding & Human Care</p>
+                        <h3 class="font-heading text-base font-bold text-gray-900 leading-tight">SOS · Immediate Support</h3>
+                        <p class="text-[11px] text-gray-500">Your safety comes first</p>
                     </div>
                 </div>
 
                 <!-- Right: Persistent Human Support Trigger & Close -->
                 <div class="flex items-center space-x-2">
-                    <button id="btn-toggle-human-drawer" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 transition flex items-center space-x-1.5 shadow-sm">
+                    <button id="btn-toggle-human-drawer" type="button" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-rose-100 hover:bg-rose-200 text-rose-900 transition flex items-center space-x-1.5 shadow-sm" title="Get support now">
                         <span>📞</span>
-                        <span>Get immediate human support</span>
+                        <span>Get support now →</span>
                     </button>
                     <button id="btn-close-emergency-flow" type="button" class="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg text-lg transition">✕</button>
                 </div>
             </div>
 
             <!-- Safety Mode Persistent Alert Banner (Visible when B, C, or danger selected) -->
-            <div id="emergency-safety-banner" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-3 text-xs text-amber-900">
+            <div id="emergency-safety-banner" class="hidden p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-3 text-xs text-rose-900">
                 <span class="text-base shrink-0">🛡️</span>
                 <div class="flex-1 space-y-0.5">
                     <p class="font-bold">Safety Mode Active — Immediate human support is right here.</p>
-                    <p class="text-[11px] text-amber-800">You don't need to finish any AI exercises to speak with someone. You can tap "Get immediate human support" at any second.</p>
+                    <p class="text-[11px] text-rose-800">You don't need to finish any exercises to speak with someone. You can tap "Get support now →" at any second.</p>
                 </div>
             </div>
 
@@ -1438,14 +1287,43 @@
                  STEP 1: INITIAL CHECK-IN
                  =============================================================== -->
             <div id="emergency-step-checkin" class="emergency-flow-step space-y-6">
-                <div class="text-center space-y-1.5 max-w-lg mx-auto">
-                    <h4 class="font-heading text-2xl font-extrabold text-gray-900">What kind of support do you need right now?</h4>
-                    <p class="text-xs text-gray-500 leading-relaxed">
-                        You don't need to have everything figured out. Choose what feels closest to your situation.
-                    </p>
+                <!-- Core Handbook Entry Content -->
+                <div class="space-y-4">
+                    <div class="text-center space-y-1 max-w-lg mx-auto">
+                        <span class="text-xs font-bold text-rose-700 uppercase tracking-widest">SOS · Immediate Support</span>
+                        <h4 class="font-heading text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">I don't feel safe right now</h4>
+                    </div>
+
+                    <div class="p-4 sm:p-5 bg-rose-50/70 border border-rose-200 rounded-2xl space-y-3">
+                        <p class="text-xs font-semibold text-rose-950">If right now you're:</p>
+                        <ul class="text-xs sm:text-sm text-rose-900 space-y-1.5 list-disc list-inside font-medium">
+                            <li>panicking and feel out of control</li>
+                            <li>having thoughts or urges to hurt yourself</li>
+                            <li>not feeling safe being alone</li>
+                        </ul>
+                        <div class="pt-2 border-t border-rose-200/70 text-xs sm:text-sm text-rose-900 space-y-0.5">
+                            <p class="font-bold text-rose-950">Your safety comes first.</p>
+                            <p class="text-rose-800">You don't need to handle everything by yourself right now.</p>
+                        </div>
+
+                        <!-- Primary CTA -->
+                        <div class="pt-1">
+                            <button id="btn-sos-get-support-now" type="button" onclick="window.TempoEmergencySupport.openHumanDrawer()" 
+                                class="w-full py-3 px-4 bg-[#D92D20] hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+                                <span>📞</span>
+                                <span>Get support now →</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="space-y-3">
+                <div class="space-y-3 pt-1">
+                    <div class="text-center">
+                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Or choose what you need right now
+                        </p>
+                    </div>
+
                     <!-- Option A -->
                     <button type="button" onclick="window.TempoEmergencySupport.handleInitialCheckin('overwhelmed')" 
                         class="w-full p-4 rounded-2xl border border-gray-200 hover:border-[#FF6B2C] hover:bg-[#FFE9DC]/30 text-left transition group">
@@ -1560,57 +1438,71 @@
                   =============================================================== -->
             <div id="emergency-step-still_unsafe" class="emergency-flow-step hidden space-y-6">
                 <div class="text-center space-y-1.5 max-w-lg mx-auto">
-                    <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Human Support First</span>
+                    <span class="text-xs font-bold text-rose-700 uppercase tracking-wider">Get Support Now</span>
                     <h4 class="font-heading text-2xl font-extrabold text-gray-900">You don't have to handle this alone.</h4>
                     <p class="text-xs text-gray-600 leading-relaxed">
-                        Please connect with these immediate human resources right now. You deserve support.
+                        If you don't feel safe, don't stay alone. Stay with someone you trust and reach out for support now.
                     </p>
                 </div>
 
                 <div class="space-y-3">
-                    <!-- 988 Lifeline (Semantic Danger #D92D20) -->
-                    <div class="p-4 bg-rose-50/60 border border-[#D92D20]/30 rounded-2xl flex items-center justify-between">
+                    <!-- Emergency Medical Support (115) -->
+                    <div class="p-4 bg-rose-50/70 border border-[#D92D20]/30 rounded-2xl flex items-center justify-between">
                         <div class="space-y-0.5">
                             <div class="flex items-center space-x-2">
-                                <h5 class="text-sm font-bold text-gray-900">988 Suicide & Crisis Lifeline</h5>
-                                <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded-full">24/7 • Free</span>
+                                <h5 class="text-sm font-bold text-gray-900">Emergency Medical Support</h5>
+                                <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded-full">Emergency</span>
                             </div>
-                            <p class="text-xs text-gray-600">Call or Text <strong>988</strong> anytime.</p>
+                            <div class="text-lg font-extrabold text-[#D92D20]">115</div>
+                            <p class="text-xs text-gray-600">If you're at immediate risk of hurting yourself or you're in immediate danger.</p>
                         </div>
-                        <a href="tel:988" class="px-4 py-2 bg-[#D92D20] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-sm">Call 988</a>
+                        <a href="tel:115" class="px-4 py-2 bg-[#D92D20] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-sm shrink-0 ml-3">Call 115</a>
                     </div>
 
-                    <!-- Crisis Text Line -->
-                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl flex items-center justify-between">
+                    <!-- HOPE — Suicide Prevention Hotline -->
+                    <div class="p-4 bg-rose-50/70 border border-rose-300 rounded-2xl flex items-center justify-between">
                         <div class="space-y-0.5">
-                            <h5 class="text-sm font-bold text-gray-900">Crisis Text Line</h5>
-                            <p class="text-xs text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong> to message with a counselor.</p>
+                            <div class="flex items-center space-x-2">
+                                <h5 class="text-sm font-bold text-gray-900">HOPE — Suicide Prevention Hotline</h5>
+                                <span class="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-full">Crisis Support</span>
+                            </div>
+                            <div class="text-base font-extrabold text-[#202124]">0865 044 400</div>
+                            <p class="text-xs text-gray-600">If you're in crisis, having thoughts of hurting yourself, or need someone to support you right now.</p>
                         </div>
-                        <span class="px-3 py-1 bg-stone-200 text-gray-800 rounded-lg text-xs font-semibold">SMS 741741</span>
+                        <a href="tel:0865044400" class="px-4 py-2 bg-[#202124] hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-sm shrink-0 ml-3">Call 0865 044 400</a>
                     </div>
 
-                    <!-- Campus Support (With Offline Notice & Message Form) -->
-                    <div class="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
+                    <!-- While Waiting For Support Guidance -->
+                    <div class="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-2">
+                        <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">While you're waiting for support</span>
+                        <ul class="text-xs text-amber-950 space-y-1.5 list-disc list-inside font-medium">
+                            <li>Stay with someone you trust.</li>
+                            <li>Move somewhere safer.</li>
+                            <li>Create distance from anything that could hurt you.</li>
+                        </ul>
+                        <div class="pt-2 border-t border-amber-200/70 text-xs text-amber-900 space-y-0.5">
+                            <p class="font-semibold">You don't need to solve everything right now.</p>
+                            <p>For now, just focus on staying safe.</p>
+                        </div>
+                    </div>
+
+                    <!-- Campus Support (With Message Form) -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
                         <div class="flex items-center justify-between">
-                            <h5 class="text-xs font-bold text-amber-950 uppercase tracking-wider">Campus Student Wellbeing</h5>
-                            <span class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Support Team Offline</span>
+                            <h5 class="text-xs font-bold text-gray-700 uppercase tracking-wider">Campus Student Wellbeing</h5>
+                            <span class="text-[10px] font-bold text-stone-600 bg-stone-200 px-2 py-0.5 rounded">Office Hours Support</span>
                         </div>
-                        <div class="p-2 bg-amber-100/70 rounded-xl text-xs text-amber-950 font-bold flex items-center space-x-1.5">
-                            <span>⚠️</span>
-                            <span>The support team is currently offline.</span>
-                        </div>
-                        <p class="text-xs text-amber-900 leading-relaxed">
-                            Campus operating hours are Mon–Fri: 9:00 AM – 5:00 PM. For urgent safety situations, please call <strong>988</strong> or text <strong>741741</strong> rather than waiting for an administrator response.
+                        <p class="text-xs text-stone-600 leading-relaxed">
+                            For immediate crisis or danger, call <strong>115</strong> or <strong>0865 044 400</strong>. For non-urgent campus advising questions during office hours:
                         </p>
-                        <div class="pt-2 border-t border-amber-200/60 space-y-2">
-                            <p class="text-[11px] font-bold text-gray-800">Leave a non-urgent message for campus staff:</p>
-                            <input id="step5a-offline-contact" type="text" placeholder="Your name or student email (optional)" class="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500">
-                            <textarea id="step5a-offline-message" rows="2" placeholder="Describe your question or message for office hours..." class="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"></textarea>
-                            <button id="btn-step5a-send-offline" type="button" onclick="window.TempoEmergencySupport.submitOfflineMessage('step5a')" class="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl text-xs font-bold transition shadow-sm">
+                        <div class="pt-2 border-t border-stone-200 space-y-2">
+                            <input id="step5a-offline-contact" type="text" placeholder="Your name or student email (optional)" class="w-full p-2.5 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-stone-400">
+                            <textarea id="step5a-offline-message" rows="2" placeholder="Describe your question or message for office hours..." class="w-full p-2.5 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-stone-400"></textarea>
+                            <button id="btn-step5a-send-offline" type="button" onclick="window.TempoEmergencySupport.submitOfflineMessage('step5a')" class="w-full py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition shadow-sm">
                                 Leave Message for Campus Staff
                             </button>
                             <p id="step5a-offline-success" class="hidden text-[11px] text-emerald-800 font-semibold p-2 bg-emerald-50 border border-emerald-200 rounded-xl">
-                                ✓ Message saved. Staff will respond during normal hours. For immediate help, call 988.
+                                ✓ Message saved. Staff will respond during normal hours. For immediate help, call 115 or 0865 044 400.
                             </p>
                         </div>
                     </div>
@@ -1622,7 +1514,7 @@
                         <div class="p-3 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 italic">
                             "Hey, I'm having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?"
                         </div>
-                        <button id="btn-copy-trusted-msg" type="button" class="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold transition">
+                        <button id="btn-copy-trusted-msg" type="button" onclick="window.TempoEmergencySupport.copyTrustedMessage()" class="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold transition">
                             📋 Copy Message to Clipboard
                         </button>
                     </div>
@@ -1772,79 +1664,93 @@
         <div id="human-support-drawer" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-white shadow-2xl z-50 p-6 flex flex-col justify-between overflow-y-auto hidden border-l border-gray-200">
             <div class="space-y-6">
                 <div class="flex items-center justify-between pb-3 border-b border-gray-100">
-                    <div class="flex items-center space-x-2 text-amber-800">
+                    <div class="flex items-center space-x-2 text-rose-700">
                         <span class="text-lg">🛡️</span>
-                        <h4 class="font-heading text-base font-bold text-gray-900">Immediate Human Support</h4>
+                        <h4 class="font-heading text-base font-bold text-gray-900">Get Support Now</h4>
                     </div>
                     <button id="btn-close-human-drawer" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
                 </div>
 
-                <p class="text-xs text-gray-600 leading-relaxed">
-                    You never have to carry intense stress or emotional distress in isolation. These confidential resources are ready for you right now:
-                </p>
+                <div class="space-y-1">
+                    <p class="text-xs font-semibold text-gray-900">If you don't feel safe, don't stay alone.</p>
+                    <p class="text-xs text-gray-600 leading-relaxed">Stay with someone you trust and reach out for support now.</p>
+                </div>
 
                 <div class="space-y-3">
-                    <!-- 988 Lifeline (Semantic Danger #D92D20) -->
-                    <div class="p-4 bg-rose-50/60 border border-[#D92D20]/30 rounded-2xl space-y-1">
+                    <!-- Emergency Medical Support (115) -->
+                    <div class="p-4 bg-rose-50/70 border border-[#D92D20]/30 rounded-2xl space-y-2">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-gray-900">National Crisis Lifeline</span>
-                            <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded">24/7 • Free</span>
+                            <span class="text-xs font-bold text-gray-900 uppercase tracking-wider">Emergency Medical Support</span>
+                            <span class="px-2 py-0.5 bg-rose-100 text-[#D92D20] text-[10px] font-bold rounded">Emergency</span>
                         </div>
-                        <p class="text-xs text-gray-600">Call or Text <strong>988</strong> anytime.</p>
-                        <a href="tel:988" class="inline-block mt-2 px-3 py-1.5 bg-[#D92D20] hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm">Call 988 Now</a>
+                        <div class="text-xl font-extrabold text-[#D92D20] tracking-tight">115</div>
+                        <p class="text-xs text-gray-600">If you're at immediate risk of hurting yourself or you're in immediate danger.</p>
+                        <a href="tel:115" class="inline-block mt-1 px-4 py-2 bg-[#D92D20] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-sm">Call 115 Now</a>
                     </div>
 
-                    <!-- Crisis Text Line -->
-                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-1">
+                    <!-- HOPE — Suicide Prevention Hotline -->
+                    <div class="p-4 bg-rose-50/70 border border-rose-300 rounded-2xl space-y-2">
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-gray-900">Crisis Text Line</span>
-                            <span class="px-2 py-0.5 bg-stone-200 text-gray-800 text-[10px] font-bold rounded">Free SMS</span>
+                            <span class="text-xs font-bold text-gray-900 uppercase tracking-wider">HOPE — Suicide Prevention Hotline</span>
+                            <span class="px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded">Crisis Support</span>
                         </div>
-                        <p class="text-xs text-gray-600">Text <strong>HOME</strong> to <strong>741741</strong>.</p>
+                        <div class="text-lg font-extrabold text-[#202124] tracking-tight">0865 044 400</div>
+                        <p class="text-xs text-gray-600">If you're in crisis, having thoughts of hurting yourself, or need someone to support you right now.</p>
+                        <a href="tel:0865044400" class="inline-block mt-1 px-4 py-2 bg-[#202124] hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-sm">Call 0865 044 400</a>
                     </div>
 
-                    <!-- Campus Support Offline Notice with Message Leave -->
-                    <div class="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold text-amber-950 uppercase tracking-wider">Campus Student Wellbeing</span>
-                            <span class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">Support Team Offline</span>
-                        </div>
-                        <div class="p-2 bg-amber-100/70 rounded-xl text-xs text-amber-950 font-bold flex items-center space-x-1.5">
-                            <span>⚠️</span>
-                            <span>The support team is currently offline.</span>
-                        </div>
-                        <p class="text-xs text-amber-900 leading-relaxed">
-                            Campus operating hours are Mon–Fri: 9:00 AM – 5:00 PM. For urgent safety situations, please call <strong>988</strong> or text <strong>741741</strong> rather than waiting for an administrator response.
-                        </p>
-                        <div class="pt-2 border-t border-amber-200/60 space-y-2">
-                            <p class="text-[11px] font-bold text-gray-800">Leave a non-urgent message for campus staff:</p>
-                            <input id="drawer-offline-contact" type="text" placeholder="Your name or student email (optional)" class="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500">
-                            <textarea id="drawer-offline-message" rows="2" placeholder="Describe your question or message for office hours..." class="w-full p-2.5 text-xs bg-white border border-amber-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"></textarea>
-                            <button id="btn-drawer-send-offline" type="button" onclick="window.TempoEmergencySupport.submitOfflineMessage('drawer')" class="w-full py-2 bg-amber-800 hover:bg-amber-900 text-white rounded-xl text-xs font-bold transition shadow-sm">
-                                Leave Message for Campus Staff
-                            </button>
-                            <p id="drawer-offline-success" class="hidden text-[11px] text-emerald-800 font-semibold p-2 bg-emerald-50 border border-emerald-200 rounded-xl">
-                                ✓ Message saved. Staff will respond during normal hours. For immediate help, call 988.
-                            </p>
+                    <!-- While Waiting For Support Guidance -->
+                    <div class="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-2.5">
+                        <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">While you're waiting for support</span>
+                        <ul class="text-xs text-amber-950 space-y-1.5 list-disc list-inside font-medium">
+                            <li>Stay with someone you trust.</li>
+                            <li>Move somewhere safer.</li>
+                            <li>Create distance from anything that could hurt you.</li>
+                        </ul>
+                        <div class="pt-2 border-t border-amber-200/70 text-xs text-amber-900 space-y-0.5">
+                            <p class="font-semibold">You don't need to solve everything right now.</p>
+                            <p>For now, just focus on staying safe.</p>
                         </div>
                     </div>
 
-                    <!-- Trusted Person Helper -->
+                    <!-- Reach Out to Someone You Trust Helper -->
                     <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
-                        <span class="text-xs font-bold text-gray-900">Reach Out to a Friend or Family:</span>
+                        <span class="text-xs font-bold text-gray-900">Reach Out to Someone You Trust:</span>
+                        <p class="text-xs text-gray-500">Copy this simple message to reach out to a friend or family member:</p>
                         <div class="p-3 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 italic">
                             "Hey, I'm having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?"
                         </div>
-                        <button onclick="navigator.clipboard.writeText('Hey, I\'m having a really difficult time right now and feeling overwhelmed. Are you free to talk or sit with me for a few minutes?'); window.TempoApp.showToast('Copied to clipboard!');" 
+                        <button type="button" onclick="window.TempoEmergencySupport.copyTrustedMessage()" 
                             class="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold transition">
                             📋 Copy Message
                         </button>
+                    </div>
+
+                    <!-- Campus Support Offline Notice with Non-Urgent Message Leave -->
+                    <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Campus Student Wellbeing</span>
+                            <span class="text-[10px] font-bold text-stone-600 bg-stone-200 px-2 py-0.5 rounded">Office Hours Support</span>
+                        </div>
+                        <p class="text-xs text-stone-600 leading-relaxed">
+                            For immediate crisis or danger, call <strong>115</strong> or <strong>0865 044 400</strong>. For non-urgent campus advising questions during office hours:
+                        </p>
+                        <div class="pt-1 space-y-2">
+                            <input id="drawer-offline-contact" type="text" placeholder="Your name or student email (optional)" class="w-full p-2.5 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-stone-400">
+                            <textarea id="drawer-offline-message" rows="2" placeholder="Describe your question or message for office hours..." class="w-full p-2.5 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-stone-400"></textarea>
+                            <button id="btn-drawer-send-offline" type="button" onclick="window.TempoEmergencySupport.submitOfflineMessage('drawer')" class="w-full py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition shadow-sm">
+                                Leave Message for Campus Staff
+                            </button>
+                            <p id="drawer-offline-success" class="hidden text-[11px] text-emerald-800 font-semibold p-2 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                ✓ Message saved. Staff will respond during normal hours. For immediate help, call 115 or 0865 044 400.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="pt-4 border-t border-gray-100">
-                <button onclick="window.TempoEmergencySupport.closeHumanDrawer()" class="w-full py-2.5 bg-stone-900 text-white rounded-xl text-xs font-bold">
+                <button onclick="window.TempoEmergencySupport.closeHumanDrawer()" class="w-full py-2.5 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-bold transition">
                     Close Support Drawer
                 </button>
             </div>
@@ -2131,7 +2037,7 @@
                     <ul class="space-y-1.5 list-disc list-inside">
                         <li><strong class="text-[#202124]">No Toxic Productivity:</strong> Missing a habit or study block is never treated as a personal failure.</li>
                         <li><strong class="text-[#202124]">The ONE Next Action:</strong> When panic strikes, we help deconstruct chaos into a single 25-minute doable step.</li>
-                        <li><strong class="text-[#202124]">Safety First:</strong> 24/7 crisis lifelines (988 & 741741) are always 1 click away without any quizzes or gates.</li>
+                        <li><strong class="text-[#202124]">Safety First:</strong> Emergency support (115 & HOPE 0865 044 400) is always 1 click away without any quizzes or gates.</li>
                     </ul>
                 </div>
                 <p>
@@ -2426,7 +2332,7 @@
                     <label class="flex items-start space-x-2.5 text-xs text-sky-900 cursor-pointer pt-1">
                         <input type="checkbox" id="vol-ethical-acknowledgement" required class="mt-0.5 rounded text-sky-600 focus:ring-sky-500">
                         <span class="leading-relaxed">
-                            I understand and agree that Tempo volunteers provide <strong>non-diagnostic, supportive active listening only</strong>. I will never offer clinical psychiatric diagnoses, medical prescriptions, or emergency crisis treatment. I commit to immediately escalating any high-risk distress or self-harm concerns to campus emergency counselors and the 988 lifeline.
+                            I understand and agree that Tempo volunteers provide <strong>non-diagnostic, supportive active listening only</strong>. I will never offer clinical psychiatric diagnoses, medical prescriptions, or emergency crisis treatment. I commit to immediately escalating any high-risk distress or self-harm concerns to campus emergency counselors, 115, and HOPE (0865 044 400).
                         </span>
                     </label>
                 </div>
@@ -2615,7 +2521,7 @@
                 Confidential peer wellbeing support. Not a replacement for emergency or psychiatric services.
             </p>
             <div class="flex items-center space-x-3 text-xs">
-                <button onclick="window.TempoEmergencySupport.openModal()" class="text-[#D92D20] font-bold hover:underline">988 Crisis Support</button>
+                <button onclick="window.TempoEmergencySupport.openSOS()" class="text-[#D92D20] font-bold hover:underline">SOS · Immediate Support</button>
                 <span class="text-gray-300">•</span>
                 <span class="text-[#6F6B68]">© 2026 Tempo</span>
             </div>
@@ -2650,6 +2556,9 @@
     <script src="selfCheckPatterns.js"></script>
     <script src="selfCheckHistory.js"></script>
     <script src="weeklyReview.js"></script>
+    <script src="unclearMode.js"></script>
+    <script src="tempoTools.js"></script>
+    <script src="learnSolve.js"></script>
     <script src="mode.js"></script>
     <script src="app.js"></script>
 </body>
