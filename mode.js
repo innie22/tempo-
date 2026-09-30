@@ -491,6 +491,12 @@ window.TempoMode = (function() {
         }
     }
 
+    function selectModeOption(targetMode) {
+        closeChangeModeModal();
+        if (targetMode === currentMode) return;
+        requestMode(targetMode);
+    }
+
     function updateAuthGateBanners(targetMode) {
         document.querySelectorAll('.auth-mode-gate-banner').forEach(banner => {
             const titleEl = banner.querySelector('.auth-mode-gate-title');
@@ -673,34 +679,27 @@ window.TempoMode = (function() {
     function renderDmodeYourDay(planData) {
         let contentHTML = '';
 
-        if (planData.state === 'BRAND_NEW') {
-            contentHTML = `
-                <div class="py-8 px-4 text-center space-y-3 bg-[#FAF8F5] rounded-xl border border-dashed border-[#E8E4E1]">
-                    <p class="font-heading text-base font-bold text-[#202124]">Nothing planned yet.</p>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">You can start with whatever matters today.</p>
-                    <div class="pt-2">
-                        <button type="button" onclick="window.TempoMode.openPlanWorkspace()"
-                                class="btn-primary px-5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer">
-                            View my plan
-                        </button>
-                    </div>
-                </div>
-            `;
-        } else if (planData.state === 'NO_WORK_TODAY') {
+        if (planData.state === 'BRAND_NEW' || planData.state === 'NO_WORK_TODAY') {
             const tomorrowLine = planData.tomorrowTasksCount > 0
-                ? `<p class="text-xs text-[#8C8782] font-medium pt-1">Next planned work: Tomorrow (${planData.tomorrowTasksCount} task${planData.tomorrowTasksCount === 1 ? '' : 's'})</p>`
+                ? `<p class="text-xs text-[#8C8782] font-medium pt-0.5">Next planned work: Tomorrow (${planData.tomorrowTasksCount} task${planData.tomorrowTasksCount === 1 ? '' : 's'})</p>`
                 : '';
 
             contentHTML = `
-                <div class="py-8 px-4 text-center space-y-3 bg-[#FAF8F5] rounded-xl border border-dashed border-[#E8E4E1]">
+                <div class="py-5 px-4 text-center space-y-2 bg-[#FAF8F5] rounded-xl border border-dashed border-[#E8E4E1]">
                     <p class="font-heading text-base font-bold text-[#202124]">Nothing planned for today.</p>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">You don't need to fill the space.</p>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">You don't need to fill the space. Start with whatever matters today.</p>
                     ${tomorrowLine}
-                    <div class="pt-2">
+                    <div class="pt-1.5 flex items-center justify-center gap-2.5">
                         <button type="button" onclick="window.TempoMode.openPlanWorkspace()"
-                                class="px-4 py-2 rounded-xl text-xs font-bold text-[#202124] bg-white border border-[#D5CEC8] hover:bg-stone-50 transition shadow-xs cursor-pointer">
-                            View my plan
+                                class="btn-primary px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
+                            <span>+ Add a task</span>
                         </button>
+                        ${planData.hasActivePlan ? `
+                            <button type="button" onclick="window.TempoMode.openPlanWorkspace()"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-[#202124] bg-white border border-[#D5CEC8] hover:bg-stone-50 transition shadow-xs cursor-pointer">
+                                View my plan
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -713,8 +712,8 @@ window.TempoMode = (function() {
 
             contentHTML = `
                 <div class="space-y-4">
-                    <div class="py-6 px-4 text-center space-y-2 bg-[#EDF7F1] rounded-xl border border-[#CDE9DA]">
-                        <p class="font-heading text-base font-bold text-[#166545]">✓ You're done with what you planned for today.</p>
+                    <div class="py-4 px-4 text-center space-y-1.5 bg-[#EDF7F1] rounded-xl border border-[#CDE9DA]">
+                        <p class="font-heading text-base font-bold text-[#166545]">✓ You're done with what was planned for today.</p>
                         ${tomorrowLine}
                     </div>
                     <div class="space-y-2">
@@ -1097,24 +1096,59 @@ window.TempoMode = (function() {
         return '';
     }
 
+    function renderDmodeModeSwitchEntry() {
+        return `
+            <div id="dmode-mode-switch-bar" class="flex items-center justify-between px-4 py-2.5 bg-[#FAF8F5] border border-[#EAE4DF] rounded-2xl text-xs text-[#6F6B68]">
+                <div class="flex items-center space-x-2">
+                    <span class="text-stone-400">🧭</span>
+                    <span class="font-medium text-[#202124]">Need a different kind of support?</span>
+                </div>
+                <button type="button" 
+                        onclick="window.TempoMode.openChangeModeModal()" 
+                        class="font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
+                    <span>Change mode</span>
+                    <span>→</span>
+                </button>
+            </div>
+        `;
+    }
+
+    function renderDmodeGuestInvitation() {
+        return `
+            <div id="dmode-guest-invitation" class="p-4 sm:p-5 bg-gradient-to-r from-[#FFFBF7] to-[#FAF8F5] border border-[#EAE4DF] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div class="space-y-1">
+                    <span class="font-bold text-[#202124] text-sm">Save your progress across sessions</span>
+                    <p class="text-[#6F6B68]">Create a free account to plan your days, track habits, and preserve your work.</p>
+                </div>
+                <button type="button" onclick="if (window.TempoAuth) window.TempoAuth.openSignUpModal();"
+                        class="btn-primary px-4 py-2 rounded-xl font-bold text-xs shrink-0 self-start sm:self-auto shadow-xs transition cursor-pointer">
+                    Create free account →
+                </button>
+            </div>
+        `;
+    }
+
     function renderDmodeHome() {
         applyModeVisibility(MODES.DEFAULT);
 
         const dmodeBox = document.getElementById('dmode-home-content');
         if (!dmodeBox) return;
 
+        const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
         const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
         const greetingInfo = getSafeGreetingInfo(profile);
         const planData = getSharedPlanTodayTasks();
 
         dmodeBox.innerHTML = `
             ${renderDmodeHeader(greetingInfo)}
+            ${renderDmodeModeSwitchEntry()}
             ${renderDmodeYourDay(planData)}
             ${renderDmodeSelfCheckCard()}
             ${renderDmodeContextualCard()}
             ${renderDmodeTools()}
             ${renderDmodeLearnSolve()}
             ${renderDmodePostsSection()}
+            ${!isAuthenticated ? renderDmodeGuestInvitation() : ''}
         `;
 
         if (window.TempoCommunity && typeof window.TempoCommunity.renderHomepagePreview === 'function') {
@@ -1255,6 +1289,15 @@ window.TempoMode = (function() {
             return { name: 'there', greetingText: 'Hi there 👋', isFallback: true };
         }
 
+        // 0) Intelligent cultural greeting extraction (Vietnamese given name last vs Western given name first)
+        if (window.TempoAuth && typeof window.TempoAuth.extractGreetingName === 'function') {
+            const extracted = window.TempoAuth.extractGreetingName(profile.display_name || profile.full_name);
+            if (extracted && isCleanShortName(extracted)) {
+                const clean = formatCapitalized(extracted);
+                return { name: clean, greetingText: `Hi, ${clean} 👋`, isFallback: false };
+            }
+        }
+
         // 1) preferred_name / display_name
         const pref = profile.preferred_name || profile.display_name;
         if (pref && isCleanShortName(pref)) {
@@ -1354,10 +1397,23 @@ window.TempoMode = (function() {
             }
         }
 
-        // Render appropriate view according to state
+        // Render appropriate view according to state with stable ~65 / 35 outer shell
         emodeBox.innerHTML = `
-            ${renderEmodeHeader()}
-            ${renderStateBody(activeHomeState, { confirmedPlan, currentStage, availabilityDays, todayStr, greetingInfo })}
+            <div class="relative space-y-5">
+                ${renderEmodeHeader()}
+                <div class="urgent-home-main-grid">
+                    <!-- LEFT COLUMN (~65%) -->
+                    <div class="urgent-left-col">
+                        ${renderEmodePrimarySection(activeHomeState, { confirmedPlan, currentStage, availabilityDays, todayStr, greetingInfo })}
+                        ${renderSupportRowHTML()}
+                    </div>
+                    <!-- RIGHT COLUMN (~35%) -->
+                    <div class="urgent-right-col bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-xs flex flex-col justify-between">
+                        ${renderEmodeRightCol(activeHomeState, { confirmedPlan, todayStr, currentStage })}
+                    </div>
+                </div>
+                ${renderTempoPostsSection()}
+            </div>
         `;
 
         // Trigger community posts preview sync for urgent feed
@@ -1383,7 +1439,7 @@ window.TempoMode = (function() {
                         <button id="btn-home-mode-selector" 
                                 type="button" 
                                 onclick="window.TempoMode.toggleModeDropdown(event)" 
-                                class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] hover:bg-[#FFDFC9] border border-[#FFD2BA] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                                class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] hover:bg-[#FFDFC9] border border-[#FFD2BA] transition flex items-center space-x-1.5 shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] focus:ring-offset-1"
                                 aria-haspopup="true"
                                 aria-expanded="false"
                                 title="Switch Tempo Mode">
@@ -1395,7 +1451,7 @@ window.TempoMode = (function() {
                     </div>
 
                     <!-- Date Display -->
-                    <div class="hidden sm:block text-xs font-semibold text-[#6F6B68]">
+                    <div class="text-xs font-semibold text-[#6F6B68]">
                         ${escapeHTML(formattedDate)}
                     </div>
                 </div>
@@ -1403,27 +1459,27 @@ window.TempoMode = (function() {
         `;
     }
 
-    function renderStateBody(state, ctx) {
+    function renderEmodePrimarySection(state, ctx) {
         const { confirmedPlan, currentStage, availabilityDays, todayStr, greetingInfo } = ctx;
 
         switch (state) {
             case 'PLAN_INCOMPLETE':
-                return renderStatePlanIncomplete(currentStage);
+                return renderStatePlanIncomplete(currentStage, greetingInfo);
 
             case 'PLAN_COMPLETE':
-                return renderStatePlanComplete(confirmedPlan);
+                return renderStatePlanComplete(confirmedPlan, greetingInfo);
 
             case 'PLAN_STALE':
-                return renderStatePlanStale(confirmedPlan, todayStr);
+                return renderStatePlanStale(confirmedPlan, todayStr, greetingInfo);
 
             case 'TIME_ENDED_WITH_INCOMPLETE_WORK':
-                return renderStateTimeEnded(confirmedPlan, todayStr);
+                return renderStateTimeEnded(confirmedPlan, todayStr, greetingInfo);
 
             case 'TODAY_COMPLETE':
-                return renderStateTodayComplete(confirmedPlan, todayStr);
+                return renderStateTodayComplete(confirmedPlan, todayStr, greetingInfo);
 
             case 'NO_WORK_TODAY':
-                return renderStateNoWorkToday(confirmedPlan, todayStr);
+                return renderStateNoWorkToday(confirmedPlan, todayStr, greetingInfo);
 
             case 'ACTIVE_TODAY':
             default:
@@ -1431,10 +1487,12 @@ window.TempoMode = (function() {
         }
     }
 
+    const renderStateBody = renderEmodePrimarySection;
+
     // -------------------------------------------------------------------------
     // STATE A: PLAN_INCOMPLETE
     // -------------------------------------------------------------------------
-    function renderStatePlanIncomplete(currentStage) {
+    function renderStatePlanIncomplete(currentStage, greetingInfo) {
         const stageNames = {
             'entry': 'Settle / Reset Checkpoint',
             'reality-check': 'Reality Check (Task Dump)',
@@ -1451,40 +1509,35 @@ window.TempoMode = (function() {
         const currentStageTitle = stageNames[currentStage] || 'Urgent Setup';
 
         return `
-            <div class="space-y-8">
-                <!-- Resume Card -->
-                <div class="bg-white border-2 border-dashed border-[#FF6B2C]/50 rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs">
-                    <div class="space-y-2">
-                        <span class="px-3 py-1 rounded-full text-[11px] font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
-                            YOUR URGENT PLAN
-                        </span>
-                        <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                            You're still setting up your plan.
-                        </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] max-w-lg leading-relaxed">
-                            Your urgent plan setup is in progress at step: <strong class="text-[#202124]">${escapeHTML(currentStageTitle)}</strong>.
-                            All of your task entries and estimates are safely preserved.
-                        </p>
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-7 space-y-4 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 space-y-1.5">
+                    <span class="px-3 py-1 rounded-full text-[11px] font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
+                        YOUR URGENT PLAN
+                    </span>
+                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68] pt-1">
+                        ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
-
-                    <div class="pt-2 flex flex-wrap items-center gap-3">
-                        <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('${currentStage}');"
-                                class="btn-primary px-6 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>Continue building my plan</span>
-                            <span>→</span>
-                        </button>
-                        <button onclick="window.TempoMode.openChangeModeModal()" 
-                                class="px-4 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
-                            Switch mode
-                        </button>
-                    </div>
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        You're still setting up your plan.
+                    </h3>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-lg leading-relaxed">
+                        Your urgent plan setup is in progress at step: <strong class="text-[#202124]">${escapeHTML(currentStageTitle)}</strong>.
+                        All of your task entries and estimates are safely preserved.
+                    </p>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
-
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 pt-1 flex flex-wrap items-center gap-3">
+                    <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('${currentStage}');"
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm inline-flex items-center space-x-2 transition cursor-pointer">
+                        <span>Continue building my plan</span>
+                        <span>→</span>
+                    </button>
+                    <button onclick="window.TempoMode.openChangeModeModal()" 
+                            class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
+                        Switch mode
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -1492,55 +1545,51 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     // STATE G: PLAN_COMPLETE
     // -------------------------------------------------------------------------
-    function renderStatePlanComplete(confirmedPlan) {
+    function renderStatePlanComplete(confirmedPlan, greetingInfo) {
         const totalTasks = confirmedPlan?.plannedTasks?.length || 0;
 
         return `
-            <div class="space-y-8">
-                <div class="bg-gradient-to-br from-[#EDF7F1] via-white to-[#F6FAF8] border border-[#CDE9DA] rounded-3xl p-8 sm:p-10 space-y-6 text-center shadow-xs">
-                    <div class="w-16 h-16 bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA] rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-sm">
-                        🎉
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-7 space-y-5 text-center shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 w-12 h-12 bg-white/80 text-[#166545] border border-[#CDE9DA] rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-xs">
+                    🎉
+                </div>
+                <div class="relative z-10 space-y-1.5 max-w-md mx-auto">
+                    <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#166545]">ACUTE CRISIS CLEARED</span>
+                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                        ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
-                    <div class="space-y-2 max-w-md mx-auto">
-                        <span class="text-xs font-extrabold uppercase tracking-widest text-[#166545]">ACUTE CRISIS CLEARED</span>
-                        <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">
-                            Your Urgent Plan is complete.
-                        </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                            No urgent tasks are waiting in this plan. You worked through ${totalTasks} planned task${totalTasks === 1 ? '' : 's'} step by step.
-                        </p>
-                    </div>
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        Your Urgent Plan is complete.
+                    </h3>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        No urgent tasks are waiting in this plan. You worked through ${totalTasks} planned task${totalTasks === 1 ? '' : 's'} step by step.
+                    </p>
+                </div>
 
-                    <!-- Mode Recommendation Suggestion (Never forced) -->
-                    <div class="p-4 bg-white/90 border border-[#CDE9DA] rounded-2xl max-w-md mx-auto text-left flex items-start space-x-3 text-xs text-[#166545]">
-                        <span class="text-lg">🌱</span>
-                        <div class="space-y-1">
-                            <p class="font-bold">Tempo Recommendation:</p>
-                            <p class="text-[#202124] leading-relaxed">Your workload has eased up. Shifting toward <strong>Recovery Mode</strong> can help you restore energy and rebuild a sustainable pace.</p>
-                        </div>
-                    </div>
-
-                    <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <button onclick="window.TempoMode.setMode('recovery')" 
-                                class="btn-primary px-6 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition cursor-pointer">
-                            Shift to Recovery Mode →
-                        </button>
-                        <button onclick="window.TempoMode.openChangeModeModal()" 
-                                class="px-5 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
-                            Change mode
-                        </button>
-                        <button onclick="window.TempoApp.showToast('Remaining in Urgent Mode.')" 
-                                class="px-4 py-3 text-xs text-[#6F6B68] hover:text-[#202124] underline cursor-pointer">
-                            Stay in Urgent Mode
-                        </button>
+                <!-- Mode Recommendation Suggestion (Never forced) -->
+                <div class="relative z-10 p-3.5 bg-white/90 border border-[#FFD2BA] rounded-2xl max-w-md mx-auto text-left flex items-start space-x-3 text-xs text-[#166545]">
+                    <span class="text-base">🌱</span>
+                    <div class="space-y-0.5">
+                        <p class="font-bold">Tempo Recommendation:</p>
+                        <p class="text-[#202124] leading-relaxed">Your workload has eased up. Shifting toward <strong>Recovery Mode</strong> can help you restore energy and rebuild a sustainable pace.</p>
                     </div>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
-
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 pt-1 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                    <button onclick="window.TempoMode.setMode('recovery')" 
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
+                        Shift to Recovery Mode →
+                    </button>
+                    <button onclick="window.TempoMode.openChangeModeModal()" 
+                            class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
+                        Change mode
+                    </button>
+                    <button onclick="window.TempoApp.showToast('Remaining in Urgent Mode.')" 
+                            class="px-3 py-2 text-xs text-[#6F6B68] hover:text-[#202124] underline cursor-pointer">
+                        Stay in Urgent Mode
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -1548,54 +1597,50 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     // STATE F: PLAN_STALE
     // -------------------------------------------------------------------------
-    function renderStatePlanStale(confirmedPlan, todayStr) {
+    function renderStatePlanStale(confirmedPlan, todayStr, greetingInfo) {
         const staleTasks = (confirmedPlan?.plannedTasks || []).filter(pt => {
             return pt.dayDate && pt.dayDate < todayStr && (!pt.task || !pt.task.completed);
         });
 
         return `
-            <div class="space-y-8">
-                <div class="bg-amber-50 border border-amber-200 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs">
-                    <div class="flex items-start space-x-3.5">
-                        <span class="text-2xl mt-0.5">⚠️</span>
-                        <div class="space-y-1">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-800">SCHEDULE UPDATE NEEDED</span>
-                            <h3 class="font-heading text-xl sm:text-2xl font-bold text-amber-950">
-                                Your plan needs an update.
-                            </h3>
-                            <p class="text-xs sm:text-sm text-amber-900 leading-relaxed">
-                                Some planned work dates have passed while tasks are still unfinished. We don't reschedule automatically—let's review and adjust your plan calmly together.
-                            </p>
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 flex items-start space-x-3.5">
+                    <span class="text-2xl mt-0.5">⚠️</span>
+                    <div class="space-y-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">SCHEDULE UPDATE NEEDED</span>
+                        <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                            ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                         </div>
-                    </div>
-
-                    <div class="p-3.5 bg-white/80 rounded-2xl border border-amber-200/70 text-xs text-amber-950 space-y-1.5">
-                        <div class="font-bold text-stone-700 uppercase text-[10px] tracking-wider">Unfinished from past dates:</div>
-                        ${staleTasks.map(t => `
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold">• ${escapeHTML(t.task.name)}</span>
-                                <span class="text-stone-500 text-[11px]">Was scheduled: ${escapeHTML(t.dayLabel || t.dayDate)}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-
-                    <div class="pt-2 flex flex-wrap items-center gap-3">
-                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition cursor-pointer">
-                            Review & update plan →
-                        </button>
-                        <button onclick="window.TempoMode.dismissStaleWarning()" 
-                                class="px-4 py-2.5 rounded-xl border border-amber-300 text-xs font-semibold text-amber-900 bg-white hover:bg-amber-100/50 transition cursor-pointer">
-                            Dismiss for now
-                        </button>
+                        <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                            Your plan needs an update.
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            Some planned work dates have passed while tasks are still unfinished. We don't reschedule automatically—let's review and adjust your plan calmly together.
+                        </p>
                     </div>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
+                <div class="relative z-10 p-3.5 bg-white/90 rounded-2xl border border-[#FFD2BA] text-xs text-amber-950 space-y-1.5">
+                    <div class="font-bold text-stone-700 uppercase text-[10px] tracking-wider">Unfinished from past dates:</div>
+                    ${staleTasks.map(t => `
+                        <div class="flex items-center justify-between">
+                            <span class="font-semibold">• ${escapeHTML(t.task.name)}</span>
+                            <span class="text-stone-500 text-[11px]">Was scheduled: ${escapeHTML(t.dayLabel || t.dayDate)}</span>
+                        </div>
+                    `).join('')}
+                </div>
 
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 pt-1 flex flex-wrap items-center gap-3">
+                    <button onclick="window.TempoApp.navigateTo('plan-workspace');"
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition cursor-pointer">
+                        Review & update plan →
+                    </button>
+                    <button onclick="window.TempoMode.dismissStaleWarning()" 
+                            class="px-4 py-2.5 rounded-xl border border-[#FFD2BA] text-xs font-semibold text-[#B83D08] bg-white hover:bg-[#FFE9DC]/50 transition cursor-pointer">
+                        Dismiss for now
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -1603,7 +1648,7 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     // STATE E: TIME_ENDED_WITH_INCOMPLETE_WORK
     // -------------------------------------------------------------------------
-    function renderStateTimeEnded(confirmedPlan, todayStr) {
+    function renderStateTimeEnded(confirmedPlan, todayStr, greetingInfo) {
         const todayTasks = (confirmedPlan?.plannedTasks || []).filter(pt => pt.dayDate === todayStr);
         const topUnfinished = todayTasks.find(pt => !pt.task.completed) || todayTasks[0];
         const taskName = topUnfinished?.task?.name || 'Your planned work';
@@ -1615,55 +1660,51 @@ window.TempoMode = (function() {
         );
 
         return `
-            <div class="space-y-8">
-                <div class="bg-[#FFF8F2] border border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs">
-                    <div class="flex items-start space-x-3.5">
-                        <span class="text-2xl mt-0.5">⏰</span>
-                        <div class="space-y-1">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">PLANNED WINDOW ENDED</span>
-                            <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                                Your planned work time for today has ended.
-                            </h3>
-                            <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                                <strong class="text-[#202124]">${escapeHTML(taskName)}</strong> is still in progress.
-                            </p>
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 flex items-start space-x-3.5">
+                    <span class="text-2xl mt-0.5">⏰</span>
+                    <div class="space-y-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">PLANNED WINDOW ENDED</span>
+                        <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                            ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                         </div>
-                    </div>
-
-                    ${hasDeadlineRisk ? `
-                        <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 space-y-1">
-                            <div class="font-bold flex items-center space-x-1">
-                                <span>⚠️</span>
-                                <span>Upcoming Deadline Notice:</span>
-                            </div>
-                            <p>This task is due tonight or early tomorrow. If you choose to stop now, you may want to open your plan and allocate a morning block tomorrow.</p>
-                        </div>
-                    ` : ''}
-
-                    <div class="space-y-2 pt-1">
-                        <span class="text-xs font-bold text-[#202124]">What would you like to do?</span>
-                        <div class="flex flex-wrap items-center gap-3">
-                            <button onclick="window.TempoMode.stopForToday()" 
-                                    class="px-5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold transition cursor-pointer">
-                                Stop for today
-                            </button>
-                            <button onclick="window.TempoMode.keepWorkingToday()" 
-                                    class="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer">
-                                Keep working
-                            </button>
-                            <button onclick="window.TempoApp.navigateTo('plan-workspace');" 
-                                    class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
-                                Adjust my plan
-                            </button>
-                        </div>
+                        <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                            Your planned work time for today has ended.
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            <strong class="text-[#202124]">${escapeHTML(taskName)}</strong> is still in progress.
+                        </p>
                     </div>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
+                ${hasDeadlineRisk ? `
+                    <div class="relative z-10 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 space-y-1">
+                        <div class="font-bold flex items-center space-x-1">
+                            <span>⚠️</span>
+                            <span>Upcoming Deadline Notice:</span>
+                        </div>
+                        <p>This task is due tonight or early tomorrow. If you choose to stop now, you may want to open your plan and allocate a morning block tomorrow.</p>
+                    </div>
+                ` : ''}
 
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 space-y-2 pt-1">
+                    <span class="text-xs font-bold text-[#202124]">What would you like to do?</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button onclick="window.TempoMode.stopForToday()" 
+                                class="px-4 py-2.5 rounded-xl bg-white border border-[#FFD2BA] hover:bg-stone-50 text-stone-800 text-xs font-bold transition cursor-pointer">
+                            Stop for today
+                        </button>
+                        <button onclick="window.TempoMode.keepWorkingToday()" 
+                                class="btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer">
+                            Keep working
+                        </button>
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');" 
+                                class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
+                            Adjust my plan
+                        </button>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -1671,7 +1712,7 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     // STATE C: TODAY_COMPLETE
     // -------------------------------------------------------------------------
-    function renderStateTodayComplete(confirmedPlan, todayStr) {
+    function renderStateTodayComplete(confirmedPlan, todayStr, greetingInfo) {
         // Find next planned date with tasks
         const futureTasks = (confirmedPlan?.plannedTasks || []).filter(pt => {
             return pt.dayDate > todayStr && (!pt.task || !pt.task.completed);
@@ -1683,42 +1724,38 @@ window.TempoMode = (function() {
             : 'No further dates scheduled';
 
         return `
-            <div class="space-y-8">
-                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs">
-                    <div class="flex items-center space-x-2">
-                        <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">TODAY'S WORK DONE</span>
-                    </div>
-
-                    <div class="space-y-1">
-                        <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">
-                            You're done for today.
-                        </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68]">
-                            You've completed what you planned for today. Protect your rest.
-                        </p>
-                    </div>
-
-                    <div class="p-4 bg-[#FFFDFB] border border-[#EAE4DF] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div class="space-y-0.5">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Next planned work:</span>
-                            <div class="font-bold text-sm text-[#202124]">${escapeHTML(nextScheduleText)}</div>
-                            ${nextItem ? `<p class="text-[#6F6B68] text-[11px]">${escapeHTML(nextItem.task.name)}</p>` : ''}
-                        </div>
-                        ${nextItem ? `
-                            <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                                    class="px-4 py-2 rounded-xl border border-gray-200 bg-white font-semibold text-xs text-gray-700 hover:bg-stone-50 transition self-start sm:self-auto cursor-pointer">
-                                View tomorrow →
-                            </button>
-                        ` : ''}
-                    </div>
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 flex items-center space-x-2">
+                    <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">TODAY'S WORK DONE</span>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
+                <div class="relative z-10 space-y-1">
+                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                        ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
+                    </div>
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        You're done for today.
+                    </h3>
+                    <p class="text-xs sm:text-sm text-[#6F6B68]">
+                        You've completed what you planned for today. Protect your rest.
+                    </p>
+                </div>
 
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 p-3.5 bg-white/90 border border-[#FFD2BA] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div class="space-y-0.5">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Next planned work:</span>
+                        <div class="font-bold text-sm text-[#202124]">${escapeHTML(nextScheduleText)}</div>
+                        ${nextItem ? `<p class="text-[#6F6B68] text-[11px]">${escapeHTML(nextItem.task.name)}</p>` : ''}
+                    </div>
+                    ${nextItem ? `
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
+                                class="px-4 py-2 rounded-xl border border-[#FFD2BA] bg-white font-semibold text-xs text-gray-700 hover:bg-stone-50 transition self-start sm:self-auto cursor-pointer">
+                            View tomorrow →
+                        </button>
+                    ` : ''}
+                </div>
             </div>
         `;
     }
@@ -1726,37 +1763,33 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     // STATE D: NO_WORK_TODAY
     // -------------------------------------------------------------------------
-    function renderStateNoWorkToday(confirmedPlan, todayStr) {
+    function renderStateNoWorkToday(confirmedPlan, todayStr, greetingInfo) {
         const upcomingTasks = (confirmedPlan?.plannedTasks || []).filter(pt => pt.dayDate > todayStr);
         const nextItem = upcomingTasks[0];
         const nextDateLabel = nextItem ? (nextItem.dayLabel || nextItem.dayDate) : 'a future date';
 
         return `
-            <div class="space-y-8">
-                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs">
-                    <div class="space-y-1">
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">SCHEDULE OVERVIEW</span>
-                        <h3 class="font-heading text-2xl font-bold text-[#202124]">
-                            Nothing planned for today.
-                        </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                            Your Urgent Plan continues on <strong>${escapeHTML(nextDateLabel)}</strong>.
-                        </p>
+            <div class="bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-sm relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="relative z-10 space-y-1">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">SCHEDULE OVERVIEW</span>
+                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                        ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
-
-                    <div class="pt-2 flex items-center space-x-3">
-                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
-                            View Plan Schedule →
-                        </button>
-                    </div>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                        Nothing planned for today.
+                    </h3>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        Your Urgent Plan continues on <strong>${escapeHTML(nextDateLabel)}</strong>.
+                    </p>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
-
-                <!-- Tempo Posts -->
-                ${renderTempoPostsSection()}
+                <div class="relative z-10 pt-1 flex items-center space-x-3">
+                    <button onclick="window.TempoApp.navigateTo('plan-workspace');"
+                            class="px-4 py-2.5 rounded-xl border border-[#FFD2BA] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
+                        View Plan Schedule →
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -1805,229 +1838,353 @@ window.TempoMode = (function() {
         const needsAttentionItems = checkNeedsAttentionIssues(confirmedPlan, todayStr);
 
         return `
-            <div class="space-y-8">
-                <!-- Main Asymmetric Grid: ~65% Left / ~35% Right on Desktop -->
-                <div class="urgent-home-main-grid">
-                    <!-- LEFT COLUMN -->
-                    <div class="urgent-left-col">
-                        <!-- Priority #1: YOUR TASK FOR NOW -->
-                        ${nowItem ? `
-                            <div class="urgent-card-now bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm relative overflow-hidden">
-                                <!-- Greeting directly above YOUR TASK FOR NOW -->
-                                <div class="relative z-10 text-xs sm:text-sm font-semibold text-[#6F6B68]">
-                                    ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
-                                </div>
+            <!-- Priority #1: YOUR TASK FOR NOW -->
+            ${nowItem ? `
+                <div class="urgent-card-now bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm relative overflow-hidden">
+                    <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
+                    <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
 
-                                <div class="relative z-10 flex items-center justify-between">
-                                    <div class="flex items-center space-x-2">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-[#FF6B2C] animate-pulse inline-block"></span>
-                                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#B83D08]">
-                                            YOUR TASK FOR NOW
-                                        </span>
-                                    </div>
-                                    <span class="px-3 py-1 rounded-full text-[10px] font-extrabold bg-[#FF6B2C] text-white tracking-wider shadow-xs">
-                                        NOW
-                                    </span>
-                                </div>
-
-                                <div class="relative z-10 space-y-1.5">
-                                    <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                                        ${escapeHTML(nowItem.task.name)}
-                                    </h3>
-                                    <p class="text-sm sm:text-base font-semibold text-[#6F6B68]">
-                                        ${escapeHTML(nextActionText)}
-                                    </p>
-                                </div>
-
-                                <!-- Metadata Row -->
-                                <div class="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-medium text-[#6F6B68] pt-1">
-                                    <div class="flex items-center space-x-1.5">
-                                        <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                        </svg>
-                                        <span>${escapeHTML(deadlineText)}</span>
-                                    </div>
-                                    <span class="text-[#FFD2BA] hidden sm:inline">|</span>
-                                    <div class="flex items-center space-x-1.5">
-                                        <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                        </svg>
-                                        <span>${escapeHTML(durationText)}</span>
-                                    </div>
-                                    <span class="text-[#FFD2BA] hidden sm:inline">|</span>
-                                    <div class="flex items-center space-x-1.5">
-                                        <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-                                        </svg>
-                                        <span>${escapeHTML(actionStepsLabel)}</span>
-                                    </div>
-                                </div>
-
-                                <!-- Action Buttons Row -->
-                                <div class="relative z-10 pt-3 flex flex-wrap items-center gap-3">
-                                    <button onclick="window.TempoMode.startTaskFocus('${nowItem.task.id}')"
-                                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition cursor-pointer">
-                                        <span class="text-xs">▶</span>
-                                        <span>Focus on this task →</span>
-                                    </button>
-                                    <button onclick="window.TempoApp.navigateTo('plan-workspace'); if (window.TempoPlanWorkspace && window.TempoPlanWorkspace.selectTask) { window.TempoPlanWorkspace.selectTask('${nowItem.task.id}'); }"
-                                            class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-bold text-[#202124] bg-white hover:bg-stone-50 transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
-                                        <span>View task</span>
-                                        <span>→</span>
-                                    </button>
-                                </div>
-                            </div>
-                        ` : ''}
-
-                        <!-- Needs Attention (Only if actual issues exist) -->
-                        ${needsAttentionItems.length > 0 ? `
-                            <div class="bg-amber-50 border border-amber-200 rounded-3xl p-5 sm:p-6 space-y-3 shadow-xs">
-                                <div class="flex items-center space-x-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
-                                    <span>⚠️</span>
-                                    <span>Needs Attention</span>
-                                </div>
-                                <div class="space-y-2">
-                                    ${needsAttentionItems.map(issue => `
-                                        <div class="p-3.5 bg-white/90 rounded-xl border border-amber-200 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                                            <div class="space-y-0.5">
-                                                <div class="font-bold text-[#202124]">${escapeHTML(issue.title)}</div>
-                                                <div class="text-stone-700">${escapeHTML(issue.message)}</div>
-                                            </div>
-                                            <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                                                    class="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-[11px] shrink-0 self-start sm:self-auto transition cursor-pointer">
-                                                Review Plan
-                                            </button>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
+                    <!-- Badge Row: YOUR TASK FOR NOW & NOW -->
+                    <div class="relative z-10 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#FF6B2C] animate-pulse inline-block"></span>
+                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#B83D08]">
+                                YOUR TASK FOR NOW
+                            </span>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-[10px] font-extrabold bg-[#FF6B2C] text-white tracking-wider shadow-xs">
+                            NOW
+                        </span>
                     </div>
 
-                    <!-- RIGHT COLUMN: Priority #2 - Your plan for today -->
-                    <div class="urgent-right-col bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-xs flex flex-col justify-between">
-                        <div class="space-y-4">
-                            <!-- Header -->
-                            <div class="flex items-center justify-between pb-1">
-                                <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                                    Your plan for today
-                                </h3>
+                    <!-- Greeting & Task Title Block -->
+                    <div class="relative z-10 space-y-1.5">
+                        <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
+                            ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
+                        </div>
+                        <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
+                            ${escapeHTML(nowItem.task.name)}
+                        </h3>
+                        <p class="text-sm sm:text-base font-semibold text-[#6F6B68]">
+                            ${escapeHTML(nextActionText)}
+                        </p>
+                    </div>
+
+                    <!-- Metadata Row -->
+                    <div class="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-medium text-[#6F6B68] pt-1">
+                        <div class="flex items-center space-x-1.5">
+                            <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            <span>${escapeHTML(deadlineText)}</span>
+                        </div>
+                        <span class="text-[#FFD2BA] hidden sm:inline">|</span>
+                        <div class="flex items-center space-x-1.5">
+                            <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>${escapeHTML(durationText)}</span>
+                        </div>
+                        <span class="text-[#FFD2BA] hidden sm:inline">|</span>
+                        <div class="flex items-center space-x-1.5">
+                            <svg class="w-4 h-4 text-[#B83D08] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                            </svg>
+                            <span>${escapeHTML(actionStepsLabel)}</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons Row -->
+                    <div class="relative z-10 pt-3 flex flex-wrap items-center gap-3">
+                        <button onclick="window.TempoMode.startTaskFocus('${nowItem.task.id}')"
+                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition cursor-pointer">
+                            <span class="text-xs">▶</span>
+                            <span>Focus on this task →</span>
+                        </button>
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace'); if (window.TempoPlanWorkspace && window.TempoPlanWorkspace.selectTask) { window.TempoPlanWorkspace.selectTask('${nowItem.task.id}'); }"
+                                class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-bold text-[#202124] bg-white hover:bg-stone-50 transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
+                            <span>View task</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Needs Attention (Only if actual issues exist) -->
+            ${needsAttentionItems.length > 0 ? `
+                <div class="bg-amber-50 border border-amber-200 rounded-3xl p-5 sm:p-6 space-y-3 shadow-xs">
+                    <div class="flex items-center space-x-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
+                        <span>⚠️</span>
+                        <span>Needs Attention</span>
+                    </div>
+                    <div class="space-y-2">
+                        ${needsAttentionItems.map(issue => `
+                            <div class="p-3.5 bg-white/90 rounded-xl border border-amber-200 text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div class="space-y-0.5">
+                                    <div class="font-bold text-[#202124]">${escapeHTML(issue.title)}</div>
+                                    <div class="text-stone-700">${escapeHTML(issue.message)}</div>
+                                </div>
                                 <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                                        class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                                    <span>View / Edit Plan</span>
-                                    <span>→</span>
+                                        class="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-[11px] shrink-0 self-start sm:self-auto transition cursor-pointer">
+                                    Review Plan
                                 </button>
                             </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    }
 
-                            <!-- Progress Header & Bar -->
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between text-xs">
-                                    <span class="text-[#6F6B68] font-medium">${completedTodayCount} of ${todayTasks.length} completed</span>
-                                    <span class="font-bold text-[#202124]">${completionPercent}%</span>
-                                </div>
-                                <div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
-                                    <div class="bg-[#FF6B2C] h-2 rounded-full transition-all duration-300" style="width: ${completionPercent}%"></div>
-                                </div>
-                            </div>
+    // -------------------------------------------------------------------------
+    // RIGHT COLUMN: Priority #2 - Your plan for today (Timeline & Progress)
+    // -------------------------------------------------------------------------
+    function renderEmodeRightCol(state, ctx) {
+        const { confirmedPlan, todayStr, currentStage } = ctx;
 
-                            <!-- Timeline Task List -->
-                            <div class="pt-2 space-y-4">
-                                ${todayTasks.map((item, idx) => {
-                                    const isDone = item.task.completed === true;
-                                    const isNow = !isDone && nowItem && item.task.id === nowItem.task.id;
-                                    const isUpNext = !isDone && !isNow;
-                                    const isLast = idx === todayTasks.length - 1;
+        if (state === 'PLAN_INCOMPLETE' || !confirmedPlan || !confirmedPlan.plannedTasks || confirmedPlan.plannedTasks.length === 0) {
+            return `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between pb-1">
+                        <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
+                            Your plan for today
+                        </h3>
+                        <button onclick="window.TempoApp.navigateTo('emergency'); if (window.TempoEmergencyFlow && window.TempoEmergencyFlow.goToStage) { window.TempoEmergencyFlow.goToStage('${currentStage || 'entry'}'); }"
+                                class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
+                            <span>Resume Setup</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                    <div class="p-4 bg-stone-50 border border-stone-200/60 rounded-2xl text-xs text-[#6F6B68] space-y-2">
+                        <div class="font-bold text-[#202124]">Plan setup in progress</div>
+                        <p>Your task schedule and timeline will appear here once you finalize your urgent plan.</p>
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-stone-100 flex items-center justify-between text-xs text-[#8C8782]">
+                    <span>Step: <strong>${escapeHTML(currentStage || 'entry')}</strong></span>
+                    <button onclick="window.TempoMode.openChangeModeModal()" class="hover:text-[#202124] underline cursor-pointer">
+                        Switch mode
+                    </button>
+                </div>
+            `;
+        }
 
-                                    let bulletHTML = '';
-                                    if (isDone) {
-                                        bulletHTML = `
-                                            <div class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 z-10 shadow-xs">
-                                                ✓
-                                            </div>
-                                        `;
-                                    } else if (isNow) {
-                                        bulletHTML = `
-                                            <div class="w-6 h-6 rounded-full bg-[#FF6B2C] border-2 border-white shadow-xs flex items-center justify-center shrink-0 z-10">
-                                                <div class="w-2 h-2 rounded-full bg-white"></div>
-                                            </div>
-                                        `;
-                                    } else {
-                                        bulletHTML = `
-                                            <div class="w-6 h-6 rounded-full border-2 border-stone-300 bg-white flex items-center justify-center shrink-0 z-10"></div>
-                                        `;
-                                    }
+        const allPlanned = confirmedPlan.plannedTasks || [];
+        const todayTasks = allPlanned.filter(pt => pt.dayDate === todayStr);
 
-                                    let badgeHTML = '';
-                                    if (isDone) {
-                                        badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>`;
-                                    } else if (isNow) {
-                                        badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE9DC] text-[#B83D08]">NOW</span>`;
-                                    } else {
-                                        badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600">UP NEXT</span>`;
-                                    }
+        if (todayTasks.length === 0) {
+            const upcomingTasks = allPlanned.filter(pt => pt.dayDate > todayStr);
+            const nextItem = upcomingTasks[0];
+            const nextDateLabel = nextItem ? (nextItem.dayLabel || nextItem.dayDate) : 'a future date';
 
-                                    const timeDurationStr = `${item.startTime || ''}${item.startTime ? ' · ' : ''}~${item.task.isUnknownDuration ? 'Not estimated' : (item.task.durationLabel || '45 min')}`;
+            return `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between pb-1">
+                        <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
+                            Your plan for today
+                        </h3>
+                        <button onclick="window.TempoApp.navigateTo('plan-workspace');"
+                                class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
+                            <span>View / Edit Plan</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                    <div class="p-4 bg-stone-50 border border-stone-200/60 rounded-2xl text-xs text-[#6F6B68] space-y-2">
+                        <div class="font-bold text-[#202124]">Nothing scheduled today</div>
+                        <p>Your Urgent Plan continues on <strong>${escapeHTML(nextDateLabel)}</strong>.</p>
+                    </div>
+                </div>
+                <div class="pt-4 border-t border-stone-100 flex items-center justify-between text-xs text-[#8C8782]">
+                    <span>${upcomingTasks.length} upcoming task${upcomingTasks.length === 1 ? '' : 's'}</span>
+                    <button onclick="window.TempoApp.navigateTo('plan-workspace');" class="hover:text-[#202124] underline cursor-pointer">
+                        View Plan Schedule →
+                    </button>
+                </div>
+            `;
+        }
 
-                                    return `
-                                        <div class="urgent-timeline-item flex items-start space-x-3 group relative">
-                                            ${!isLast ? '<div class="urgent-timeline-line"></div>' : ''}
-                                            
-                                            <!-- Bullet -->
-                                            <div class="pt-0.5">
-                                                ${bulletHTML}
-                                            </div>
+        // We have tasks for today!
+        let nowItem = todayTasks.find(pt => pt.task.isInProgress && !pt.task.completed);
+        if (!nowItem) {
+            nowItem = todayTasks.find(pt => !pt.task.completed);
+        }
+        if (!nowItem) {
+            nowItem = todayTasks[0];
+        }
 
-                                            <!-- Content -->
-                                            <div class="flex-1 min-w-0">
-                                                <div class="flex items-start justify-between gap-2">
-                                                    <div class="min-w-0 flex-1">
-                                                        <h4 class="text-xs font-bold truncate ${isDone ? 'line-through text-stone-400' : 'text-[#202124]'}">
-                                                            ${escapeHTML(item.task.name)}
-                                                        </h4>
-                                                        <p class="text-[11px] text-[#6F6B68]">
-                                                            ${escapeHTML(timeDurationStr)}
-                                                        </p>
-                                                    </div>
-                                                    <div class="flex items-center space-x-1.5 shrink-0">
-                                                        ${badgeHTML}
-                                                        <button type="button" onclick="window.TempoMode.toggleTaskCompletion('${item.task.id}')"
-                                                                title="${isDone ? 'Mark as incomplete' : 'Mark as completed'}"
-                                                                class="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition text-xs cursor-pointer">
-                                                            •••
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        </div>
+        const completedTodayCount = todayTasks.filter(pt => pt.task.completed).length;
+        const completionPercent = todayTasks.length > 0 ? Math.round((completedTodayCount / todayTasks.length) * 100) : 0;
+
+        return `
+            <div class="space-y-4">
+                <!-- Header -->
+                <div class="flex items-center justify-between pb-1">
+                    <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
+                        Your plan for today
+                    </h3>
+                    <button onclick="window.TempoApp.navigateTo('plan-workspace');"
+                            class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
+                        <span>View / Edit Plan</span>
+                        <span>→</span>
+                    </button>
+                </div>
+
+                <!-- Progress Header & Bar -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-[#6F6B68] font-medium">${completedTodayCount} of ${todayTasks.length} completed</span>
+                        <span class="font-bold text-[#202124]">${completionPercent}%</span>
+                    </div>
+                    <div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                        <div class="bg-[#FF6B2C] h-2 rounded-full transition-all duration-300" style="width: ${completionPercent}%"></div>
                     </div>
                 </div>
 
-                <!-- Shared Tempo Ecosystem -->
-                ${renderEmodeSharedEcosystem()}
+                <!-- Timeline Task List -->
+                <div class="pt-2 space-y-4">
+                    ${todayTasks.map((item, idx) => {
+                        const isDone = item.task.completed === true;
+                        const isNow = !isDone && nowItem && item.task.id === nowItem.task.id;
+                        const isLast = idx === todayTasks.length - 1;
 
-                <!-- Tempo Posts Section -->
-                ${renderTempoPostsSection()}
+                        let bulletHTML = '';
+                        if (isDone) {
+                            bulletHTML = `
+                                <div class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 z-10 shadow-xs">
+                                    ✓
+                                </div>
+                            `;
+                        } else if (isNow) {
+                            bulletHTML = `
+                                <div class="w-6 h-6 rounded-full bg-[#FF6B2C] border-2 border-white shadow-xs flex items-center justify-center shrink-0 z-10">
+                                    <div class="w-2 h-2 rounded-full bg-white"></div>
+                                </div>
+                            `;
+                        } else {
+                            bulletHTML = `
+                                <div class="w-6 h-6 rounded-full border-2 border-stone-300 bg-white flex items-center justify-center shrink-0 z-10"></div>
+                            `;
+                        }
+
+                        let badgeHTML = '';
+                        if (isDone) {
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>`;
+                        } else if (isNow) {
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE9DC] text-[#B83D08]">NOW</span>`;
+                        } else {
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600">UP NEXT</span>`;
+                        }
+
+                        const timeDurationStr = `${item.startTime || ''}${item.startTime ? ' · ' : ''}~${item.task.isUnknownDuration ? 'Not estimated' : (item.task.durationLabel || '45 min')}`;
+
+                        return `
+                            <div class="urgent-timeline-item flex items-start space-x-3 group relative">
+                                ${!isLast ? '<div class="urgent-timeline-line"></div>' : ''}
+                                
+                                <!-- Bullet -->
+                                <div class="pt-0.5">
+                                    ${bulletHTML}
+                                </div>
+
+                                <!-- Content -->
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <h4 class="text-xs font-bold truncate ${isDone ? 'line-through text-stone-400' : 'text-[#202124]'}">
+                                                ${escapeHTML(item.task.name)}
+                                            </h4>
+                                            <p class="text-[11px] text-[#6F6B68]">
+                                                ${escapeHTML(timeDurationStr)}
+                                            </p>
+                                        </div>
+                                        <div class="flex items-center space-x-1.5 shrink-0">
+                                            ${badgeHTML}
+                                            <button type="button" onclick="window.TempoMode.toggleTaskCompletion('${item.task.id}')"
+                                                    title="${isDone ? 'Mark as incomplete' : 'Mark as completed'}"
+                                                    class="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition text-xs cursor-pointer">
+                                                •••
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
             </div>
         `;
     }
 
     // -------------------------------------------------------------------------
-    // SHARED ECOSYSTEM FOR URGENT MODE
+    // SHARED ECOSYSTEM FOR URGENT MODE (Excluded in favor of dedicated Urgent Support Row)
     // -------------------------------------------------------------------------
     function renderEmodeSharedEcosystem() {
-        return `
-            ${window.TempoTools ? window.TempoTools.renderSectionHTML() : ''}
-            ${window.TempoLearnSolve ? `<div id="emode-learn-solve-container">${window.TempoLearnSolve.renderSectionHTML()}</div>` : ''}
-        `;
+        return '';
     }
 
-    // Preserved for backwards compatibility (consolidated into shared ecosystem)
+    // -------------------------------------------------------------------------
+    // DEDICATED URGENT SUPPORT ROW (Feeling overwhelmed? + Focus now)
+    // -------------------------------------------------------------------------
     function renderSupportRowHTML() {
-        return '';
+        return `
+            <div class="urgent-support-row">
+                <!-- Card 1: Feeling overwhelmed? -->
+                <div class="urgent-card-overwhelmed bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-xs">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-9 h-9 rounded-2xl bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center text-lg shrink-0">
+                            ⚡
+                        </div>
+                        <div>
+                            <h4 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
+                                Feeling overwhelmed?
+                            </h4>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed">
+                                Take a few minutes to calm things down and clear your head.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="pt-1 flex flex-wrap items-center gap-2.5">
+                        <button type="button"
+                                onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
+                                class="btn-primary px-4 py-2 rounded-xl font-bold text-xs shadow-xs inline-flex items-center space-x-1.5 transition cursor-pointer">
+                            <span>Quick Stress Relief</span>
+                            <span>→</span>
+                        </button>
+                        <button type="button"
+                                onclick="if (window.TempoTriage && window.TempoTriage.openBoxBreathingModal) { window.TempoTriage.openBoxBreathingModal(); } else if (window.TempoBreathing && window.TempoBreathing.openModal) { window.TempoBreathing.openModal(); }"
+                                class="px-3.5 py-2 rounded-xl border border-[#FFD2BA] bg-white text-xs font-bold text-[#B83D08] hover:bg-[#FFF9F5] transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
+                            <span>💨</span>
+                            <span>Breathing</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card 2: Focus now -->
+                <div class="urgent-card-focus-now bg-[#FFFDFB] border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-xs flex flex-col justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-9 h-9 rounded-2xl bg-orange-50 text-[#FF6B2C] flex items-center justify-center text-lg shrink-0">
+                            🎯
+                        </div>
+                        <div>
+                            <h4 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
+                                Focus now
+                            </h4>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed">
+                                Start a Focus session at your own pace.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="pt-1">
+                        <button type="button"
+                                onclick="if (window.TempoFocusZone && window.TempoFocusZone.openQuickEntry) { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoTriage && window.TempoTriage.launchFocusMode) { window.TempoTriage.launchFocusMode(); }"
+                                class="px-4 py-2 rounded-xl bg-[#FFE9DC] hover:bg-[#FFDFC9] text-[#B83D08] font-bold text-xs border border-[#FFD2BA] transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
+                            <span>Start Focus</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // -------------------------------------------------------------------------
@@ -2996,6 +3153,7 @@ window.TempoMode = (function() {
         requestMode,
         handleAuthSuccess,
         setMode,
+        selectModeOption,
         renderShellIndicator,
         openChangeModeModal,
         closeChangeModeModal,
@@ -3004,9 +3162,11 @@ window.TempoMode = (function() {
         closeAllModeDropdowns,
         selectModeFromDropdown,
         renderEmodeHome,
+        renderEmodePrimarySection,
         renderRmodeHome,
         renderUmodeHome,
         renderDmodeHome,
+        renderDmodeModeSwitchEntry,
         restoreDefaultHome,
         renderActiveModeHome,
         applyModeVisibility,

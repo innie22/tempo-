@@ -343,7 +343,7 @@ window.TempoPlanStore = (function() {
         const activeKey = getActiveKey(userId, planType);
 
         // Enforce durable save guarantee: if user is authenticated, Supabase MUST be available!
-        if (userId !== 'guest' && !userId.startsWith('local_student_')) {
+        if (userId !== 'guest' && !userId.startsWith('local_student_') && !userId.startsWith('local_user_')) {
             if (!isRemoteAvailable()) {
                 throw new Error("Cannot save plan: Supabase database connection is not available for this account.");
             }

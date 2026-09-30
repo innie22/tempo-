@@ -17,6 +17,158 @@ window.TempoAuth = (function() {
         resolveAuthReady = resolve;
     });
 
+    // Pre-auth localization state & dictionary
+    let currentAuthLang = 'en';
+
+    const AUTH_I18N = {
+        en: {
+            regHeading: "CREATE YOUR TEMPO ACCOUNT",
+            regTitle: "Welcome to Tempo",
+            regSubtitle: "Manage academic stress, organize deadlines, and find your rhythm.",
+            regNameLabel: 'Display name <span class="text-rose-500">*</span>',
+            regNamePlaceholder: "e.g. Alex or Nguyễn Yến Nhi",
+            regEmailLabel: 'Email <span class="text-rose-500">*</span>',
+            regEmailPlaceholder: "you@example.com",
+            regPasswordLabel: 'Password <span class="text-rose-500">*</span>',
+            regPasswordPlaceholder: "Min. 6 characters",
+            regSubmitBtn: "Create account",
+            regFooterText: 'Already have an account? <button type="button" onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Log in</button>',
+            
+            loginHeading: "WELCOME BACK",
+            loginTitle: "Welcome Back",
+            loginSubtitle: "Sign in to your Tempo account.",
+            loginEmailLabel: "Email",
+            loginPasswordLabel: "Password",
+            loginForgotLink: "Forgot password?",
+            loginSubmitBtn: "Log in",
+            loginFooterText: 'Don\'t have an account? <button type="button" onclick="window.TempoAuth.openRegisterModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Create account</button>',
+            
+            forgotPrompt: "Enter your registered email address to receive password reset instructions:",
+            forgotSent: "Password reset link has been sent to your email.",
+            fillRequired: "Please fill in all required fields.",
+            passTooShort: "Password must be at least 6 characters long."
+        },
+        vi: {
+            regHeading: "TẠO TÀI KHOẢN TEMPO",
+            regTitle: "Chào mừng đến với Tempo",
+            regSubtitle: "Quản lý căng thẳng học tập, sắp xếp hạn chót và tìm lại nhịp điệu của bạn.",
+            regNameLabel: 'Tên hiển thị <span class="text-rose-500">*</span>',
+            regNamePlaceholder: "VD: Alex hoặc Nguyễn Yến Nhi",
+            regEmailLabel: 'Email <span class="text-rose-500">*</span>',
+            regEmailPlaceholder: "ban@example.com",
+            regPasswordLabel: 'Mật khẩu <span class="text-rose-500">*</span>',
+            regPasswordPlaceholder: "Tối thiểu 6 ký tự",
+            regSubmitBtn: "Tạo tài khoản",
+            regFooterText: 'Đã có tài khoản? <button type="button" onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Đăng nhập</button>',
+            
+            loginHeading: "CHÀO MỪNG TRỞ LẠI",
+            loginTitle: "Chào mừng trở lại",
+            loginSubtitle: "Đăng nhập vào tài khoản Tempo của bạn.",
+            loginEmailLabel: "Email",
+            loginPasswordLabel: "Mật khẩu",
+            loginForgotLink: "Quên mật khẩu?",
+            loginSubmitBtn: "Đăng nhập",
+            loginFooterText: 'Chưa có tài khoản? <button type="button" onclick="window.TempoAuth.openRegisterModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Tạo tài khoản</button>',
+            
+            forgotPrompt: "Nhập địa chỉ email đã đăng ký để nhận hướng dẫn đặt lại mật khẩu:",
+            forgotSent: "Liên kết đặt lại mật khẩu đã được gửi đến email của bạn.",
+            fillRequired: "Vui lòng điền đầy đủ các thông tin bắt buộc.",
+            passTooShort: "Mật khẩu phải có ít nhất 6 ký tự."
+        }
+    };
+
+    function setAuthLanguage(lang) {
+        if (!['en', 'vi'].includes(lang)) return;
+        currentAuthLang = lang;
+        try {
+            localStorage.setItem('tempo_auth_lang', lang);
+        } catch (e) {}
+
+        const dict = AUTH_I18N[lang];
+        if (!dict) return;
+
+        // Update registration modal elements
+        const regHeading = document.getElementById('auth-reg-heading');
+        if (regHeading) regHeading.textContent = dict.regHeading;
+        const regTitle = document.getElementById('auth-reg-title');
+        if (regTitle) regTitle.textContent = dict.regTitle;
+        const regSubtitle = document.getElementById('auth-reg-subtitle');
+        if (regSubtitle) regSubtitle.textContent = dict.regSubtitle;
+        const regNameLabel = document.getElementById('auth-reg-name-label');
+        if (regNameLabel) regNameLabel.innerHTML = dict.regNameLabel;
+        const regNameInput = document.getElementById('reg-display-name');
+        if (regNameInput) regNameInput.placeholder = dict.regNamePlaceholder;
+        const regEmailLabel = document.getElementById('auth-reg-email-label');
+        if (regEmailLabel) regEmailLabel.innerHTML = dict.regEmailLabel;
+        const regEmailInput = document.getElementById('reg-email');
+        if (regEmailInput) regEmailInput.placeholder = dict.regEmailPlaceholder;
+        const regPassLabel = document.getElementById('auth-reg-password-label');
+        if (regPassLabel) regPassLabel.innerHTML = dict.regPasswordLabel;
+        const regPassInput = document.getElementById('reg-password');
+        if (regPassInput) regPassInput.placeholder = dict.regPasswordPlaceholder;
+        const btnSubmitReg = document.getElementById('btn-submit-register');
+        if (btnSubmitReg) btnSubmitReg.textContent = dict.regSubmitBtn;
+        const regFooter = document.getElementById('auth-reg-footer-text');
+        if (regFooter) regFooter.innerHTML = dict.regFooterText;
+
+        // Update sign-in modal elements
+        const loginHeading = document.getElementById('auth-login-heading');
+        if (loginHeading) loginHeading.textContent = dict.loginHeading;
+        const loginTitle = document.getElementById('auth-login-title');
+        if (loginTitle) loginTitle.textContent = dict.loginTitle;
+        const loginSubtitle = document.getElementById('auth-login-subtitle');
+        if (loginSubtitle) loginSubtitle.textContent = dict.loginSubtitle;
+        const loginEmailLabel = document.getElementById('auth-login-email-label');
+        if (loginEmailLabel) loginEmailLabel.textContent = dict.loginEmailLabel;
+        const loginPassLabel = document.getElementById('auth-login-password-label');
+        if (loginPassLabel) loginPassLabel.textContent = dict.loginPasswordLabel;
+        const loginForgotLink = document.getElementById('auth-login-forgot-link');
+        if (loginForgotLink) loginForgotLink.textContent = dict.loginForgotLink;
+        const btnSubmitSignin = document.getElementById('btn-submit-signin');
+        if (btnSubmitSignin) btnSubmitSignin.textContent = dict.loginSubmitBtn;
+        const loginFooter = document.getElementById('auth-login-footer-text');
+        if (loginFooter) loginFooter.innerHTML = dict.loginFooterText;
+
+        // Update active switch button styles
+        document.querySelectorAll('.auth-lang-btn').forEach(btn => {
+            const btnLang = btn.getAttribute('data-lang');
+            if (btnLang === lang) {
+                btn.className = 'auth-lang-btn font-bold text-[#FF6B2C] cursor-pointer';
+            } else {
+                btn.className = 'auth-lang-btn text-stone-400 hover:text-stone-700 cursor-pointer';
+            }
+        });
+    }
+
+    /**
+     * Computes circular initials fallback from a display name or email.
+     * Rules:
+     * - Single word: first letter uppercase (e.g. "Alex" -> "A")
+     * - Multiple words: first letters of the first two words uppercase (e.g. "Nguyễn Yến Nhi" -> "NY", "Alex Morgan" -> "AM")
+     */
+    function getInitials(name) {
+        if (!name || typeof name !== 'string') return 'U';
+        const trimmed = name.trim();
+        if (!trimmed) return 'U';
+        const cleanName = trimmed.includes('@') ? trimmed.split('@')[0] : trimmed;
+        const parts = cleanName.split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return 'U';
+        if (parts.length === 1) {
+            return parts[0].charAt(0).toUpperCase();
+        }
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+
+    function escapeHTML(str) {
+        if (!str || typeof str !== 'string') return '';
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     function isLocalEnvironment() {
         return ['localhost', '127.0.0.1', '0.0.0.0', ''].includes(window.location.hostname);
     }
@@ -51,6 +203,12 @@ window.TempoAuth = (function() {
 
     async function init() {
         bindEvents();
+        try {
+            const savedLang = localStorage.getItem('tempo_auth_lang');
+            if (savedLang && ['en', 'vi'].includes(savedLang)) {
+                setAuthLanguage(savedLang);
+            }
+        } catch (e) {}
         updateUserGreeting(null);
         // Initialize Supabase Client
         if (window.TempoSupabase) {
@@ -66,9 +224,10 @@ window.TempoAuth = (function() {
             btnOpenSignIn.addEventListener('click', openSignInModal);
         }
 
+        // Direct Registration Modal trigger (Single Standard Tempo Account)
         const btnOpenRegister = document.getElementById('btn-header-register');
         if (btnOpenRegister) {
-            btnOpenRegister.addEventListener('click', openRoleSelectModal);
+            btnOpenRegister.addEventListener('click', openRegisterModal);
         }
 
         const btnSignOut = document.getElementById('btn-header-signout');
@@ -76,7 +235,7 @@ window.TempoAuth = (function() {
             btnSignOut.addEventListener('click', handleSignOut);
         }
 
-        // Role Selection Modal Choices
+        // Role Selection Modal Choices (Preserved dormant)
         const chooseStudentBtn = document.getElementById('btn-choose-role-student');
         if (chooseStudentBtn) {
             chooseStudentBtn.addEventListener('click', () => {
@@ -94,6 +253,11 @@ window.TempoAuth = (function() {
         }
 
         // Form Submissions
+        const formRegister = document.getElementById('form-register');
+        if (formRegister) {
+            formRegister.addEventListener('submit', handleRegister);
+        }
+
         const formStudentRegister = document.getElementById('form-student-register');
         if (formStudentRegister) {
             formStudentRegister.addEventListener('submit', handleStudentRegister);
@@ -126,11 +290,13 @@ window.TempoAuth = (function() {
                         const parsed = JSON.parse(storedLocal);
                         if (parsed && parsed.id) {
                             currentUser = parsed;
+                            const name = parsed.user_metadata?.display_name || parsed.user_metadata?.full_name || (parsed.email || 'user').split('@')[0];
                             currentProfile = {
                                 id: parsed.id,
                                 email: parsed.email || '',
-                                full_name: (parsed.email || 'user').split('@')[0],
-                                role: 'student'
+                                full_name: name,
+                                display_name: name,
+                                role: parsed.user_metadata?.role || 'student'
                             };
                             authState = 'AUTHENTICATED';
                             renderHeaderUI(currentProfile);
@@ -212,14 +378,19 @@ window.TempoAuth = (function() {
             if (error || !profile) {
                 console.warn("Profile not yet created or loading:", error);
                 // Fallback using user metadata if trigger has latency
+                const metaName = currentUser?.user_metadata?.display_name || currentUser?.user_metadata?.full_name || '';
                 currentProfile = {
                     id: userId,
-                    email: currentUser.email,
-                    full_name: currentUser.user_metadata?.full_name || '',
-                    role: currentUser.user_metadata?.role || 'student'
+                    email: currentUser?.email || '',
+                    full_name: metaName,
+                    display_name: metaName,
+                    role: currentUser?.user_metadata?.role || 'student'
                 };
             } else {
-                currentProfile = profile;
+                currentProfile = {
+                    ...profile,
+                    display_name: profile.display_name || profile.full_name || currentUser?.user_metadata?.display_name || ''
+                };
             }
 
             // If role is volunteer, load volunteer profile
@@ -287,7 +458,7 @@ window.TempoAuth = (function() {
             return;
         }
 
-        const greetingName = extractGreetingName(profile.full_name);
+        const greetingName = extractGreetingName(profile.display_name || profile.full_name);
         if (greetingName) {
             greetingEl.textContent = `Hi, ${greetingName} 👋`;
         } else {
@@ -302,6 +473,7 @@ window.TempoAuth = (function() {
         const authBox = document.getElementById('header-authenticated-box');
         const nameLabel = document.getElementById('header-user-name');
         const rolePill = document.getElementById('header-user-role-pill');
+        const avatarEl = document.getElementById('header-user-avatar');
 
         if (!profile) {
             if (unauthBox) unauthBox.classList.remove('hidden');
@@ -311,22 +483,33 @@ window.TempoAuth = (function() {
             if (unauthBox) unauthBox.classList.add('hidden');
             if (authBox) authBox.classList.remove('hidden');
 
-            if (nameLabel) nameLabel.textContent = profile.full_name || profile.email;
-            if (rolePill) {
-                let badgeText = 'Student';
-                let badgeClass = 'bg-[#FFE9DC] text-[#B83D08]';
+            const displayName = profile.display_name || profile.full_name || profile.email || 'User';
+            if (nameLabel) nameLabel.textContent = displayName;
 
+            if (avatarEl) {
+                avatarEl.setAttribute('title', displayName);
+                if (profile.avatar_url) {
+                    avatarEl.innerHTML = `<img src="${escapeHTML(profile.avatar_url)}" alt="${escapeHTML(displayName)}" class="w-full h-full rounded-full object-cover">`;
+                } else {
+                    avatarEl.textContent = getInitials(displayName);
+                }
+            }
+
+            if (rolePill) {
                 if (profile.role === 'admin') {
-                    badgeText = 'Administrator';
-                    badgeClass = 'bg-[#F3F1EF] text-[#202124] border border-[#E8E4E1]';
+                    rolePill.textContent = 'Administrator';
+                    rolePill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F3F1EF] text-[#202124] border border-[#E8E4E1]';
+                    rolePill.classList.remove('hidden');
                 } else if (profile.role === 'volunteer') {
                     const status = currentVolunteerProfile?.application_status || 'PENDING';
-                    badgeText = status === 'APPROVED' ? 'Peer Volunteer' : `Volunteer (${status})`;
-                    badgeClass = status === 'APPROVED' ? 'bg-[#FFE9DC] text-[#B83D08]' : 'bg-amber-100 text-amber-800';
+                    rolePill.textContent = status === 'APPROVED' ? 'Peer Volunteer' : `Volunteer (${status})`;
+                    rolePill.className = status === 'APPROVED' ? 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]' : 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800';
+                    rolePill.classList.remove('hidden');
+                } else {
+                    // Standard user account: NEVER display "Student" as part of the user's visible account identity
+                    rolePill.classList.add('hidden');
+                    rolePill.textContent = '';
                 }
-
-                rolePill.textContent = badgeText;
-                rolePill.className = `px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}`;
             }
         }
     }
@@ -351,7 +534,139 @@ window.TempoAuth = (function() {
     }
 
     // =========================================================================
-    // STUDENT REGISTRATION (US02)
+    // STANDARD TEMPO REGISTRATION (PHASE 1)
+    // =========================================================================
+    async function registerWithCredentials(displayName, email, password) {
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+
+        if (!displayName || !email || !password) {
+            window.TempoApp.showToast(dict.fillRequired);
+            return false;
+        }
+
+        if (password.length < 6) {
+            window.TempoApp.showToast(dict.passTooShort);
+            return false;
+        }
+
+        const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
+        if (!supabase) {
+            if (!isLocalEnvironment()) {
+                window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.", 5000);
+                return false;
+            }
+            const userId = 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+            currentUser = { 
+                id: userId, 
+                email: email,
+                user_metadata: {
+                    full_name: displayName,
+                    display_name: displayName,
+                    role: 'student'
+                }
+            };
+            try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
+            currentProfile = {
+                id: userId,
+                email: email,
+                full_name: displayName,
+                display_name: displayName,
+                role: 'student'
+            };
+            authState = 'AUTHENTICATED';
+            renderHeaderUI(currentProfile);
+            closeAllAuthModals();
+            if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
+                window.TempoApp.triggerConfetti();
+            }
+            window.TempoApp.showToast(`Welcome, ${displayName}! Your account has been created.`);
+
+            await syncPlanForUser(currentUser.id);
+
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                window.TempoApp.navigateTo('today');
+            }
+            return true;
+        }
+
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        full_name: displayName,
+                        display_name: displayName,
+                        role: 'student'
+                    }
+                }
+            });
+
+            if (error) {
+                window.TempoApp.showToast(`Registration failed: ${error.message}`);
+                return false;
+            }
+
+            closeAllAuthModals();
+            if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
+                window.TempoApp.triggerConfetti();
+            }
+            window.TempoApp.showToast(`Welcome, ${displayName}! Your account has been created.`);
+
+            if (data.session) {
+                currentUser = data.user;
+                authState = 'AUTHENTICATED';
+                await loadUserProfile(data.user.id);
+                await syncPlanForUser(data.user.id);
+            } else {
+                window.TempoApp.showToast("Please check your email to confirm your account!");
+            }
+
+            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
+                window.TempoMode.handleAuthSuccess();
+            } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                window.TempoApp.navigateTo('today');
+            }
+            return true;
+
+        } catch (err) {
+            console.error("Register error:", err);
+            window.TempoApp.showToast("An unexpected error occurred. Please try again.");
+            return false;
+        }
+    }
+
+    async function handleRegister(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        const nameInput = document.getElementById('reg-display-name');
+        const emailInput = document.getElementById('reg-email');
+        const passInput = document.getElementById('reg-password');
+
+        const displayName = nameInput ? nameInput.value.trim() : '';
+        const email = emailInput ? emailInput.value.trim() : '';
+        const password = passInput ? passInput.value : '';
+
+        const submitBtn = e && e.target ? e.target.querySelector('button[type="submit"]') : document.getElementById('btn-submit-register');
+        const originalText = submitBtn ? submitBtn.textContent : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = currentAuthLang === 'vi' ? "Đang tạo tài khoản..." : "Creating account...";
+        }
+
+        try {
+            await registerWithCredentials(displayName, email, password);
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        }
+    }
+
+    // =========================================================================
+    // DORMANT LEGACY STUDENT REGISTRATION (US02) - PRESERVED FOR COMPATIBILITY
     // =========================================================================
     async function handleStudentRegister(e) {
         e.preventDefault();
@@ -562,18 +877,24 @@ window.TempoAuth = (function() {
                 window.TempoApp.showToast("Authentication backend is not configured. Please ensure SUPABASE_URL and publishable key are set in environment variables.", 5000);
                 return false;
             }
-            currentUser = { id: 'local_student_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16), email: email };
+            const name = email.split('@')[0];
+            currentUser = { 
+                id: 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16), 
+                email: email,
+                user_metadata: { full_name: name, display_name: name, role: 'student' }
+            };
             try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
             currentProfile = {
                 id: currentUser.id,
                 email: email,
-                full_name: email.split('@')[0],
+                full_name: name,
+                display_name: name,
                 role: 'student'
             };
             authState = 'AUTHENTICATED';
             renderHeaderUI(currentProfile);
             closeAllAuthModals();
-            window.TempoApp.showToast(`Welcome back, ${currentProfile.full_name}! (Local Dev Mode)`);
+            window.TempoApp.showToast(`Welcome back, ${name}!`);
 
             await syncPlanForUser(currentUser.id);
 
@@ -601,7 +922,8 @@ window.TempoAuth = (function() {
             authState = 'AUTHENTICATED';
             await loadUserProfile(data.user.id);
             await syncPlanForUser(data.user.id);
-            window.TempoApp.showToast(`Welcome back, ${currentProfile?.full_name || email}!`);
+            const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
+            window.TempoApp.showToast(`Welcome back, ${welcomeName}!`);
 
             if (window.TempoMode && window.TempoMode.hasPendingMode()) {
                 window.TempoMode.handleAuthSuccess();
@@ -644,6 +966,38 @@ window.TempoAuth = (function() {
     }
 
     // =========================================================================
+    // FORGOT PASSWORD
+    // =========================================================================
+    async function handleForgotPassword() {
+        const emailInput = document.getElementById('signin-email');
+        const defaultEmail = emailInput ? emailInput.value.trim() : '';
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+
+        const email = prompt(dict.forgotPrompt, defaultEmail);
+        if (!email || !email.trim()) return;
+
+        const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
+        if (!supabase) {
+            window.TempoApp.showToast(dict.forgotSent + " (Dev Mode)");
+            return;
+        }
+
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+                redirectTo: window.location.origin
+            });
+            if (error) {
+                window.TempoApp.showToast(`Error: ${error.message}`);
+            } else {
+                window.TempoApp.showToast(dict.forgotSent);
+            }
+        } catch (err) {
+            console.error("Forgot password error:", err);
+            window.TempoApp.showToast("Could not send reset email. Please try again.");
+        }
+    }
+
+    // =========================================================================
     // SIGN OUT
     // =========================================================================
     async function handleSignOut() {
@@ -674,6 +1028,16 @@ window.TempoAuth = (function() {
     // =========================================================================
     // MODAL CONTROLLERS
     // =========================================================================
+    function openRegisterModal() {
+        closeAllAuthModals();
+        const modal = document.getElementById('modal-register');
+        if (modal) {
+            modal.classList.remove('hidden');
+            const nameInput = document.getElementById('reg-display-name');
+            if (nameInput) setTimeout(() => nameInput.focus(), 50);
+        }
+    }
+
     function openRoleSelectModal() {
         closeAllAuthModals();
         const modal = document.getElementById('modal-role-select');
@@ -700,14 +1064,19 @@ window.TempoAuth = (function() {
     function openSignInModal() {
         closeAllAuthModals();
         const modal = document.getElementById('modal-signin');
-        if (modal) modal.classList.remove('hidden');
+        if (modal) {
+            modal.classList.remove('hidden');
+            const emailInput = document.getElementById('signin-email');
+            if (emailInput) setTimeout(() => emailInput.focus(), 50);
+        }
     }
 
     function openVolunteerSubmittedModal(name) {
         closeAllAuthModals();
         const modal = document.getElementById('modal-volunteer-submitted');
         if (modal) {
-            document.getElementById('vol-submitted-name').textContent = name;
+            const nameEl = document.getElementById('vol-submitted-name');
+            if (nameEl) nameEl.textContent = name;
             modal.classList.remove('hidden');
         }
     }
@@ -727,10 +1096,21 @@ window.TempoAuth = (function() {
         getCurrentUserId: () => currentUser ? currentUser.id : null,
         getCurrentProfile: () => currentProfile,
         getCurrentVolunteerProfile: () => currentVolunteerProfile,
+        openRegisterModal,
         openRoleSelectModal,
+        openStudentRegisterModal,
+        openVolunteerApplyModal,
         openSignInModal,
+        closeModal: closeAllAuthModals,
+        closeAllAuthModals,
+        register: registerWithCredentials,
+        signUp: registerWithCredentials,
         signIn: signInWithCredentials,
         handleSignOut,
+        handleForgotPassword,
+        setAuthLanguage,
+        getAuthLanguage: () => currentAuthLang,
+        getInitials,
         loadUserProfile,
         extractGreetingName,
         updateUserGreeting,

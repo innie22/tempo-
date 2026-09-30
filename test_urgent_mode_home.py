@@ -96,8 +96,11 @@ def run_tests():
         # Helper to set up a clean confirmed plan
         eval_js("""
             window.__setupTestPlan = function() {
-                const today = new Date().toISOString().split('T')[0];
-                const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+                const now = new Date();
+                const pad = n => String(n).padStart(2, '0');
+                const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+                const tomorrowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                const tomorrow = `${tomorrowDate.getFullYear()}-${pad(tomorrowDate.getMonth() + 1)}-${pad(tomorrowDate.getDate())}`;
 
                 const testPlan = {
                     id: 'plan_urgent_test_101',

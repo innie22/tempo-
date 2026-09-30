@@ -238,16 +238,16 @@ def run_tests():
         assert emode_layout["hasNowCard"], "Urgent Home State B must render 'Your task for now' card."
         assert emode_layout["hasRightCol"], "Urgent Home State B must render 'Your plan for today' column."
         assert emode_layout["hasTaskFocusBtn"], "Urgent Home must preserve task-specific Focus CTA in 'Your task for now'."
-        assert not emode_layout["hasOldSupportRow"], "Old generic support row must be removed from Urgent Home left column."
-        assert not emode_layout["hasOldOverwhelmedCard"], "Duplicate 'Feeling overwhelmed?' card must be removed."
-        assert not emode_layout["hasOldFocusNowCard"], "Duplicate generic 'Focus now' card must be removed."
-        assert emode_layout["hasTools"], "Urgent Home must render the shared Tempo Tools section below the 2-column grid."
-        assert emode_layout["hasLearnSolve"], "Urgent Home must render the shared Learn & Solve section below the 2-column grid."
+        assert emode_layout["hasOldSupportRow"], "Dedicated Urgent support row must be present in Urgent Home left column."
+        assert emode_layout["hasOldOverwhelmedCard"], "Dedicated 'Feeling overwhelmed?' card must be present."
+        assert emode_layout["hasOldFocusNowCard"], "Dedicated 'Focus now' card must be present."
+        assert not emode_layout["hasTools"], "Generic 4-card Tempo Tools row must NOT be injected into Urgent Home."
+        assert not emode_layout["hasLearnSolve"], "Learn & Solve must NOT be injected into Urgent Home."
         assert emode_layout["hasPosts"], "Urgent Home must render the Tempo Posts section."
         log(f"✓ Urgent Home State B confirmed: Task for Now + Plan for Today intact.")
         log(f"✓ Task-specific Focus CTA preserved: '{emode_layout['taskFocusBtnText']}'.")
-        log("✓ Redundant generic support row and duplicate focus cards removed from Urgent left column.")
-        log("✓ Shared Tempo Tools and Learn & Solve correctly mounted below 2-column core.")
+        log("✓ Restored dedicated support row (Feeling overwhelmed? + Focus now) verified.")
+        log("✓ Generic Tempo Tools and Learn & Solve verified absent from Urgent Mode.")
 
         # =========================================================================
         # CHECK 3: RECOVERY HOME HIERARCHY, SELF-CHECK HERO & DUPLICATE CLEANUP
@@ -449,19 +449,21 @@ def run_tests():
         # CHECK 7: LEARN & SOLVE FUNCTIONALITY ACROSS DASHBOARDS
         # =========================================================================
         log("\n--- Checking 7: Learn & Solve Functionality Across Dashboards ---")
-        # In Urgent Home, test switching tabs in Learn & Solve
+        # Switch to Default Home where Learn & Solve is mounted
+        send_eval("window.TempoMode.setMode('default');")
+        time.sleep(0.3)
         send_eval("window.TempoLearnSolve.selectTab('learn');")
         time.sleep(0.3)
         learn_active = send_eval("""
             (() => {
                 const learnCard = document.querySelector('#tempo-learn-solve-section div[onclick*="selectTab(\\'learn\\')"]');
                 const hasSelectedBorder = learnCard && (learnCard.className.includes('border-[#7E22CE]') || learnCard.className.includes('border-2'));
-                const topics = document.querySelectorAll('#emode-home-content #tempo-learn-solve-section #learn-solve-subcontent h5');
+                const topics = document.querySelectorAll('#dmode-home-content #tempo-learn-solve-section #learn-solve-subcontent h5');
                 return { hasSelectedBorder, topicCount: topics.length };
             })()
         """)
-        assert learn_active["hasSelectedBorder"] and learn_active["topicCount"] == 9, f"Learn tab in Urgent Home should show 9 stress topics (got {learn_active})."
-        log("✓ Learn & Solve tab selection works seamlessly in Urgent Home.")
+        assert learn_active["hasSelectedBorder"] and learn_active["topicCount"] == 9, f"Learn tab should show 9 stress topics (got {learn_active})."
+        log("✓ Learn & Solve tab selection works seamlessly on Default Home.")
 
         # Open topic in modal
         send_eval("window.TempoLearnSolve.openModal('stress_loop');")
@@ -501,11 +503,21 @@ def run_tests():
             time.sleep(0.2)
             cur = send_eval("window.TempoMode.getCurrentMode();")
             assert cur == expected_m, f"Expected current mode '{expected_m}', got '{cur}'."
-            has_tools = send_eval("Boolean(document.querySelector('.tempo-tools-section'))")
-            has_ls = send_eval("Boolean(document.querySelector('#tempo-learn-solve-section'))")
-            assert has_tools, f"Shared tools missing in '{set_m}' mode!"
-            assert has_ls, f"Shared Learn & Solve missing in '{set_m}' mode!"
-            log(f"✓ Mode '{set_m}': Upper core specific, shared tools and Learn & Solve consistently present.")
+            container_id = 'emode-home-content' if set_m == 'emergency' else ('rmode-home-content' if set_m == 'recovery' else 'dmode-home-content')
+            if set_m == 'emergency':
+                has_support = send_eval(f"Boolean(document.querySelector('#{container_id} .urgent-support-row'))")
+                has_tools = send_eval(f"Boolean(document.querySelector('#{container_id} .tempo-tools-section'))")
+                has_ls = send_eval(f"Boolean(document.querySelector('#{container_id} #tempo-learn-solve-section'))")
+                assert has_support, f"Urgent support row missing in emergency mode!"
+                assert not has_tools, f"Generic tools must not be present in emergency mode!"
+                assert not has_ls, f"Learn & Solve must not be present in emergency mode!"
+                log(f"✓ Mode '{set_m}': Execution core preserved with dedicated support row (no generic dashboard tools).")
+            else:
+                has_tools = send_eval(f"Boolean(document.querySelector('#{container_id} .tempo-tools-section'))")
+                has_ls = send_eval(f"Boolean(document.querySelector('#{container_id} #tempo-learn-solve-section'))")
+                assert has_tools, f"Shared tools missing in '{set_m}' mode!"
+                assert has_ls, f"Shared Learn & Solve missing in '{set_m}' mode!"
+                log(f"✓ Mode '{set_m}': Upper core specific, shared tools and Learn & Solve consistently present.")
 
         log("\n🎉 ALL ECOSYSTEM PHASE 3 SMOKE CHECKS PASSED WITH FLYING COLORS!")
 

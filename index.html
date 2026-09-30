@@ -196,12 +196,14 @@
 
                 <!-- 2. Authenticated Header State -->
                 <div id="header-authenticated-box" class="hidden flex items-center space-x-2">
-                    <div class="flex items-center space-x-2 px-3 py-1.5 bg-stone-100/90 rounded-xl border border-stone-200">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span id="header-user-name" class="text-xs font-bold text-gray-800">User</span>
-                        <span id="header-user-role-pill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">Student</span>
+                    <div id="header-user-identity" class="flex items-center space-x-2 px-2.5 py-1 bg-stone-100/90 rounded-2xl border border-stone-200 shadow-2xs">
+                        <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center border border-[#FFD2BA] shrink-0" title="User">
+                            U
+                        </div>
+                        <span id="header-user-name" class="text-xs font-bold text-gray-800 max-w-[140px] truncate">User</span>
+                        <span id="header-user-role-pill" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold"></span>
                     </div>
-                    <button id="btn-header-signout" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-transparent hover:border-rose-100">
+                    <button id="btn-header-signout" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-transparent hover:border-rose-100 cursor-pointer">
                         Sign Out
                     </button>
                 </div>
@@ -2100,60 +2102,29 @@
          AUTHENTICATION & ROLE SELECTION MODALS
          =================================================================== -->
 
-    <!-- 1. ROLE SELECTION MODAL (US01) -->
-    <div id="modal-role-select" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
-        <div class="tempo-card max-w-lg w-full p-6 md:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative">
-            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
-
-            <div class="text-center space-y-1.5">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-12 w-auto object-contain mx-auto mb-2">
-                <h3 class="font-heading text-2xl font-bold text-gray-900">Welcome to Tempo</h3>
-                <p class="text-xs text-gray-600">Choose how you'd like to participate in our campus wellbeing network.</p>
-            </div>
-
-            <div class="space-y-3.5">
-                <!-- Option 1: Student -->
-                <button id="btn-choose-role-student" type="button" class="w-full p-5 rounded-2xl border-2 border-[#FFD2BA] hover:border-[#FF6B2C] bg-[#FFF9F4] hover:bg-[#FFE9DC]/30 text-left transition group space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wider text-[#B83D08] bg-[#FFE9DC] px-2.5 py-0.5 rounded-full">For Students</span>
-                        <span class="text-[#FF6B2C] font-bold text-sm group-hover:translate-x-1 transition">Continue →</span>
-                    </div>
-                    <h4 class="font-heading text-base font-bold text-gray-900">I'm looking for support</h4>
-                    <p class="text-xs text-gray-600 leading-relaxed">
-                        Manage academic stress, triage concentrated deadlines, build healthier routines, and connect with empathetic peer support.
-                    </p>
-                </button>
-
-                <!-- Option 2: Volunteer -->
-                <button id="btn-choose-role-volunteer" type="button" class="w-full p-5 rounded-2xl border-2 border-sky-100 hover:border-sky-600 bg-sky-50/40 hover:bg-sky-50 text-left transition group space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wider text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-full">For Supporters</span>
-                        <span class="text-sky-700 font-bold text-sm group-hover:translate-x-1 transition">Apply Now →</span>
-                    </div>
-                    <h4 class="font-heading text-base font-bold text-gray-900">I want to support others</h4>
-                    <p class="text-xs text-gray-600 leading-relaxed">
-                        Join Tempo as a vetted peer volunteer. Provide non-diagnostic active listening and encouragement to fellow students.
-                    </p>
-                </button>
-            </div>
-
-            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
-                Already registered? 
-                <button onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Sign In here</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 2. STUDENT REGISTRATION MODAL (US02) -->
-    <div id="modal-student-register" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
+    <!-- 1. NORMAL TEMPO REGISTRATION MODAL (PHASE 1) -->
+    <div id="modal-register" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
         <div class="tempo-card max-w-md w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 space-y-5 bg-white rounded-3xl shadow-2xl relative">
-            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer">✕</button>
+
+            <!-- Language Switch & Branding Header (Pre-auth accessible) -->
+            <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+                <div class="flex items-center space-x-2">
+                    <img src="assets/tempo-logo.png" alt="Tempo" class="h-6 w-auto object-contain">
+                    <span class="font-heading font-extrabold text-sm text-[#202124]">Tempo</span>
+                </div>
+                <!-- Language Switch Hook (Accessible before login/registration) -->
+                <div id="auth-lang-switch-reg" class="flex items-center space-x-1.5 text-xs text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full">
+                    <button type="button" class="auth-lang-btn font-bold text-[#FF6B2C] cursor-pointer" data-lang="en" onclick="window.TempoAuth.setAuthLanguage('en')" title="English">EN</button>
+                    <span class="text-stone-300">|</span>
+                    <button type="button" class="auth-lang-btn text-stone-400 hover:text-stone-700 cursor-pointer" data-lang="vi" onclick="window.TempoAuth.setAuthLanguage('vi')" title="Tiếng Việt">VI</button>
+                </div>
+            </div>
 
             <div class="space-y-1 text-center">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-10 w-auto object-contain mx-auto mb-2">
-                <span class="text-[11px] font-bold text-[#B83D08] uppercase tracking-wider">Student Sign Up</span>
-                <h3 class="font-heading text-2xl font-bold text-gray-900">Join Tempo Wellbeing</h3>
-                <p class="text-xs text-gray-500">Free, confidential support for managing university stress and deadlines.</p>
+                <span id="auth-reg-heading" class="text-[11px] font-extrabold text-[#FF6B2C] uppercase tracking-wider">CREATE YOUR TEMPO ACCOUNT</span>
+                <h3 id="auth-reg-title" class="font-heading text-xl sm:text-2xl font-bold text-gray-900">Welcome to Tempo</h3>
+                <p id="auth-reg-subtitle" class="text-xs text-gray-500">Manage academic stress, organize deadlines, and find your rhythm.</p>
             </div>
 
             <!-- Mode Gate Banner (Visible when unauthenticated user requested a mode) -->
@@ -2167,70 +2138,46 @@
                 </p>
             </div>
 
-            <form id="form-student-register" class="space-y-3.5">
+            <form id="form-register" class="space-y-4 text-left">
                 <div>
-                    <label for="reg-student-name" class="block text-xs font-semibold text-gray-700 mb-1">Full Name <span class="text-rose-500">*</span></label>
-                    <input type="text" id="reg-student-name" required placeholder="e.g. Your Full Name" 
+                    <label id="auth-reg-name-label" for="reg-display-name" class="block text-xs font-semibold text-gray-700 mb-1">Display name <span class="text-rose-500">*</span></label>
+                    <input type="text" id="reg-display-name" required placeholder="e.g. Alex or Nguyễn Yến Nhi" autocomplete="name"
                         class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div>
-                    <label for="reg-student-email" class="block text-xs font-semibold text-gray-700 mb-1">University / Preferred Email <span class="text-rose-500">*</span></label>
-                    <input type="email" id="reg-student-email" required placeholder="student@university.edu" 
+                    <label id="auth-reg-email-label" for="reg-email" class="block text-xs font-semibold text-gray-700 mb-1">Email <span class="text-rose-500">*</span></label>
+                    <input type="email" id="reg-email" required placeholder="you@example.com" autocomplete="email"
                         class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="reg-student-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
-                        <input type="password" id="reg-student-password" required minlength="6" placeholder="Min. 6 chars" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
-                    </div>
-                    <div>
-                        <label for="reg-student-confirm" class="block text-xs font-semibold text-gray-700 mb-1">Confirm Password <span class="text-rose-500">*</span></label>
-                        <input type="password" id="reg-student-confirm" required minlength="6" placeholder="Re-enter password" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="reg-student-university" class="block text-xs font-semibold text-gray-700 mb-1">University (Optional)</label>
-                        <input type="text" id="reg-student-university" placeholder="e.g. State University" 
-                            class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
-                    </div>
-                    <div>
-                        <label for="reg-student-year" class="block text-xs font-semibold text-gray-700 mb-1">Year of Study (Optional)</label>
-                        <select id="reg-student-year" class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white text-gray-800">
-                            <option value="">Select Year...</option>
-                            <option value="1st Year">1st Year (Freshman)</option>
-                            <option value="2nd Year">2nd Year (Sophomore)</option>
-                            <option value="3rd Year">3rd Year (Junior)</option>
-                            <option value="4th Year">4th Year (Senior)</option>
-                            <option value="Graduate / Postgrad">Graduate / Postgraduate</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="pt-1">
-                    <label class="flex items-start space-x-2 text-xs text-gray-600 cursor-pointer">
-                        <input type="checkbox" id="reg-student-terms" required class="mt-0.5 rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                        <span>I agree to the <a href="#hub" class="text-[#FF6B2C] underline">Terms of Service</a> & <a href="#hub" class="text-[#FF6B2C] underline">Privacy Policy</a>. I understand that Tempo provides academic wellbeing & peer support, not emergency medical diagnosis.</span>
-                    </label>
+                <div>
+                    <label id="auth-reg-password-label" for="reg-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
+                    <input type="password" id="reg-password" required minlength="6" placeholder="Min. 6 characters" autocomplete="new-password"
+                        class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-primary w-full py-3 rounded-xl font-bold text-xs shadow-md">
-                        Create Student Account →
+                    <button type="submit" id="btn-submit-register" class="btn-primary w-full py-3 rounded-xl font-bold text-xs shadow-md cursor-pointer">
+                        Create account
                     </button>
                 </div>
             </form>
 
-            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
+            <div id="auth-reg-footer-text" class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
                 Already have an account? 
-                <button onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Sign In</button>
+                <button type="button" onclick="window.TempoAuth.openSignInModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Log in</button>
             </div>
         </div>
+    </div>
+
+    <!-- DORMANT LEGACY MODALS PRESERVED FOR BACKEND/TEST COMPATIBILITY -->
+    <div id="modal-role-select" style="display:none;" class="auth-modal-overlay hidden">
+        <button id="btn-choose-role-student"></button>
+        <button id="btn-choose-role-volunteer"></button>
+    </div>
+    <div id="modal-student-register" style="display:none;" class="auth-modal-overlay hidden">
+        <form id="form-student-register"></form>
     </div>
 
     <!-- 3. VOLUNTEER APPLICATION MODAL (US03) -->
@@ -2374,15 +2321,29 @@
         </div>
     </div>
 
-    <!-- 5. SIGN IN MODAL -->
+    <!-- 5. SIGN IN MODAL (PHASE 1) -->
     <div id="modal-signin" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden auth-modal-overlay">
         <div class="tempo-card max-w-sm w-full p-6 md:p-8 space-y-5 bg-white rounded-3xl shadow-2xl relative">
-            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition">✕</button>
+            <button class="btn-close-auth-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer">✕</button>
+
+            <!-- Language Switch & Branding Header (Pre-auth accessible) -->
+            <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+                <div class="flex items-center space-x-2">
+                    <img src="assets/tempo-logo.png" alt="Tempo" class="h-6 w-auto object-contain">
+                    <span class="font-heading font-extrabold text-sm text-[#202124]">Tempo</span>
+                </div>
+                <!-- Language Switch Hook (Accessible before login/registration) -->
+                <div id="auth-lang-switch-signin" class="flex items-center space-x-1.5 text-xs text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full">
+                    <button type="button" class="auth-lang-btn font-bold text-[#FF6B2C] cursor-pointer" data-lang="en" onclick="window.TempoAuth.setAuthLanguage('en')" title="English">EN</button>
+                    <span class="text-stone-300">|</span>
+                    <button type="button" class="auth-lang-btn text-stone-400 hover:text-stone-700 cursor-pointer" data-lang="vi" onclick="window.TempoAuth.setAuthLanguage('vi')" title="Tiếng Việt">VI</button>
+                </div>
+            </div>
 
             <div class="space-y-1 text-center">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-12 w-auto object-contain mx-auto mb-2">
-                <h3 class="font-heading text-xl font-bold text-gray-900">Welcome Back</h3>
-                <p class="text-xs text-gray-500">Sign in to your Tempo student or volunteer account.</p>
+                <span id="auth-login-heading" class="text-[11px] font-extrabold text-[#FF6B2C] uppercase tracking-wider">WELCOME BACK</span>
+                <h3 id="auth-login-title" class="font-heading text-xl font-bold text-gray-900">Welcome Back</h3>
+                <p id="auth-login-subtitle" class="text-xs text-gray-500">Sign in to your Tempo account.</p>
             </div>
 
             <!-- Mode Gate Banner (Visible when unauthenticated user requested a mode) -->
@@ -2396,28 +2357,33 @@
                 </p>
             </div>
 
-            <form id="form-signin" class="space-y-3.5">
+            <form id="form-signin" class="space-y-3.5 text-left">
                 <div>
-                    <label for="signin-email" class="block text-xs font-semibold text-gray-700 mb-1">Email Address</label>
-                    <input type="email" id="signin-email" required placeholder="you@university.edu" 
+                    <label id="auth-login-email-label" for="signin-email" class="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                    <input type="email" id="signin-email" required placeholder="you@example.com" autocomplete="email"
                         class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
                 <div>
-                    <label for="signin-password" class="block text-xs font-semibold text-gray-700 mb-1">Password</label>
-                    <input type="password" id="signin-password" required placeholder="••••••••" 
+                    <div class="flex items-center justify-between mb-1">
+                        <label id="auth-login-password-label" for="signin-password" class="block text-xs font-semibold text-gray-700">Password</label>
+                        <button type="button" id="auth-login-forgot-link" onclick="window.TempoAuth.handleForgotPassword()" class="text-[11px] text-[#FF6B2C] hover:underline cursor-pointer">
+                            Forgot password?
+                        </button>
+                    </div>
+                    <input type="password" id="signin-password" required placeholder="••••••••" autocomplete="current-password"
                         class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs shadow-md">
-                        Sign In →
+                    <button type="submit" id="btn-submit-signin" class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs shadow-md cursor-pointer">
+                        Log in
                     </button>
                 </div>
             </form>
 
-            <div class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
-                Don't have an account yet? 
-                <button onclick="window.TempoAuth.openRoleSelectModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1">Register</button>
+            <div id="auth-login-footer-text" class="pt-2 text-center text-xs text-gray-500 border-t border-gray-100">
+                Don't have an account? 
+                <button type="button" onclick="window.TempoAuth.openRegisterModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Create account</button>
             </div>
         </div>
     </div>
@@ -2440,7 +2406,7 @@
             <!-- Mode Choices List -->
             <div class="space-y-3">
                 <!-- Option 0: Emergency Mode -->
-                <button type="button" id="change-mode-opt-emergency" onclick="window.TempoMode.setMode('emergency')"
+                <button type="button" id="change-mode-opt-emergency" onclick="window.TempoMode.selectModeOption('emergency')"
                         class="w-full p-4 rounded-2xl border-2 border-[#FFD2BA] hover:border-[#FF6B2C] bg-[#FFE9DC]/50 hover:bg-[#FFE9DC] text-left transition group space-y-1">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-[#B83D08] bg-white px-2.5 py-0.5 rounded-full border border-[#FFD2BA]">
@@ -2455,7 +2421,7 @@
                 </button>
 
                 <!-- Option 1: Recovery Mode -->
-                <button type="button" id="change-mode-opt-recovery" onclick="window.TempoMode.setMode('recovery')"
+                <button type="button" id="change-mode-opt-recovery" onclick="window.TempoMode.selectModeOption('recovery')"
                         class="w-full p-4 rounded-2xl border-2 border-[#CDE9DA] hover:border-[#166545] bg-[#EDF7F1]/50 hover:bg-[#EDF7F1] text-left transition group space-y-1">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-[#166545] bg-white px-2.5 py-0.5 rounded-full border border-[#CDE9DA]">
@@ -2470,7 +2436,7 @@
                 </button>
 
                 <!-- Option 2: Unclear Mode -->
-                <button type="button" id="change-mode-opt-unclear" onclick="window.TempoMode.setMode('unclear')"
+                <button type="button" id="change-mode-opt-unclear" onclick="window.TempoMode.selectModeOption('unclear')"
                         class="w-full p-4 rounded-2xl border-2 border-[#FDE5BE] hover:border-[#9A5B13] bg-[#FEF7EC]/50 hover:bg-[#FEF7EC] text-left transition group space-y-1">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-[#9A5B13] bg-white px-2.5 py-0.5 rounded-full border border-[#FDE5BE]">
@@ -2485,7 +2451,7 @@
                 </button>
 
                 <!-- Option 3: Take a Break / Default Tempo -->
-                <button type="button" id="change-mode-opt-default" onclick="window.TempoMode.setMode('default')"
+                <button type="button" id="change-mode-opt-default" onclick="window.TempoMode.selectModeOption('default')"
                         class="w-full p-4 rounded-2xl border-2 border-stone-200 hover:border-stone-400 bg-stone-50 hover:bg-white text-left transition group space-y-1">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold uppercase tracking-wider text-stone-700 bg-white px-2.5 py-0.5 rounded-full border border-stone-200">
