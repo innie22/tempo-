@@ -444,6 +444,163 @@ header nav,
 }
 
 /* ==========================================================================
+   URGENT MODE HOME REDESIGN & AMBIENT DEPTH
+   ========================================================================== */
+
+/* Subtle Ambient Page Depth (CSS-only, pointer-events: none, behind content) */
+.urgent-home-ambient {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 0;
+}
+
+.urgent-home-ambient-glow {
+    position: absolute;
+    top: -120px;
+    right: -100px;
+    width: 650px;
+    height: 650px;
+    background: radial-gradient(circle, rgba(255, 107, 44, 0.05) 0%, rgba(255, 233, 220, 0.3) 40%, transparent 70%);
+    border-radius: 50%;
+}
+
+.urgent-home-ambient-glow-left {
+    position: absolute;
+    bottom: 40px;
+    left: -140px;
+    width: 520px;
+    height: 520px;
+    background: radial-gradient(circle, rgba(255, 107, 44, 0.035) 0%, rgba(255, 245, 238, 0.35) 45%, transparent 70%);
+    border-radius: 50%;
+}
+
+.urgent-ambient-ring {
+    display: none;
+}
+
+.urgent-dot-pattern {
+    background-image: radial-gradient(rgba(255, 107, 44, 0.16) 1.2px, transparent 1.2px);
+    background-size: 16px 16px;
+}
+
+/* Primary Asymmetric Desktop Layout (~65% Left / ~35% Right) & Responsive Stack */
+@media (min-width: 1024px) {
+    .urgent-home-main-grid,
+    .recovery-home-main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+        gap: 1.5rem;
+        align-items: stretch;
+    }
+    .urgent-left-col,
+    .recovery-left-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    .urgent-support-row,
+    .recovery-support-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+    }
+    .urgent-right-col,
+    .recovery-right-col {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+}
+
+@media (max-width: 1023px) {
+    .urgent-home-main-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .urgent-left-col {
+        display: contents;
+    }
+    .urgent-card-now {
+        order: 1;
+    }
+    .urgent-right-col {
+        order: 2;
+    }
+    .urgent-support-row {
+        display: contents;
+    }
+    .urgent-card-overwhelmed {
+        order: 3;
+    }
+    .urgent-card-focus-now {
+        order: 4;
+    }
+
+    .recovery-home-main-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+    .recovery-left-col {
+        display: contents;
+    }
+    .recovery-card-selfcheck {
+        order: 1;
+    }
+    .recovery-right-col {
+        display: contents;
+    }
+    .recovery-card-recently {
+        order: 2;
+    }
+    .recovery-support-row {
+        display: contents;
+    }
+    .recovery-card-quickrelief {
+        order: 3;
+    }
+    .recovery-card-focuszone {
+        order: 4;
+    }
+}
+
+.urgent-section-posts {
+    order: 5;
+}
+
+.recovery-card-weeklyreview {
+    order: 5;
+}
+
+.recovery-section-today {
+    order: 6;
+}
+
+.recovery-section-posts {
+    order: 7;
+}
+
+/* Timeline Vertical Connector */
+.urgent-timeline-item {
+    position: relative;
+}
+.urgent-timeline-line {
+    position: absolute;
+    top: 24px;
+    bottom: -16px;
+    left: 11px;
+    width: 2px;
+    background-color: #EAE4DF;
+    z-index: 0;
+}
+.urgent-timeline-item:last-child .urgent-timeline-line {
+    display: none;
+}
+
+/* ==========================================================================
    TEMPO FOCUS ZONE VISUAL SYSTEM
    ========================================================================== */
 

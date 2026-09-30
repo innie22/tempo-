@@ -142,16 +142,25 @@ window.TempoApp = (function() {
             targetScreen.classList.remove('hidden');
         }
 
-        // If on today tab, check if emergency mode should render dynamic Emode home
+        // If on today tab, synchronize active mode dashboard with strict mutual exclusivity
         if (tabId === 'today') {
-            if (window.TempoMode && window.TempoMode.getMode() === 'emergency') {
-                window.TempoMode.renderEmodeHome();
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
             } else if (window.TempoMode) {
-                const dmodeBox = document.getElementById('dmode-home-content');
-                const emodeBox = document.getElementById('emode-home-content');
-                if (dmodeBox) dmodeBox.classList.remove('hidden');
-                if (emodeBox) emodeBox.classList.add('hidden');
+                const mode = window.TempoMode.getMode();
+                if (mode === 'emergency') window.TempoMode.renderEmodeHome();
+                else if (mode === 'recovery') window.TempoMode.renderRmodeHome();
+                else window.TempoMode.restoreDefaultHome();
             }
+        }
+
+        // If entering Recovery Mode via route, activate recovery mode and route to today
+        if (tabId === 'recovery-mode') {
+            if (window.TempoMode && window.TempoMode.getMode() !== 'recovery') {
+                window.TempoMode.setMode('recovery', { silent: true });
+            }
+            navigateTo('today');
+            return;
         }
 
         // If entering Emergency Mode, ensure Emode is active and resume stage
@@ -328,7 +337,7 @@ window.TempoApp = (function() {
             { name: 'Breathing (Box Breathing)', category: 'Tool', desc: 'A quick 4-4-4-4 breathing exercise to calm your mind.', action: () => { window.TempoStressRelief.openBreathing({ context: 'home' }); } },
             { name: 'Quick Stress Relief', category: 'Tool', desc: 'Simple micro-actions (1m, 3m, 5m) to ease stress in minutes.', action: () => { window.TempoStressRelief.openLibrary({ context: 'home' }); } },
             { name: 'Self-check', category: 'Tool', desc: 'Track your stress signals and wellbeing habits across 6 dimensions.', action: () => { navigateTo('stress-check'); } },
-            { name: 'Emergency Mode (Deadline Triage)', category: 'Tool', desc: 'Academic triage: unfreeze panic and extract the ONE next action.', action: () => { navigateTo('emergency'); } },
+            { name: 'Urgent Mode (Deadline Triage)', category: 'Tool', desc: 'Academic triage: unfreeze panic and extract the ONE next action.', action: () => { navigateTo('emergency'); } },
             { name: 'Routine & Habit Tracker', category: 'Tool', desc: 'Build gentle, non-punitive habits and daily routine blocks.', action: () => { navigateTo('routine'); } },
             { name: 'SOS Safety Support', category: 'Safety', desc: '24/7 Lifeline (988), Crisis Text Line (741741), and urgent safety help.', action: () => { window.TempoEmergencySupport.openSOS(); } }
         ];

@@ -75,11 +75,13 @@ window.TempoCommunity = (function() {
         }
     ];
 
-    let posts = [];
+    let posts = [...INITIAL_POSTS];
 
     function init() {
         loadPosts();
         renderHomepagePreview();
+        renderUrgentPreview();
+        renderRecoveryPreview();
         bindEvents();
     }
 
@@ -128,67 +130,113 @@ window.TempoCommunity = (function() {
         }
     }
 
-    function renderHomepagePreview() {
-        const container = document.getElementById('homepage-community-posts-list');
-        if (!container) return;
+    function renderPostCardHTML(post, options = {}) {
+        if (!post) return '';
 
-        // Display top 2 posts matching the mockup
-        const previewPosts = posts.slice(0, 2);
+        const authorInitial = (post.authorName || 'S').charAt(0).toUpperCase();
+        const subtitleText = post.context || (post.university ? `${post.university} · ${post.timeAgo || 'Recently'}` : (post.timeAgo || 'Recently'));
 
-        container.innerHTML = previewPosts.map(post => `
-            <div class="p-3.5 bg-white border border-[#E8E4E1] rounded-2xl space-y-2.5 transition hover:border-[#D3CDC8]">
-                <!-- Header: Avatar, Name, Time & Tag -->
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-2.5">
-                        <img src="${post.avatar}" alt="${post.authorName}" 
-                             class="w-7 h-7 rounded-full object-cover border border-stone-200">
-                        <div>
-                            <div class="flex items-center space-x-1.5">
-                                <span class="text-xs font-bold text-[#202124]">${post.authorName}</span>
+        return `
+            <div class="p-4 sm:p-5 bg-white border border-[#E8E4E1] hover:border-[#D3CDC8] rounded-2xl space-y-3 transition shadow-xs flex flex-col justify-between">
+                <!-- Header: Avatar, Name, Context/Time -->
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center space-x-2.5 min-w-0">
+                        ${post.avatar ? `
+                            <img src="${escapeHtml(post.avatar)}" alt="${escapeHtml(post.authorName || 'Student')}" 
+                                 class="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0"
+                                 onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                            <div class="w-8 h-8 rounded-full bg-[#FFE9DC] text-[#B83D08] items-center justify-center text-xs font-bold shrink-0 hidden">
+                                ${escapeHtml(authorInitial)}
                             </div>
-                            <div class="text-[10px] text-[#6F6B68] flex items-center space-x-1">
-                                <span>${post.timeAgo}</span>
-                                <span>•</span>
-                                <span class="text-[#FF6B2C] font-semibold">${post.tag}</span>
+                        ` : `
+                            <div class="w-8 h-8 rounded-full bg-[#FFE9DC] text-[#B83D08] flex items-center justify-center text-xs font-bold shrink-0">
+                                ${escapeHtml(authorInitial)}
+                            </div>
+                        `}
+                        <div class="min-w-0">
+                            <div class="flex items-center space-x-1.5">
+                                <span class="text-xs font-bold text-[#202124] truncate">${escapeHtml(post.authorName || 'Anonymous')}</span>
+                                ${post.isAnonymous ? '<span class="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-medium">Anonymous</span>' : ''}
+                            </div>
+                            <div class="text-[10px] text-[#6F6B68] flex items-center space-x-1 truncate">
+                                <span>${escapeHtml(subtitleText)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Post Text -->
-                <p class="text-xs text-[#202124] leading-relaxed">
-                    ${escapeHtml(post.content)}
-                </p>
+                <!-- Post Content -->
+                <div class="space-y-2 flex-1">
+                    <p class="text-xs text-[#202124] leading-relaxed break-words whitespace-pre-line cursor-pointer" onclick="window.TempoCommunity.openPostComments('${post.id}')">
+                        ${escapeHtml(post.content)}
+                    </p>
+                    ${post.tag ? `
+                        <div class="pt-0.5">
+                            <span class="text-[11px] font-semibold text-[#FF6B2C] hover:underline cursor-pointer" onclick="window.TempoCommunity.openCommunityModal()">${escapeHtml(post.tag)}</span>
+                        </div>
+                    ` : ''}
+                </div>
 
-                <!-- Actions: Like, Comment, Bookmark, More -->
-                <div class="pt-1.5 border-t border-gray-100 flex items-center justify-between text-xs text-[#6F6B68]">
+                <!-- Actions: Like, Comment, Bookmark -->
+                <div class="pt-2 border-t border-[#F5F2EF] flex items-center justify-between text-xs text-[#6F6B68]">
                     <div class="flex items-center space-x-4">
-                        <button onclick="window.TempoCommunity.toggleLike('${post.id}')" 
-                                class="flex items-center space-x-1 hover:text-[#FF6B2C] transition ${post.isLiked ? 'text-[#FF6B2C] font-semibold' : ''}">
-                            <span>${post.isLiked ? '♥' : '♡'}</span>
-                            <span class="text-[11px]">${post.likes}</span>
+                        <button type="button" 
+                                onclick="window.TempoCommunity.toggleLike('${post.id}')" 
+                                class="flex items-center space-x-1.5 hover:text-[#FF6B2C] transition cursor-pointer ${post.isLiked ? 'text-[#FF6B2C] font-semibold' : ''}"
+                                title="Like">
+                            <span class="text-sm leading-none">${post.isLiked ? '♥' : '♡'}</span>
+                            <span class="text-[11px] font-medium">${post.likes || 0}</span>
                         </button>
-                        <button onclick="window.TempoCommunity.openPostComments('${post.id}')" 
-                                class="flex items-center space-x-1 hover:text-[#202124] transition">
-                            <span>💬</span>
-                            <span class="text-[11px]">${post.commentsCount}</span>
+                        <button type="button" 
+                                onclick="window.TempoCommunity.openPostComments('${post.id}')" 
+                                class="flex items-center space-x-1.5 hover:text-[#202124] transition cursor-pointer"
+                                title="Comments">
+                            <span class="text-sm leading-none">💬</span>
+                            <span class="text-[11px] font-medium">${post.commentsCount || (post.comments ? post.comments.length : 0)}</span>
                         </button>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="window.TempoCommunity.toggleBookmark('${post.id}')" 
-                                class="hover:text-[#FF6B2C] transition ${post.isBookmarked ? 'text-[#FF6B2C]' : ''}" 
-                                title="Save post">
+                        <button type="button" 
+                                onclick="window.TempoCommunity.toggleBookmark('${post.id}')" 
+                                class="hover:text-[#FF6B2C] transition cursor-pointer ${post.isBookmarked ? 'text-[#FF6B2C]' : ''}" 
+                                title="${post.isBookmarked ? 'Remove bookmark' : 'Bookmark post'}">
                             <svg class="w-3.5 h-3.5" fill="${post.isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                             </svg>
                         </button>
-                        <button class="hover:text-[#202124] transition text-stone-400" title="Options">
-                            <span class="text-xs font-bold leading-none">•••</span>
-                        </button>
                     </div>
                 </div>
             </div>
-        `).join('');
+        `;
+    }
+
+    function renderUrgentPreview() {
+        const container = document.getElementById('urgent-community-posts-list');
+        if (!container) return;
+        const previewPosts = posts.slice(0, 2);
+        container.innerHTML = previewPosts.map(p => renderPostCardHTML(p)).join('');
+    }
+
+    function renderRecoveryPreview() {
+        const container = document.getElementById('recovery-community-posts-list');
+        if (!container) return;
+        let previewPosts = posts.filter(p => p.tag === '#Recovery' || p.tag === '#MentalHealth');
+        if (previewPosts.length < 2) {
+            previewPosts = posts.slice(0, 2);
+        } else {
+            previewPosts = previewPosts.slice(0, 2);
+        }
+        container.innerHTML = previewPosts.map(p => renderPostCardHTML(p)).join('');
+    }
+
+    function renderHomepagePreview() {
+        const container = document.getElementById('homepage-community-posts-list');
+        if (container) {
+            const previewPosts = posts.slice(0, 2);
+            container.innerHTML = previewPosts.map(post => renderPostCardHTML(post)).join('');
+        }
+        renderUrgentPreview();
+        renderRecoveryPreview();
     }
 
     function renderModalPosts(filterTag = 'all') {
@@ -381,6 +429,10 @@ window.TempoCommunity = (function() {
         closeCommunityModal,
         openPostComments,
         renderModalPosts,
+        renderHomepagePreview,
+        renderUrgentPreview,
+        renderRecoveryPreview,
+        renderPostCardHTML,
         getAllPosts
     };
 })();

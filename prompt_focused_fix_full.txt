@@ -1,0 +1,596 @@
+<USER_REQUEST>
+Continue working on the CURRENT LOCAL Tempo project.
+
+FOCUSED BUG FIX — ONLY ONE MODE DASHBOARD MAY BE VISIBLE AT A TIME
+
+IMPORTANT CONTEXT:
+
+Recovery Mode implementation has just been completed / is at its final
+implementation state.
+
+A blocking rendering bug is visible:
+
+When Recovery Mode is active, Recovery Home appears underneath content
+from another mode/dashboard instead of replacing the previous Home
+experience.
+
+Observed example:
+
+[ content from previous dashboard ]
+[ Tempo Posts from previous dashboard ]
+---------------------------------------
+[ Recovery Mode selector ]
+[ Recovery Home ]
+[ Self-check ]
+[ Recovery Note / Recently / Today ... ]
+
+This is WRONG.
+
+Tempo modes are mutually exclusive HOME contexts.
+
+At any moment, the Home experience must show exactly ONE active mode
+dashboard.
+
+This task is ONLY a focused mode-rendering bug fix.
+
+Do not continue Recovery feature development.
+Do not redesign Recovery.
+Do not implement future Tempo Tools / Learn & Solve work.
+
+==================================================
+1. EXPECTED BEHAVIOR
+==================================================
+
+When currentMode = default:
+
+show ONLY Default Home.
+
+When currentMode = emergency:
+
+show ONLY Urgent Home.
+
+NOTE:
+"emergency" remains the legacy INTERNAL identifier.
+User-facing terminology remains "Urgent Mode".
+
+When currentMode = recovery:
+
+show ONLY Recovery Home.
+
+When currentMode = unclear:
+
+show ONLY the intended Unclear experience.
+
+SOS remains separate and must not be treated as currentMode.
+
+==================================================
+2. ROOT-CAUSE INSPECTION FIRST
+==================================================
+
+Before editing anything, inspect the CURRENT implementation.
+
+Especially inspect:
+
+- mode.js
+- app.js
+- Home / #today rendering
+- currentMode state handling
+- Recovery Home renderer
+- Default Home renderer
+- Emode/Urgent Home renderer
+- Unclear renderer
+- dashboard/root containers
+- show/hide logic
+- mode switching logic
+- Recovery Mode Phase 1–final changes
+- where Tempo Posts is mounted/rendered
+
+Determine WHY Recovery Home is being appended below another dashboard.
+
+Possible causes to investigate include:
+
+- Recovery renderer appends instead of replacing/selecting Home
+- previous dashboard root is never hidden
+- Recovery root is outside the normal active-dashboard container
+- mode visibility logic only handles Default/Urgent
+- Recovery was added without registering it in centralized visibility
+  logic
+- multiple Home roots are visible simultaneously
+- #today navigation renders generic Home before Recovery Home
+- previous dashboard DOM is not cleared/hidden on mode switch
+- Recovery renderer is called in addition to generic Home renderer
+- Tempo Posts belongs to previous dashboard but remains globally
+  visible
+
+Do NOT assume which cause is correct.
+
+Inspect the actual current code first.
+
+==================================================
+3. CORE INVARIANT
+==================================================
+
+Restore/enforce this invariant:
+
+ON HOME:
+
+exactly ONE mode dashboard is active and visible.
+
+Conceptually:
+
+default
+→ Default Home
+
+emergency
+→ Urgent Home
+
+recovery
+→ Recovery Home
+
+unclear
+→ Unclear experience
+
+Never:
+
+Default Home
++
+Recovery Home
+
+Never:
+
+Urgent Home
++
+Recovery Home
+
+Never:
+
+Default
++
+Urgent
++
+Recovery
+
+stacked vertically.
+
+==================================================
+4. USE CENTRALIZED MODE VISIBILITY
+==================================================
+
+Fix this through the existing centralized mode architecture.
+
+Prefer restoring/extending the existing mechanism rather than adding
+special-case CSS.
+
+Do NOT scatter logic such as:
+
+if recovery hide default
+if recovery hide emergency
+if emergency hide recovery
+...
+
+across multiple files.
+
+currentMode should remain the single source of truth.
+
+If the project already has a centralized function responsible for
+applying mode visibility, extend/fix that function.
+
+==================================================
+5. DO NOT USE A COSMETIC CSS PATCH
+==================================================
+
+Do NOT solve this by merely adding:
+
+display: none
+
+to whichever section happens to be visible in the screenshot.
+
+The DOM/render lifecycle must behave correctly when switching modes.
+
+A CSS visibility mechanism is acceptable ONLY if it is already part of
+the project's centralized mode architecture.
+
+Do not create random per-dashboard overrides.
+
+==================================================
+6. RECOVERY MODE
+==================================================
+
+When Recovery is active, the Home page should contain the Recovery
+experience only.
+
+Preserve the current Recovery Home design and logic.
+
+This may include existing implemented Recovery elements such as:
+
+- compact Recovery Mode selector
+- date
+- Self-check
+- Recovery Note
+- Recently
+- Weekly Review when applicable
+- Today / shared academic continuity
+- other Recovery elements already implemented by the completed phases
+- Tempo Posts if Recovery Home currently intentionally includes them
+
+Do NOT redesign these.
+
+Do NOT change their hierarchy unless required to fix the rendering bug.
+
+The important requirement is:
+
+NO Default/Urgent dashboard remains visible above or below Recovery.
+
+==================================================
+7. DEFAULT MODE
+==================================================
+
+When Default is active:
+
+show Default Home only.
+
+Recovery Home must not remain below it.
+
+Urgent Home must not remain below it.
+
+Do not add a visible "Default Mode" badge.
+
+Preserve existing Default behavior.
+
+==================================================
+8. URGENT MODE
+==================================================
+
+When internal currentMode = "emergency":
+
+show Urgent Home only.
+
+Recovery Home must disappear.
+
+Default Home must disappear.
+
+Preserve:
+
+- Task for Now
+- Plan Today
+- existing Urgent Plan behavior
+- task-specific Focus actions
+- current Urgent Home states
+
+Do not change Urgent logic.
+
+==================================================
+9. UNCLEAR MODE
+==================================================
+
+When currentMode = unclear:
+
+show only the intended Unclear experience.
+
+Do not stack Recovery underneath it.
+
+Do not redesign the Unclear flow.
+
+==================================================
+10. TEMPO POSTS
+==================================================
+
+The screenshot suggests Tempo Posts from another dashboard may remain
+visible immediately before Recovery Home begins.
+
+Inspect the actual ownership/mounting of Tempo Posts.
+
+If Tempo Posts is part of a dashboard Home composition:
+
+it must follow the active dashboard visibility.
+
+Do not leave a previous dashboard's Tempo Posts visible when that
+dashboard is inactive.
+
+Do NOT redesign Tempo Posts.
+
+Do NOT change social-post data or behavior.
+
+Only correct its visibility/mounting if that is part of this bug.
+
+==================================================
+11. MODE SWITCHING
+==================================================
+
+Switching modes must replace the visible Home context.
+
+Example:
+
+Default
+→ Recovery
+
+Expected:
+
+Default Home disappears
+Recovery Home appears
+
+NOT:
+
+Default Home remains
+Recovery Home is appended underneath
+
+
+Recovery
+→ Urgent
+
+Expected:
+
+Recovery Home disappears
+Urgent Home appears
+
+
+Urgent
+→ Recovery
+
+Expected:
+
+Urgent Home disappears
+Recovery Home appears
+
+No page refresh should be required.
+
+==================================================
+12. PRESERVE DATA ACROSS MODE SWITCHING
+==================================================
+
+Do NOT confuse hiding/replacing dashboard UI with deleting data.
+
+Mode switching must continue preserving shared/user data such as:
+
+- tasks
+- task completion
+- subtasks
+- Urgent Plan
+- Self-check trackers
+- Self-check history
+- Recovery Note
+- Recovery setup/check-in state
+- Weekly Review data
+- auth/session state
+
+Fix PRESENTATION.
+
+Do not reset product data.
+
+==================================================
+13. RECOVERY PERSISTENCE
+==================================================
+
+Do not break Recovery persistence while fixing rendering.
+
+If Recovery currently restores:
+
+- setup progress
+- completed setup
+- Self-check configuration
+- Recovery Note
+- check-in state
+
+preserve that behavior.
+
+This bug fix must not reset Recovery merely because its dashboard is
+hidden and shown again.
+
+==================================================
+14. MODE SELECTOR
+==================================================
+
+Preserve existing mode-selector behavior.
+
+Recovery selector should continue offering only valid destinations,
+according to the current implementation.
+
+Do not redesign the selector.
+
+Do not add SOS into the mode selector.
+
+Do not rename internal legacy "emergency" identifiers.
+
+==================================================
+15. SOS
+==================================================
+
+Do NOT modify SOS.
+
+SOS is not a persistent mode dashboard.
+
+Opening/closing SOS should preserve the user's previous mode/context
+according to existing behavior.
+
+Do not include SOS in the dashboard exclusivity logic as a currentMode
+value.
+
+==================================================
+16. NO FUTURE SHARED ECOSYSTEM WORK
+==================================================
+
+IMPORTANT:
+
+Do NOT implement the planned future work for:
+
+- shared Tempo Tools section
+- standalone Tempo Break integration
+- Learn & Solve
+- Tempo Tips library
+- shared dashboard ecosystem
+- dashboard-wide integration
+
+Those are future phases.
+
+Only work with what ACTUALLY EXISTS in the current project.
+
+==================================================
+17. NO UNRELATED REFACTOR
+==================================================
+
+Do NOT:
+
+- redesign Recovery Home
+- redesign Default Home
+- redesign Urgent Home
+- redesign Unclear
+- change Recovery setup stages
+- change Self-check logic
+- change Weekly Review logic
+- change task architecture
+- change Urgent Plan architecture
+- change Focus Zone
+- change auth
+- redesign navbar
+- change copy
+- polish visual spacing
+
+Make the smallest safe architectural fix.
+
+==================================================
+18. QUICK TEST
+==================================================
+
+Perform ONE focused smoke test.
+
+TEST 1 — DEFAULT
+
+Set / switch to Default.
+
+Confirm:
+
+- Default Home visible
+- Urgent Home not visible
+- Recovery Home not visible
+- Unclear Home not visible
+
+Scroll from top to bottom.
+
+Only one dashboard context should exist.
+
+
+TEST 2 — URGENT
+
+Switch to Urgent.
+
+Confirm:
+
+- previous Default Home disappears
+- Urgent Home visible
+- Recovery Home not visible
+- Unclear Home not visible
+
+Scroll full page.
+
+
+TEST 3 — RECOVERY
+
+Switch to Recovery.
+
+Confirm:
+
+- previous dashboard disappears
+- Recovery Home visible
+- Default Home not visible
+- Urgent Home not visible
+- Unclear Home not visible
+
+Scroll full page.
+
+The screenshot bug must no longer reproduce.
+
+
+TEST 4 — REPEATED SWITCH
+
+Switch:
+
+Default
+→ Urgent
+→ Recovery
+→ Urgent
+→ Recovery
+→ Default
+
+After EACH switch:
+
+exactly ONE mode dashboard is visible.
+
+No stacked dashboard.
+
+No duplicate Tempo Posts.
+
+No refresh required.
+
+
+TEST 5 — DATA PRESERVATION
+
+Create/use any lightweight existing state if already available.
+
+Switch away and back.
+
+Confirm the bug fix did NOT reset:
+
+- shared task data
+- Recovery state
+- relevant existing user state
+
+Do not perform deep persistence testing.
+
+==================================================
+19. FIX POLICY
+==================================================
+
+Fix only blockers directly related to this issue:
+
+- multiple dashboards visible
+- previous dashboard not disappearing
+- duplicate Home content
+- duplicate Tempo Posts caused by mode rendering
+- Recovery renderer appended outside active Home
+- mode switch requires refresh
+- centralized visibility state broken
+
+If you notice unrelated cosmetic or minor issues:
+
+REPORT them.
+
+Do not fix them in this task.
+
+==================================================
+20. COMPLETION REPORT
+==================================================
+
+When fixed:
+
+STOP.
+
+Report:
+
+1. exact root cause
+2. files modified
+3. previous incorrect render behavior
+4. new active-dashboard mechanism
+5. how currentMode controls dashboard visibility now
+6. whether dashboards are conditionally rendered or centrally hidden
+7. whether Tempo Posts required a mounting/visibility fix
+8. confirmation Default shows alone
+9. confirmation Urgent shows alone
+10. confirmation Recovery shows alone
+11. confirmation Unclear shows alone
+12. confirmation repeated switching works without refresh
+13. confirmation shared/user data is preserved
+14. known non-blocking issues
+
+Do NOT start another feature.
+Do NOT start Tempo Tools.
+Do NOT start Learn & Solve.
+Do NOT continue unrelated Recovery polishing.
+Do NOT commit.
+Do NOT push.
+Do NOT deploy.
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-30T23:07:50+07:00.
+</ADDITIONAL_METADATA>

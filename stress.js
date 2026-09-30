@@ -197,7 +197,7 @@ window.TempoStress = (function() {
         const recContainer = document.getElementById('stress-tailored-actions');
         if (!recContainer) return;
 
-        let recTitle = "Activate Emergency Triage";
+        let recTitle = "Activate Urgent Triage";
         let recDesc = "Deadline pressure is your primary source of cognitive friction today.";
         let recAction = "window.TempoApp.navigateTo('emergency')";
         let recBtn = "Launch Triage Plan →";

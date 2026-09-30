@@ -256,7 +256,7 @@ window.TempoPlanStore = (function() {
                     await supabase
                         .from('plans')
                         .update({
-                            title: `${planType === 'emergency' ? 'Emergency' : 'Action'} Plan (Draft)`,
+                            title: `${planType === 'emergency' ? 'Urgent' : 'Action'} Plan (Draft)`,
                             metadata: draftToStore,
                             updated_at: new Date().toISOString()
                         })
@@ -268,7 +268,7 @@ window.TempoPlanStore = (function() {
                             user_id: userId,
                             plan_type: planType,
                             status: 'draft',
-                            title: `${planType === 'emergency' ? 'Emergency' : 'Action'} Plan (Draft)`,
+                            title: `${planType === 'emergency' ? 'Urgent' : 'Action'} Plan (Draft)`,
                             metadata: draftToStore,
                             updated_at: new Date().toISOString()
                         });
@@ -357,7 +357,7 @@ window.TempoPlanStore = (function() {
             planId: planId,
             planType,
             status: 'active',
-            title: planData.title || 'Emergency Plan',
+            title: planData.title || (planType === 'emergency' ? 'Urgent Plan' : 'Action Plan'),
             totalPlannedMinutes: planData.totalPlannedMinutes || 0,
             tasks,
             plannedTasks: planData.plannedTasks || [],

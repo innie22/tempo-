@@ -31,7 +31,7 @@ window.TempoAuth = (function() {
         }
         if (window.TempoMode) {
             const hasActive = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
-            if (hasActive) {
+            if (hasActive && window.TempoMode.getMode() === 'default') {
                 window.TempoMode.setMode('emergency', { silent: true });
             }
         }

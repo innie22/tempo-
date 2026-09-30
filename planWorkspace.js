@@ -319,7 +319,7 @@ window.TempoPlanWorkspace = (function() {
      * Remove task from plan
      */
     function removeTask(taskId) {
-        if (!confirm("Are you sure you want to remove this task from your Emergency Plan?")) return;
+        if (!confirm("Are you sure you want to remove this task from your Urgent Plan?")) return;
 
         const plan = getActivePlan();
         if (!plan) return;
@@ -735,9 +735,9 @@ window.TempoPlanWorkspace = (function() {
                         📋
                     </div>
                     <div class="space-y-1.5">
-                        <h2 class="font-heading text-2xl font-bold text-[#202124]">No active Emergency Plan found</h2>
+                        <h2 class="font-heading text-2xl font-bold text-[#202124]">No active Urgent Plan found</h2>
                         <p class="text-xs sm:text-sm text-[#6F6B68]">
-                            You don't have an active Emergency Plan right now. Create one to get clear, realistic guidance.
+                            You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance.
                         </p>
                     </div>
                     <div class="pt-2 flex items-center justify-center gap-3">
@@ -745,7 +745,7 @@ window.TempoPlanWorkspace = (function() {
                             ← Home
                         </button>
                         <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('entry');" class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-md transition">
-                            Create an Emergency Plan →
+                            Create an Urgent Plan →
                         </button>
                     </div>
                 </div>
@@ -838,7 +838,7 @@ window.TempoPlanWorkspace = (function() {
 
                     <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div class="space-y-1">
-                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#FF6B2C] block">YOUR EMERGENCY PLAN</span>
+                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#FF6B2C] block">YOUR URGENT PLAN</span>
                             <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
                                 Here's what you're working through right now.
                             </h1>

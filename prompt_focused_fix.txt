@@ -1,0 +1,171 @@
+<USER_REQUEST>
+Continue working on the CURRENT LOCAL Tempo project.
+
+FOCUSED BUG FIX — ONLY ONE MODE DASHBOARD MAY BE VISIBLE AT A TIME
+
+IMPORTANT CONTEXT:
+
+Recovery Mode implementation has just been completed / is at its final
+implementation state.
+
+A blocking rendering bug is visible:
+
+When Recovery Mode is active, Recovery Home appears underneath content
+from another mode/dashboard instead of replacing the previous Home
+experience.
+
+Observed example:
+
+[ content from previous dashboard ]
+[ Tempo Posts from previous dashboard ]
+---------------------------------------
+[ Recovery Mode selector ]
+[ Recovery Home ]
+[ Self-check ]
+[ Recovery Note / Recently / Today ... ]
+
+This is WRONG.
+
+Tempo modes are mutually exclusive HOME contexts.
+
+At any moment, the Home experience must show exactly ONE active mode
+dashboard.
+
+This task is ONLY a focused mode-rendering bug fix.
+
+Do not continue Recovery feature development.
+Do not redesign Recovery.
+Do not implement future Tempo Tools / Learn & Solve work.
+
+==================================================
+1. EXPECTED BEHAVIOR
+==================================================
+
+When currentMode = default:
+
+show ONLY Default Home.
+
+When currentMode = emergency:
+
+show ONLY Urgent Home.
+
+NOTE:
+"emergency" remains the legacy INTERNAL identifier.
+User-facing terminology remains "Urgent Mode".
+
+When currentMode = recovery:
+
+show ONLY Recovery Home.
+
+When currentMode = unclear:
+
+show ONLY the intended Unclear experience.
+
+SOS remains separate and must not be treated as currentMode.
+
+==================================================
+2. ROOT-CAUSE INSPECTION FIRST
+==================================================
+
+Before editing anything, inspect the CURRENT implementation.
+
+Especially inspect:
+
+- mode.js
+- app.js
+- Home / #today rendering
+- currentMode state handling
+- Recovery Home renderer
+- Default Home renderer
+- Emode/Urgent Home renderer
+- Unclear renderer
+- dashboard/root containers
+- show/hid
+<truncated 9435 bytes>
+t
+→ Recovery
+→ Default
+
+After EACH switch:
+
+exactly ONE mode dashboard is visible.
+
+No stacked dashboard.
+
+No duplicate Tempo Posts.
+
+No refresh required.
+
+
+TEST 5 — DATA PRESERVATION
+
+Create/use any lightweight existing state if already available.
+
+Switch away and back.
+
+Confirm the bug fix did NOT reset:
+
+- shared task data
+- Recovery state
+- relevant existing user state
+
+Do not perform deep persistence testing.
+
+==================================================
+19. FIX POLICY
+==================================================
+
+Fix only blockers directly related to this issue:
+
+- multiple dashboards visible
+- previous dashboard not disappearing
+- duplicate Home content
+- duplicate Tempo Posts caused by mode rendering
+- Recovery renderer appended outside active Home
+- mode switch requires refresh
+- centralized visibility state broken
+
+If you notice unrelated cosmetic or minor issues:
+
+REPORT them.
+
+Do not fix them in this task.
+
+==================================================
+20. COMPLETION REPORT
+==================================================
+
+When fixed:
+
+STOP.
+
+Report:
+
+1. exact root cause
+2. files modified
+3. previous incorrect render behavior
+4. new active-dashboard mechanism
+5. how currentMode controls dashboard visibility now
+6. whether dashboards are conditionally rendered or centrally hidden
+7. whether Tempo Posts required a mounting/visibility fix
+8. confirmation Default shows alone
+9. confirmation Urgent shows alone
+10. confirmation Recovery shows alone
+11. confirmation Unclear shows alone
+12. confirmation repeated switching works without refresh
+13. confirmation shared/user data is preserved
+14. known non-blocking issues
+
+Do NOT start another feature.
+Do NOT start Tempo Tools.
+Do NOT start Learn & Solve.
+Do NOT continue unrelated Recovery polishing.
+Do NOT commit.
+Do NOT push.
+Do NOT deploy.
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-30T23:07:50+07:00.
+</ADDITIONAL_METADATA>

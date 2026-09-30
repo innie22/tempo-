@@ -298,12 +298,12 @@ window.TempoEmergencyFlow = (function() {
                 <div class="bg-white border-2 border-[#FF6B2C] rounded-[22px] p-6 space-y-4 shadow-sm">
                     <div class="flex items-center justify-between">
                         <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
-                            Active Emergency Plan
+                            Active Urgent Plan
                         </span>
                         <span class="text-xs font-bold text-[#6F6B68]">${confirmedPlan.plannedTasks.length} task${confirmedPlan.plannedTasks.length === 1 ? '' : 's'} scheduled</span>
                     </div>
                     <div class="space-y-1">
-                        <h4 class="font-heading text-lg font-bold text-[#202124]">You have an active Emergency Plan</h4>
+                        <h4 class="font-heading text-lg font-bold text-[#202124]">You have an active Urgent Plan</h4>
                         <p class="text-xs sm:text-sm text-[#6F6B68]">
                             Your plan is active and safely saved. You can jump directly into it, or start fresh with a new plan.
                         </p>
@@ -531,7 +531,7 @@ window.TempoEmergencyFlow = (function() {
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EMERGENCY MODE</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT MODE</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
                         Reality Check
                     </h2>
@@ -3086,9 +3086,9 @@ window.TempoEmergencyFlow = (function() {
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EMERGENCY PLAN</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT PLAN</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Your Emergency Plan
+                        Your Urgent Plan
                     </h2>
                     <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
                         Here's a starting point based on what you told us. You can reorder, move between days, or adjust estimates anytime.
@@ -4120,7 +4120,7 @@ window.TempoEmergencyFlow = (function() {
                     <button onclick="window.TempoEmergencyFlow.goToStage('plan-review')" 
                             class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
                         <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Back to Emergency Plan</span>
+                        <span>Back to Urgent Plan</span>
                     </button>
                     <div class="flex items-center space-x-2 text-xs">
                         ${breakdownIndex > 0 ? `
@@ -4444,7 +4444,7 @@ window.TempoEmergencyFlow = (function() {
                         ` : ''}
                         <button id="btn-em-save-plan" onclick="window.TempoEmergencyFlow.savePlan()" 
                                 class="btn-primary w-full sm:w-auto px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2">
-                            <span>Save Emergency Plan →</span>
+                            <span>Save Urgent Plan →</span>
                         </button>
                         ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 ? `
                             <button onclick="window.TempoEmergencyFlow.breakdownNextTask()" 
@@ -5156,7 +5156,7 @@ window.TempoEmergencyFlow = (function() {
 
         if (!targetTask) {
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("All tasks in this Emergency Plan are completed! Great job.");
+                window.TempoApp.showToast("All tasks in this Urgent Plan are completed! Great job.");
             }
             return;
         }
@@ -5236,7 +5236,7 @@ window.TempoEmergencyFlow = (function() {
             }
 
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("Emergency Plan saved successfully.");
+                window.TempoApp.showToast("Urgent Plan saved successfully.");
             }
 
             goToStage('handoff');
@@ -5291,7 +5291,7 @@ window.TempoEmergencyFlow = (function() {
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EMERGENCY PLAN READY</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT PLAN READY</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
                         Your plan is saved.
                     </h2>
@@ -5334,7 +5334,7 @@ window.TempoEmergencyFlow = (function() {
                         </div>
                         <h3 class="font-heading text-xl font-bold text-[#202124]">All planned tasks completed!</h3>
                         <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">
-                            You've completed every task in this Emergency Plan. Take a moment to acknowledge your hard work.
+                            You've completed every task in this Urgent Plan. Take a moment to acknowledge your hard work.
                         </p>
                     </div>
                 `}
@@ -5387,7 +5387,7 @@ window.TempoEmergencyFlow = (function() {
                     `}
                     <button id="btn-em-view-edit-plan" onclick="window.TempoEmergencyFlow.viewPlan()" 
                             class="w-full sm:w-auto px-5 py-3.5 rounded-xl border border-gray-200 text-xs font-semibold text-[#202124] hover:bg-stone-50 transition order-2 sm:order-1">
-                        View / Edit Emergency Plan
+                        View / Edit Urgent Plan
                     </button>
                     <button id="btn-em-return-home" onclick="window.TempoEmergencyFlow.returnHome()" 
                             class="w-full sm:w-auto px-5 py-3.5 text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100/60 rounded-xl transition order-3">
