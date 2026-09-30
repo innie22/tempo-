@@ -39,6 +39,8 @@ window.TempoEmergencyFlow = (function() {
     let showSubtaskDurations = true;
     let ignoredDeadlineWarnings = new Set();
     let moveModalState = null;
+    let removeDayModalState = null;
+    let editEstimateModalState = null;
     let isAddingDay = false;
     let planHasUserEdits = false;
     let showPlanEditWarningModal = false;
@@ -47,6 +49,7 @@ window.TempoEmergencyFlow = (function() {
     let showAiSuggestions = false;
     let currentAiSuggestions = [];
     let aiSuggestionError = false;
+    let viewingFromHandoff = false;
 
     // Autosave timer
     let autosaveTimer = null;
@@ -58,6 +61,9 @@ window.TempoEmergencyFlow = (function() {
         }
 
         const performSave = () => {
+            // Once the plan is saved and we are at handoff, draft must remain cleared
+            if (currentStage === 'handoff') return;
+
             if (window.TempoPlanStore && typeof window.TempoPlanStore.saveDraft === 'function') {
                 window.TempoPlanStore.saveDraft('emergency', {
                     currentStage,
@@ -101,8 +107,14 @@ window.TempoEmergencyFlow = (function() {
         // Restore active plan or draft from TempoPlanStore
         if (window.TempoPlanStore) {
             try {
-                // 1. Check for active confirmed plan
-                const activePlan = await window.TempoPlanStore.loadActivePlan('emergency');
+                // 1. Check for active confirmed plan (check synchronous cache first for zero latency)
+                let activePlan = typeof window.TempoPlanStore.getActivePlan === 'function' 
+                    ? window.TempoPlanStore.getActivePlan('emergency') 
+                    : null;
+                if (!activePlan) {
+                    activePlan = await window.TempoPlanStore.loadActivePlan('emergency');
+                }
+
                 if (activePlan && Array.isArray(activePlan.plannedTasks) && activePlan.plannedTasks.length > 0) {
                     confirmedPlan = activePlan;
                     const allTasksMap = new Map();
@@ -118,8 +130,25 @@ window.TempoEmergencyFlow = (function() {
                     if (Array.isArray(activePlan.availabilityDays) && activePlan.availabilityDays.length > 0) {
                         availabilityDays = activePlan.availabilityDays;
                     }
-                    currentStage = 'plan-review';
-                    console.log("[TempoEmergencyFlow] Restored active plan from storage with", tasks.length, "tasks.");
+                    let savedStage = null;
+                    try {
+                        savedStage = localStorage.getItem('tempo_emergency_stage');
+                    } catch (e) {}
+
+                    if (savedStage === 'handoff') {
+                        currentStage = 'handoff';
+                    } else if (savedStage === 'plan-review') {
+                        currentStage = 'plan-review';
+                    } else {
+                        currentStage = 'handoff';
+                    }
+                    console.log("[TempoEmergencyFlow] Restored active plan from storage with", tasks.length, "tasks. Stage:", currentStage);
+
+                    const isEmScreen = (window.location.hash === '#emergency') || 
+                                       (document.getElementById('screen-emergency') && !document.getElementById('screen-emergency').classList.contains('hidden'));
+                    if (isEmScreen) {
+                        goToStage(currentStage);
+                    }
                 } else {
                     // 2. Check for draft in progress
                     const draft = await window.TempoPlanStore.loadDraft('emergency');
@@ -140,6 +169,12 @@ window.TempoEmergencyFlow = (function() {
             } catch (err) {
                 console.warn("[TempoEmergencyFlow] Storage restoration notice:", err);
             }
+        }
+
+        // If the emergency screen is currently active in DOM, render the restored stage
+        const screen = document.getElementById('screen-emergency');
+        if (screen && !screen.classList.contains('hidden')) {
+            goToStage(currentStage);
         }
     }
 
@@ -184,7 +219,7 @@ window.TempoEmergencyFlow = (function() {
                         </p>
                     </div>
                     <div class="pt-2 flex flex-col sm:flex-row items-center gap-3">
-                        <button onclick="window.TempoEmergencyFlow.goToStage('plan-review')" 
+                        <button onclick="window.TempoEmergencyFlow.goToStage('handoff')" 
                                 class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
                             Resume Active Plan →
                         </button>
@@ -273,6 +308,21 @@ window.TempoEmergencyFlow = (function() {
     function bindEvents() {
         // Entry Stage Settle Decision
         bindEntryEvents();
+
+        // Keyboard Escape listener for modals
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                if (removeDayModalState) {
+                    closeRemoveDayModal();
+                } else if (editEstimateModalState) {
+                    closeEditEstimateModal();
+                } else if (moveModalState) {
+                    closeMoveTaskModal();
+                } else if (showPlanEditWarningModal) {
+                    cancelPlanEditWarning();
+                }
+            }
+        });
     }
 
     function goToStage(stageName) {
@@ -281,8 +331,14 @@ window.TempoEmergencyFlow = (function() {
         }
         currentStage = stageName;
 
-        // Autosave draft on stage transitions
-        scheduleDraftAutosave(true);
+        try {
+            localStorage.setItem('tempo_emergency_stage', stageName);
+        } catch (e) {}
+
+        // Autosave draft on stage transitions (unless at handoff where plan is finalized)
+        if (stageName !== 'handoff') {
+            scheduleDraftAutosave(true);
+        }
 
         // Hide all stage containers
         STAGES.forEach(stage => {
@@ -1234,7 +1290,7 @@ window.TempoEmergencyFlow = (function() {
                                         <div class="flex items-center space-x-2">
                                             <span class="text-xs font-bold text-gray-400">0h total</span>
                                             ${!isToday ? `
-                                                <button onclick="window.TempoEmergencyFlow.removeDay(${dayIndex})"
+                                                <button onclick="window.TempoEmergencyFlow.openRemoveDayModal(${dayIndex})"
                                                         class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold transition ml-1"
                                                         title="Remove this day from planning window">
                                                     Remove day
@@ -1269,7 +1325,7 @@ window.TempoEmergencyFlow = (function() {
                                             Mark day as not available
                                         </button>
                                         ${!isToday ? `
-                                            <button onclick="window.TempoEmergencyFlow.removeDay(${dayIndex})"
+                                            <button onclick="window.TempoEmergencyFlow.openRemoveDayModal(${dayIndex})"
                                                     class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold transition"
                                                     title="Remove this day from planning window">
                                                 Remove day
@@ -1379,6 +1435,7 @@ window.TempoEmergencyFlow = (function() {
                     </button>
                 </div>
             </div>
+            ${renderRemoveDayModalHTML()}
         `;
     }
 
@@ -1439,7 +1496,93 @@ window.TempoEmergencyFlow = (function() {
         renderAvailableTime();
     }
 
-    function removeDay(dayIndex) {
+    function formatRemoveDayModalDate(day) {
+        if (!day || !day.date) return day ? day.label : '';
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const parts = day.date.split('-');
+        if (parts.length === 3) {
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const d = parseInt(parts[2], 10);
+            const targetDate = new Date(y, m - 1, d);
+            const monthDay = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
+
+            let relative = '';
+            if (day.date === todayStr) relative = 'Today';
+            else if (day.date === tomorrowStr) relative = 'Tomorrow';
+            else relative = weekday;
+
+            return `${monthDay} · ${relative}`;
+        }
+        return day.label || day.date;
+    }
+
+    function getRemoveDayModalCopy(day) {
+        const blockCount = (day.blocks ? day.blocks.length : 0);
+        if (blockCount === 0) {
+            return "This day will be removed from your planning window.";
+        } else if (blockCount === 1) {
+            return "Removing this day will also remove the 1 availability block you've added for it.";
+        } else {
+            return `Removing this day will also remove the ${blockCount} availability blocks you've added for it.`;
+        }
+    }
+
+    function renderRemoveDayModalHTML() {
+        if (!removeDayModalState) return '';
+        const day = availabilityDays[removeDayModalState.dayIndex];
+        if (!day) return '';
+
+        const dateDisplay = formatRemoveDayModalDate(day);
+        const blockCopy = getRemoveDayModalCopy(day);
+
+        return `
+            <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+                 onclick="if (event.target === this) window.TempoEmergencyFlow.closeRemoveDayModal()">
+                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-4 shadow-2xl animate-scale-up"
+                     role="dialog" aria-modal="true" aria-labelledby="em-remove-day-title">
+                    <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <h3 id="em-remove-day-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
+                            Remove this day?
+                        </h3>
+                        <button onclick="window.TempoEmergencyFlow.closeRemoveDayModal()"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                aria-label="Close dialog">✕</button>
+                    </div>
+
+                    <div class="space-y-3">
+                        <p class="font-heading text-sm sm:text-base font-bold text-[#FF6B2C]">
+                            ${escapeHTML(dateDisplay)}
+                        </p>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            ${escapeHTML(blockCopy)}
+                        </p>
+                    </div>
+
+                    <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
+                        <button id="em-remove-day-cancel-btn"
+                                onclick="window.TempoEmergencyFlow.closeRemoveDayModal()"
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
+                            Cancel
+                        </button>
+                        <button id="em-remove-day-confirm-btn"
+                                onclick="window.TempoEmergencyFlow.confirmRemoveDay()"
+                                class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm shadow-sm transition">
+                            Remove day
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function openRemoveDayModal(dayIndex) {
         const day = availabilityDays[dayIndex];
         if (!day) return;
 
@@ -1450,14 +1593,32 @@ window.TempoEmergencyFlow = (function() {
             return;
         }
 
-        const hasBlocks = (day.blocks && day.blocks.length > 0) || (day.preservedBlocks && day.preservedBlocks.length > 0);
-        if (hasBlocks) {
-            const proceed = confirm(`Remove ${day.label} from your planning window? Any time blocks entered for this date will be removed.`);
-            if (!proceed) return;
-        }
-
-        availabilityDays.splice(dayIndex, 1);
+        removeDayModalState = { dayIndex };
         renderAvailableTime();
+        setTimeout(() => {
+            const cancelBtn = document.getElementById('em-remove-day-cancel-btn');
+            if (cancelBtn) cancelBtn.focus();
+        }, 50);
+    }
+
+    function closeRemoveDayModal() {
+        removeDayModalState = null;
+        renderAvailableTime();
+    }
+
+    function confirmRemoveDay() {
+        if (!removeDayModalState) return;
+        const { dayIndex } = removeDayModalState;
+        if (dayIndex >= 0 && dayIndex < availabilityDays.length) {
+            availabilityDays.splice(dayIndex, 1);
+            scheduleDraftAutosave(true);
+        }
+        removeDayModalState = null;
+        renderAvailableTime();
+    }
+
+    function removeDay(dayIndex) {
+        openRemoveDayModal(dayIndex);
     }
 
     function sortAndDeduplicateDayBlocks(day) {
@@ -2086,15 +2247,17 @@ window.TempoEmergencyFlow = (function() {
         });
 
         const activeDayLabels = Object.keys(daysMap).filter(label => daysMap[label].length > 0);
+        const hasSavedActive = !!(confirmedPlan && confirmedPlan.plannedTasks && confirmedPlan.plannedTasks.length > 0 && window.TempoPlanStore && window.TempoPlanStore.getActivePlan('emergency'));
+        const returnToHandoff = viewingFromHandoff || hasSavedActive;
 
         container.innerHTML = `
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Secondary Back Navigation -->
                 <div class="flex items-center justify-between">
-                    <button onclick="window.TempoEmergencyFlow.navigateBackFromPlan()" 
+                    <button onclick="${returnToHandoff ? "window.TempoEmergencyFlow.goToStage('handoff')" : "window.TempoEmergencyFlow.navigateBackFromPlan()"}" 
                             class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
                         <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Back to availability</span>
+                        <span>${returnToHandoff ? "Back to plan overview" : "Back to availability"}</span>
                     </button>
                 </div>
 
@@ -2199,7 +2362,7 @@ window.TempoEmergencyFlow = (function() {
                                                     <span>•</span>
                                                     <span>Due: ${item.task.hasDeadline ? formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime) : 'No fixed deadline'}</span>
                                                     <span>•</span>
-                                                    <button onclick="window.TempoEmergencyFlow.promptEditPlanDuration(${item.globalIndex})" 
+                                                    <button onclick="window.TempoEmergencyFlow.openEditEstimateModal(${item.globalIndex})" 
                                                             class="text-[#FF6B2C] hover:underline font-semibold text-[11px]">
                                                         Edit estimate
                                                     </button>
@@ -2225,16 +2388,39 @@ window.TempoEmergencyFlow = (function() {
                 </div>
 
                 <!-- Confirmation Card -->
-                <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-4 text-center shadow-sm">
-                    <div class="space-y-1">
-                        <h4 class="font-heading text-base font-bold text-[#202124]">Does this plan feel workable?</h4>
-                        <p class="text-xs text-[#6F6B68]">You can change it again later as you make progress.</p>
+                ${returnToHandoff ? `
+                    <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-4 text-center shadow-sm">
+                        <div class="space-y-1">
+                            <h4 class="font-heading text-base font-bold text-[#202124]">Plan is updated and saved</h4>
+                            <p class="text-xs text-[#6F6B68]">Any adjustments you make are automatically saved.</p>
+                        </div>
+                        <div class="pt-1 flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <button onclick="window.TempoEmergencyFlow.goToStage('handoff')" 
+                                    class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
+                                Return to Plan Overview →
+                            </button>
+                            <button onclick="window.TempoEmergencyFlow.launchFocusZone()" 
+                                    class="w-full sm:w-auto px-5 py-3 rounded-xl border border-[#FF6B2C] text-[#FF6B2C] hover:bg-[#FFE9DC] text-xs font-bold transition">
+                                Start Focus Zone →
+                            </button>
+                            <button onclick="window.TempoEmergencyFlow.confirmPlanAndProceed()" 
+                                    class="w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
+                                Review Step Breakdown
+                            </button>
+                        </div>
                     </div>
-                    <button onclick="window.TempoEmergencyFlow.confirmPlanAndProceed()" 
-                            class="btn-primary w-full py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition">
-                        <span>Use this plan →</span>
-                    </button>
-                </div>
+                ` : `
+                    <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-4 text-center shadow-sm">
+                        <div class="space-y-1">
+                            <h4 class="font-heading text-base font-bold text-[#202124]">Does this plan feel workable?</h4>
+                            <p class="text-xs text-[#6F6B68]">You can change it again later as you make progress.</p>
+                        </div>
+                        <button onclick="window.TempoEmergencyFlow.confirmPlanAndProceed()" 
+                                class="btn-primary w-full py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition">
+                            <span>Use this plan →</span>
+                        </button>
+                    </div>
+                `}
             </div>
 
             <!-- Move Task Modal Dialog (if active) -->
@@ -2242,6 +2428,9 @@ window.TempoEmergencyFlow = (function() {
 
             <!-- User-Edited Plan Warning Modal (if active) -->
             ${renderPlanEditWarningModalHTML()}
+
+            <!-- Edit Estimate Modal Dialog (if active) -->
+            ${renderEditEstimateModalHTML()}
         `;
     }
 
@@ -2471,6 +2660,9 @@ window.TempoEmergencyFlow = (function() {
         moveModalState = null;
         planHasUserEdits = true;
         recalculateTimelineSlotsPreservingOrder();
+        if (window.TempoPlanStore && confirmedPlan && window.TempoPlanStore.getActivePlan('emergency')) {
+            window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
+        }
         renderPlanReview();
     }
 
@@ -2495,32 +2687,305 @@ window.TempoEmergencyFlow = (function() {
         planHasUserEdits = true;
         // Re-assign execution badges & update timeline slots while preserving order
         recalculateTimelineSlotsPreservingOrder();
+        if (window.TempoPlanStore && confirmedPlan && window.TempoPlanStore.getActivePlan('emergency')) {
+            window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
+        }
         renderPlanReview();
     }
 
     function ignoreDeadlineWarning(taskId) {
         ignoredDeadlineWarnings.add(taskId);
         planHasUserEdits = true;
+        if (window.TempoPlanStore && confirmedPlan && window.TempoPlanStore.getActivePlan('emergency')) {
+            window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
+        }
+        renderPlanReview();
+    }
+
+    function openEditEstimateModal(taskIndex) {
+        if (!confirmedPlan || !confirmedPlan.plannedTasks || !confirmedPlan.plannedTasks[taskIndex]) return;
+        const item = confirmedPlan.plannedTasks[taskIndex];
+        const task = item.task;
+        if (!task) return;
+
+        let initialIsNotSure = !!task.isUnknownDuration;
+        let initialValue = 1;
+        let initialUnit = 'hours';
+
+        if (initialIsNotSure) {
+            initialValue = '';
+            initialUnit = 'hours';
+        } else if (task.isLongTerm) {
+            if (task.customDurationValue && task.customDurationUnit) {
+                initialValue = task.customDurationValue;
+                initialUnit = task.customDurationUnit;
+            } else if (task.durationLabel) {
+                const match = task.durationLabel.match(/(\d+(?:\.\d+)?)\s*(day|week|month)s?/i);
+                if (match) {
+                    initialValue = parseFloat(match[1]);
+                    initialUnit = match[2].toLowerCase() + 's';
+                } else {
+                    initialValue = 1;
+                    initialUnit = 'days';
+                }
+            } else {
+                initialValue = 1;
+                initialUnit = 'days';
+            }
+        } else if (task.customDurationValue && task.customDurationUnit) {
+            initialValue = task.customDurationValue;
+            initialUnit = task.customDurationUnit;
+        } else if (task.durationMinutes !== null && task.durationMinutes !== undefined) {
+            const mins = task.durationMinutes;
+            if (mins % 60 === 0) {
+                initialValue = mins / 60;
+                initialUnit = 'hours';
+            } else if (mins % 30 === 0) {
+                initialValue = mins / 60;
+                initialUnit = 'hours';
+            } else if (mins % 15 === 0 && mins >= 60) {
+                initialValue = mins / 60;
+                initialUnit = 'hours';
+            } else if (mins < 60) {
+                initialValue = mins;
+                initialUnit = 'minutes';
+            } else {
+                initialValue = mins;
+                initialUnit = 'minutes';
+            }
+        }
+
+        editEstimateModalState = {
+            taskIndex: taskIndex,
+            task: task,
+            value: initialValue,
+            unit: initialUnit,
+            isNotSure: initialIsNotSure,
+            isSubmitting: false
+        };
+
+        renderPlanReview();
+        setTimeout(() => {
+            if (initialIsNotSure) {
+                const cb = document.getElementById('em-edit-estimate-notsure');
+                if (cb) cb.focus();
+            } else {
+                const valInput = document.getElementById('em-edit-estimate-value');
+                if (valInput) {
+                    valInput.focus();
+                    valInput.select();
+                }
+            }
+        }, 50);
+    }
+
+    function closeEditEstimateModal() {
+        editEstimateModalState = null;
+        renderPlanReview();
+    }
+
+    function toggleEditEstimateNotSure(isChecked) {
+        if (!editEstimateModalState) return;
+        editEstimateModalState.isNotSure = isChecked;
+
+        const valInput = document.getElementById('em-edit-estimate-value');
+        const unitSelect = document.getElementById('em-edit-estimate-unit');
+
+        if (valInput && unitSelect) {
+            valInput.disabled = isChecked;
+            unitSelect.disabled = isChecked;
+            if (isChecked) {
+                valInput.classList.add('opacity-40', 'bg-stone-100', 'cursor-not-allowed');
+                unitSelect.classList.add('opacity-40', 'bg-stone-100', 'cursor-not-allowed');
+            } else {
+                valInput.classList.remove('opacity-40', 'bg-stone-100', 'cursor-not-allowed');
+                unitSelect.classList.remove('opacity-40', 'bg-stone-100', 'cursor-not-allowed');
+                if (!valInput.value || parseFloat(valInput.value) <= 0) {
+                    valInput.value = editEstimateModalState.value || 1;
+                }
+                valInput.focus();
+            }
+        }
+    }
+
+    function saveEditEstimate() {
+        if (!editEstimateModalState || editEstimateModalState.isSubmitting) return;
+        const { taskIndex, isNotSure } = editEstimateModalState;
+        const item = confirmedPlan && confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks[taskIndex] : null;
+        if (!item || !item.task) {
+            closeEditEstimateModal();
+            return;
+        }
+
+        const task = item.task;
+
+        if (isNotSure) {
+            task.isUnknownDuration = true;
+            task.isCustomDuration = false;
+            task.isLongTerm = false;
+            task.durationMinutes = null;
+            task.durationLabel = 'Not sure';
+            task.customDurationValue = null;
+            task.customDurationUnit = null;
+        } else {
+            const valInput = document.getElementById('em-edit-estimate-value');
+            const unitSelect = document.getElementById('em-edit-estimate-unit');
+            const rawVal = valInput ? parseFloat(valInput.value) : editEstimateModalState.value;
+            const selectedUnit = unitSelect ? unitSelect.value : editEstimateModalState.unit;
+
+            if (isNaN(rawVal) || rawVal <= 0) {
+                if (window.TempoApp) window.TempoApp.showToast("Please enter a valid estimate duration greater than 0.");
+                return;
+            }
+
+            editEstimateModalState.isSubmitting = true;
+
+            task.isUnknownDuration = false;
+            task.isCustomDuration = true;
+            task.customDurationValue = rawVal;
+            task.customDurationUnit = selectedUnit;
+
+            if (selectedUnit === 'minutes') {
+                const mins = Math.max(1, Math.round(rawVal));
+                task.durationMinutes = mins;
+                task.isLongTerm = false;
+                task.durationLabel = formatDurationMinutes(mins);
+            } else if (selectedUnit === 'hours') {
+                const mins = Math.max(1, Math.round(rawVal * 60));
+                task.durationMinutes = mins;
+                task.isLongTerm = false;
+                task.durationLabel = formatDurationMinutes(mins);
+            } else if (selectedUnit === 'days') {
+                task.durationMinutes = null;
+                task.isLongTerm = true;
+                task.durationLabel = rawVal === 1 ? '1 day' : `${rawVal} days`;
+            } else if (selectedUnit === 'weeks') {
+                task.durationMinutes = null;
+                task.isLongTerm = true;
+                task.durationLabel = rawVal === 1 ? '1 week' : `${rawVal} weeks`;
+            } else if (selectedUnit === 'months') {
+                task.durationMinutes = null;
+                task.isLongTerm = true;
+                task.durationLabel = rawVal === 1 ? '1 month' : `${rawVal} months`;
+            }
+        }
+
+        // 1. Sync matching shared task in `tasks` array
+        const sharedTask = tasks.find(t => t.id === task.id);
+        if (sharedTask) {
+            sharedTask.isUnknownDuration = task.isUnknownDuration;
+            sharedTask.isCustomDuration = task.isCustomDuration;
+            sharedTask.isLongTerm = task.isLongTerm;
+            sharedTask.durationMinutes = task.durationMinutes;
+            sharedTask.durationLabel = task.durationLabel;
+            sharedTask.customDurationValue = task.customDurationValue;
+            sharedTask.customDurationUnit = task.customDurationUnit;
+        }
+
+        // 2. Persist updated task through durable TempoPlanStore layer
+        if (window.TempoPlanStore) {
+            if (typeof window.TempoPlanStore.updateTaskState === 'function') {
+                window.TempoPlanStore.updateTaskState(task.id, {
+                    durationMinutes: task.durationMinutes,
+                    durationLabel: task.durationLabel,
+                    isUnknownDuration: task.isUnknownDuration,
+                    isLongTerm: task.isLongTerm
+                });
+            }
+            if (window.TempoPlanStore.getActivePlan('emergency')) {
+                window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
+            }
+        }
+
+        // 3. Mark user edits without silently recalculating schedule/order
+        planHasUserEdits = true;
+        scheduleDraftAutosave(true);
+
+        // 4. Close modal and re-render plan review
+        editEstimateModalState = null;
         renderPlanReview();
     }
 
     function promptEditPlanDuration(taskIndex) {
-        const item = confirmedPlan.plannedTasks[taskIndex];
-        if (!item) return;
+        openEditEstimateModal(taskIndex);
+    }
 
-        const currentHours = item.task.durationMinutes ? (item.task.durationMinutes / 60) : 1;
-        const newHoursStr = prompt(`Change duration for "${item.task.name}" (hours):`, currentHours);
-        const newHours = parseFloat(newHoursStr);
+    function renderEditEstimateModalHTML() {
+        if (!editEstimateModalState) return '';
+        const { taskIndex, isNotSure, value, unit } = editEstimateModalState;
+        const item = confirmedPlan && confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks[taskIndex] : null;
+        if (!item || !item.task) return '';
 
-        if (newHours && newHours > 0 && newHours !== currentHours) {
-            item.task.durationMinutes = Math.round(newHours * 60);
-            item.task.durationLabel = formatDurationMinutes(item.task.durationMinutes);
-            item.task.isUnknownDuration = false;
-            item.task.isLongTerm = false;
-            planHasUserEdits = true;
-            recalculateTimelineSlotsPreservingOrder();
-            renderPlanReview();
-        }
+        const task = item.task;
+
+        return `
+            <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
+                 onclick="if (event.target === this) window.TempoEmergencyFlow.closeEditEstimateModal()">
+                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up"
+                     role="dialog" aria-modal="true" aria-labelledby="em-edit-estimate-title">
+                    <div class="flex items-center justify-between pb-3 border-b border-gray-100">
+                        <h3 id="em-edit-estimate-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
+                            Edit time estimate
+                        </h3>
+                        <button onclick="window.TempoEmergencyFlow.closeEditEstimateModal()"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                aria-label="Close dialog">✕</button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">Task</span>
+                            <p class="text-sm font-extrabold text-[#202124] mt-0.5">${escapeHTML(task.name)}</p>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="block text-xs font-semibold text-gray-700">
+                                How long do you think this task will take?
+                            </label>
+                            <div class="flex items-center space-x-2">
+                                <input id="em-edit-estimate-value" type="number" min="0.1" step="any"
+                                       value="${isNotSure ? '' : (value !== '' && value !== null && value !== undefined ? value : '')}"
+                                       ${isNotSure ? 'disabled' : ''}
+                                       placeholder="e.g. 1.5"
+                                       class="w-28 px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl text-center font-bold text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                <select id="em-edit-estimate-unit"
+                                        ${isNotSure ? 'disabled' : ''}
+                                        class="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl bg-white font-semibold text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : ''}">
+                                    <option value="minutes" ${unit === 'minutes' ? 'selected' : ''}>minutes</option>
+                                    <option value="hours" ${unit === 'hours' ? 'selected' : ''}>hours</option>
+                                    <option value="days" ${unit === 'days' ? 'selected' : ''}>days</option>
+                                    <option value="weeks" ${unit === 'weeks' ? 'selected' : ''}>weeks</option>
+                                    <option value="months" ${unit === 'months' ? 'selected' : ''}>months</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="pt-1">
+                            <label class="inline-flex items-center space-x-2 cursor-pointer select-none">
+                                <input type="checkbox" id="em-edit-estimate-notsure"
+                                       ${isNotSure ? 'checked' : ''}
+                                       onchange="window.TempoEmergencyFlow.toggleEditEstimateNotSure(this.checked)"
+                                       class="w-4 h-4 rounded text-[#FF6B2C] focus:ring-[#FF6B2C] border-gray-300">
+                                <span class="text-xs sm:text-sm font-medium text-gray-700">I'm not sure yet</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
+                        <button id="em-edit-estimate-cancel-btn"
+                                onclick="window.TempoEmergencyFlow.closeEditEstimateModal()"
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
+                            Cancel
+                        </button>
+                        <button id="em-edit-estimate-save-btn"
+                                onclick="window.TempoEmergencyFlow.saveEditEstimate()"
+                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
+                            Save estimate
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     function confirmPlanAndProceed() {
@@ -2852,10 +3317,12 @@ window.TempoEmergencyFlow = (function() {
                 <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-3 shadow-sm text-center">
                     <div class="space-y-1">
                         <h4 class="font-heading text-sm font-bold text-[#202124]">
-                            ${task.subtasks.length > 0 || task.alreadyKnowWhatToDo ? `✨ "${escapeHTML(task.name)}" is ready to execute.` : `Ready to work on "${escapeHTML(task.name)}"?`}
+                            ${task.subtasks.length > 0 || task.alreadyKnowWhatToDo ? `✨ "${escapeHTML(task.name)}" is ready to execute.` : `Ready to finish "${escapeHTML(task.name)}"?`}
                         </h4>
                         <p class="text-xs text-[#6F6B68]">
-                            You can jump into focused work now, or break down another task first.
+                            ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 
+                                ? 'Save your plan whenever you\'re ready, or break down the next task.' 
+                                : 'All tasks are organized. Save your plan to finish setup and choose what to do next.'}
                         </p>
                     </div>
 
@@ -2866,9 +3333,9 @@ window.TempoEmergencyFlow = (function() {
                                 ← Previous task
                             </button>
                         ` : ''}
-                        <button onclick="window.TempoEmergencyFlow.startWorking()" 
-                                class="btn-primary w-full sm:w-auto px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition">
-                            Start working →
+                        <button id="btn-em-save-plan" onclick="window.TempoEmergencyFlow.savePlan()" 
+                                class="btn-primary w-full sm:w-auto px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2">
+                            <span>Save Emergency Plan →</span>
                         </button>
                         ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 ? `
                             <button onclick="window.TempoEmergencyFlow.breakdownNextTask()" 
@@ -3333,7 +3800,7 @@ window.TempoEmergencyFlow = (function() {
             renderBreakdown();
             scheduleDraftAutosave(true);
         } else {
-            startWorking();
+            savePlan();
         }
     }
 
@@ -3348,19 +3815,174 @@ window.TempoEmergencyFlow = (function() {
         }
     }
 
-    function startWorking(taskId) {
-        const planItem = confirmedPlan && confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks[breakdownIndex] : null;
-        const targetTaskId = taskId || (planItem ? planItem.task.id : (confirmedPlan && confirmedPlan.plannedTasks[0] ? confirmedPlan.plannedTasks[0].task.id : null));
+    /**
+     * Determines the next task to work on in Focus Zone according to priority:
+     * 1. In-progress task (if one already exists)
+     * 2. First unfinished task in the Emergency Plan's saved execution order
+     * 3. null if all tasks in the Emergency Plan are completed
+     */
+    function getNextFocusTask() {
+        if (!confirmedPlan || !Array.isArray(confirmedPlan.plannedTasks) || confirmedPlan.plannedTasks.length === 0) {
+            return null;
+        }
 
-        if (window.TempoFocusZone && typeof window.TempoFocusZone.open === 'function' && targetTaskId) {
-            window.TempoFocusZone.open({ taskId: targetTaskId });
+        const isTaskDone = (t) => {
+            if (!t) return false;
+            return !!(t.completed || t.execution_status === 'completed' || t.status === 'completed');
+        };
+
+        const isTaskInProgress = (t) => {
+            if (!t || isTaskDone(t)) return false;
+            return !!(t.isInProgress || t.inProgress || t.execution_status === 'in_progress' || t.status === 'in_progress');
+        };
+
+        // 1. In-progress task
+        for (const item of confirmedPlan.plannedTasks) {
+            const task = item.task || item;
+            if (isTaskInProgress(task)) {
+                return { planItem: item, task: task };
+            }
+        }
+
+        // 2. First unfinished task in execution order
+        for (const item of confirmedPlan.plannedTasks) {
+            const task = item.task || item;
+            if (!isTaskDone(task)) {
+                return { planItem: item, task: task };
+            }
+        }
+
+        // 3. All tasks completed
+        return null;
+    }
+
+    /**
+     * Launches Focus Zone for a specific task or the prioritized next task.
+     * Preserves mode and uses shared task ID.
+     */
+    function launchFocusZone(taskId) {
+        let targetTask = null;
+        if (taskId) {
+            const item = confirmedPlan && confirmedPlan.plannedTasks 
+                ? confirmedPlan.plannedTasks.find(pt => (pt.task && pt.task.id === taskId) || pt.id === taskId) 
+                : null;
+            if (item) {
+                targetTask = item.task || item;
+            }
+        }
+        if (!targetTask) {
+            const nextFocus = getNextFocusTask();
+            targetTask = nextFocus ? nextFocus.task : null;
+        }
+
+        if (!targetTask) {
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("All tasks in this Emergency Plan are completed! Great job.");
+            }
+            return;
+        }
+
+        if (window.TempoFocusZone && typeof window.TempoFocusZone.open === 'function') {
+            window.TempoFocusZone.open({ taskId: targetTask.id });
         } else {
+            console.warn("[TempoEmergencyFlow] TempoFocusZone is not available.");
+        }
+    }
+
+    /**
+     * Secondary choice 1: View / Edit Emergency Plan
+     * Opens the review screen without resetting setup or clearing the plan.
+     */
+    function viewPlan() {
+        viewingFromHandoff = true;
+        goToStage('plan-review');
+    }
+
+    /**
+     * Secondary choice 2: Return to Home Dashboard
+     * Navigates to main dashboard in Emergency Mode with active plan preserved.
+     */
+    function returnHome() {
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('today');
+        } else {
+            window.location.hash = '#today';
+        }
+    }
+
+    /**
+     * Save Plan: The action that COMPLETES the Emergency Plan setup.
+     * Durably persists the plan via TempoPlanStore, clears draft, and transitions to completion screen.
+     */
+    async function savePlan() {
+        if (!confirmedPlan || !confirmedPlan.plannedTasks || confirmedPlan.plannedTasks.length === 0) {
+            console.warn("[TempoEmergencyFlow] No confirmed plan to save.");
+            goToStage('reality-check');
+            return;
+        }
+
+        const saveBtn = document.getElementById('btn-em-save-plan');
+        let origBtnText = '';
+        if (saveBtn) {
+            origBtnText = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span>Saving plan...</span>
+            `;
+        }
+
+        try {
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
+                await window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
+                if (typeof window.TempoPlanStore.clearDraft === 'function') {
+                    window.TempoPlanStore.clearDraft('emergency');
+                }
+            } else {
+                localStorage.setItem('tempo_active_emergency_plan', JSON.stringify(confirmedPlan));
+                localStorage.removeItem('tempo_emergency_draft');
+            }
+
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = origBtnText;
+            }
+
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Emergency Plan saved successfully.");
+            }
+
             goToStage('handoff');
+        } catch (err) {
+            console.error("[TempoEmergencyFlow] Failed to save active plan:", err);
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = origBtnText;
+            }
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Could not save plan right now. Please try again.");
+            } else {
+                alert("Could not save plan right now. Please check your connection and try again.");
+            }
+        }
+    }
+
+    /**
+     * Backward-compatible entrypoint: If taskId passed, launches focus; else saves plan.
+     */
+    function startWorking(taskId) {
+        if (taskId) {
+            launchFocusZone(taskId);
+        } else {
+            savePlan();
         }
     }
 
     // =========================================================================
-    // STAGE 9: START WORKING HANDOFF (Focus Zone Handoff State)
+    // STAGE 9: START WORKING HANDOFF (Completion Screen / Choice Point)
     // =========================================================================
     function renderHandoff() {
         const container = document.getElementById('emergency-stage-handoff');
@@ -3371,89 +3993,127 @@ window.TempoEmergencyFlow = (function() {
             window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
         }
 
-        const firstTaskItem = confirmedPlan.plannedTasks[0];
-        const nextTasks = confirmedPlan.plannedTasks.slice(1);
+        const nextFocus = getNextFocusTask();
+        const focusItem = nextFocus ? nextFocus.planItem : null;
+        const focusTask = nextFocus ? nextFocus.task : null;
 
-        const firstSubtask = firstTaskItem.task.subtasks && firstTaskItem.task.subtasks.length > 0
-            ? firstTaskItem.task.subtasks[0].title
-            : 'Begin first 25-minute focused work block.';
+        // Upcoming queue contains all tasks EXCEPT the currently focused one
+        const upcomingTasks = confirmedPlan.plannedTasks.filter(item => {
+            const t = item.task || item;
+            return !focusTask || t.id !== focusTask.id;
+        });
+
+        // Determine first immediate action
+        let firstImmediateAction = 'Begin first 25-minute focused work block.';
+        if (focusTask && Array.isArray(focusTask.subtasks) && focusTask.subtasks.length > 0) {
+            const unfinishedSubtask = focusTask.subtasks.find(s => !s.completed);
+            firstImmediateAction = unfinishedSubtask ? unfinishedSubtask.title : focusTask.subtasks[0].title;
+        }
 
         container.innerHTML = `
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#166545]">EMERGENCY MODE READY</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EMERGENCY PLAN READY</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Ready to begin.
+                        Your plan is saved.
                     </h2>
                     <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        Your plan is organized. Take it one doable step at a time.
+                        You've turned everything into a clear, doable plan. You're in control—choose what you'd like to do next.
                     </p>
                 </div>
 
-                <!-- Active Focus Card -->
-                <div class="bg-white border-2 border-[#FF6B2C] rounded-[22px] p-6 space-y-4 shadow-sm">
-                    <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                        <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
-                            ✨ Current Focus
-                        </span>
-                        <span class="text-xs font-bold text-[#FF6B2C]">Scheduled: ${firstTaskItem.startTime} – ${firstTaskItem.endTime}</span>
-                    </div>
+                <!-- Active Focus Card OR All-Completed Celebration Card -->
+                ${focusTask ? `
+                    <div class="bg-white border-2 border-[#FF6B2C] rounded-[22px] p-6 space-y-4 shadow-sm">
+                        <div class="flex items-center justify-between pb-2 border-b border-gray-100">
+                            <span class="px-3 py-1 rounded-full text-xs font-extrabold ${focusTask.isInProgress ? 'bg-amber-100 text-amber-800' : 'bg-[#FFE9DC] text-[#B83D08]'} uppercase tracking-wider">
+                                ${focusTask.isInProgress ? '⚡ In Progress' : '✨ Current Focus'}
+                            </span>
+                            ${focusItem && focusItem.startTime && focusItem.endTime ? `
+                                <span class="text-xs font-bold text-[#FF6B2C]">Scheduled: ${focusItem.startTime} – ${focusItem.endTime}</span>
+                            ` : `
+                                <span class="text-xs font-bold text-[#6F6B68]">Planned execution queue</span>
+                            `}
+                        </div>
 
-                    <div class="space-y-1">
-                        <h3 class="font-heading text-xl font-bold text-[#202124]">${escapeHTML(firstTaskItem.task.name)}</h3>
-                        <p class="text-xs text-[#6F6B68]">
-                            Estimated duration: ~${firstTaskItem.task.durationLabel} • Due: ${firstTaskItem.task.hasDeadline ? formatHumanDeadline(firstTaskItem.task.deadlineDate, firstTaskItem.task.deadlineTime) : 'No fixed deadline'}
+                        <div class="space-y-1">
+                            <h3 class="font-heading text-xl font-bold text-[#202124]">${escapeHTML(focusTask.name)}</h3>
+                            <p class="text-xs text-[#6F6B68]">
+                                Estimated duration: ~${focusTask.durationLabel || 'Flexible'} • Due: ${focusTask.hasDeadline ? formatHumanDeadline(focusTask.deadlineDate, focusTask.deadlineTime) : 'No fixed deadline'}
+                            </p>
+                        </div>
+
+                        <!-- First Immediate Action -->
+                        <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-xl space-y-1">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Your Next Action:</span>
+                            <p class="text-xs font-semibold text-[#202124]">${escapeHTML(firstImmediateAction)}</p>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="bg-white border-2 border-emerald-500 rounded-[22px] p-6 text-center space-y-3 shadow-sm">
+                        <div class="w-12 h-12 mx-auto rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-2xl font-bold">
+                            ✓
+                        </div>
+                        <h3 class="font-heading text-xl font-bold text-[#202124]">All planned tasks completed!</h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">
+                            You've completed every task in this Emergency Plan. Take a moment to acknowledge your hard work.
                         </p>
                     </div>
-
-                    <!-- First Immediate Action -->
-                    <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-xl space-y-1">
-                        <span class="text-[11px] font-bold uppercase tracking-wider text-[#B83D08]">Your First Action:</span>
-                        <p class="text-xs font-semibold text-[#202124]">${escapeHTML(firstSubtask)}</p>
-                    </div>
-                </div>
+                `}
 
                 <!-- Upcoming Planned Queue -->
-                ${nextTasks.length > 0 ? `
+                ${upcomingTasks.length > 0 ? `
                     <div class="bg-white border border-[#EAE4DF] rounded-[22px] p-5 space-y-3 shadow-sm">
                         <h4 class="text-xs font-bold uppercase tracking-wider text-[#6F6B68]">Up Next in Your Plan</h4>
                         <div class="space-y-2">
-                            ${nextTasks.map(item => `
-                                <div class="p-3 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl flex items-center justify-between text-xs">
-                                    <div class="space-y-0.5">
-                                        <h5 class="font-bold text-[#202124]">${escapeHTML(item.task.name)}</h5>
-                                        <p class="text-[11px] text-[#6F6B68]">${item.startTime} – ${item.endTime} • ~${item.task.durationLabel}</p>
+                            ${upcomingTasks.map(item => {
+                                const t = item.task || item;
+                                const isDone = !!(t.completed || t.execution_status === 'completed');
+                                return `
+                                    <div class="p-3 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl flex items-center justify-between text-xs ${isDone ? 'opacity-60 bg-stone-50' : ''}">
+                                        <div class="space-y-0.5">
+                                            <h5 class="font-bold text-[#202124] ${isDone ? 'line-through text-gray-500' : ''}">${escapeHTML(t.name)}</h5>
+                                            <p class="text-[11px] text-[#6F6B68]">
+                                                ${item.startTime && item.endTime ? `${item.startTime} – ${item.endTime} • ` : ''}~${t.durationLabel || 'Flexible'}
+                                            </p>
+                                        </div>
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isDone ? 'bg-emerald-100 text-emerald-800' : (item.executionBadge === 'THEN' ? 'bg-[#FBF0E4] text-[#9A5B13]' : 'bg-[#F3F1EF] text-[#6F6B68]')}">
+                                            ${isDone ? 'COMPLETED' : (item.executionBadge || 'UP NEXT')}
+                                        </span>
                                     </div>
-                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.executionBadge === 'THEN' ? 'bg-[#FBF0E4] text-[#9A5B13]' : 'bg-[#F3F1EF] text-[#6F6B68]'}">
-                                        ${item.executionBadge}
-                                    </span>
-                                </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
                     </div>
                 ` : ''}
 
-                <!-- Notice & Next Steps -->
-                <div class="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-center space-y-2 text-xs text-[#6F6B68]">
-                    <p class="font-semibold text-gray-800">
-                        Focus Zone setup and live timer will continue in the next implementation.
+                <!-- Supportive Guidance Notice -->
+                <div class="p-4 bg-stone-50 border border-[#EAE4DF] rounded-2xl text-center space-y-1.5 text-xs text-[#6F6B68]">
+                    <p class="font-semibold text-[#202124]">
+                        You can adjust your plan or switch between tasks anytime.
                     </p>
-                    <p>You can return to the emergency schedule anytime to review or adjust planned blocks.</p>
+                    <p>When you're ready, jump into Focus Zone for timed work blocks with restful breaks.</p>
                 </div>
 
-                <!-- Navigation Controls -->
+                <!-- Navigation Controls (3 Explicit Choices) -->
                 <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <button onclick="window.TempoEmergencyFlow.goToStage('plan-review')" 
-                            class="w-full sm:w-auto px-5 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
+                    ${focusTask ? `
+                        <button id="btn-em-start-focus" onclick="window.TempoEmergencyFlow.launchFocusZone()" 
+                                class="btn-primary w-full sm:w-auto px-7 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition order-1 sm:order-2">
+                            Start working now with Tempo Focus Zone →
+                        </button>
+                    ` : `
+                        <button disabled class="w-full sm:w-auto px-7 py-3.5 rounded-xl font-semibold text-xs sm:text-sm bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200 order-1 sm:order-2">
+                            All tasks completed
+                        </button>
+                    `}
+                    <button id="btn-em-view-edit-plan" onclick="window.TempoEmergencyFlow.viewPlan()" 
+                            class="w-full sm:w-auto px-5 py-3.5 rounded-xl border border-gray-200 text-xs font-semibold text-[#202124] hover:bg-stone-50 transition order-2 sm:order-1">
                         View / Edit Emergency Plan
                     </button>
-                    <button onclick="window.TempoEmergencyFlow.startWorking('${firstTaskItem.task.id}')" 
-                            class="btn-primary w-full sm:w-auto px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
-                        Start working now with Tempo Focus Zone →
-                    </button>
-                    <button onclick="window.TempoApp.navigateTo('today')" 
-                            class="w-full sm:w-auto px-5 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
+                    <button id="btn-em-return-home" onclick="window.TempoEmergencyFlow.returnHome()" 
+                            class="w-full sm:w-auto px-5 py-3.5 text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100/60 rounded-xl transition order-3">
                         Return to Home Dashboard →
                     </button>
                 </div>
@@ -3649,6 +4309,9 @@ window.TempoEmergencyFlow = (function() {
         startAddDay,
         cancelAddDay,
         confirmAddDay,
+        openRemoveDayModal,
+        closeRemoveDayModal,
+        confirmRemoveDay,
         removeDay,
         continueFromAvailableTime,
         // Plan Review & Editing
@@ -3661,6 +4324,10 @@ window.TempoEmergencyFlow = (function() {
         executeMoveTask,
         movePlanTask,
         ignoreDeadlineWarning,
+        openEditEstimateModal,
+        closeEditEstimateModal,
+        toggleEditEstimateNotSure,
+        saveEditEstimate,
         promptEditPlanDuration,
         confirmPlanAndProceed,
         // Breakdown
@@ -3682,6 +4349,11 @@ window.TempoEmergencyFlow = (function() {
         acceptAllAiSuggestions,
         toggleAlreadyKnowWhatToDo,
         startWorking,
+        savePlan,
+        launchFocusZone,
+        viewPlan,
+        returnHome,
+        getNextFocusTask,
         openSubtaskDurationEditor,
         closeSubtaskDurationEditor,
         saveSubtaskDuration,

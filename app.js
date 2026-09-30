@@ -102,10 +102,10 @@ window.TempoApp = (function() {
         // Enforce auth gate for anonymous visitors attempting to access mode routes directly
         if ((tabId === 'emergency' || tabId === 'recovery-mode' || tabId === 'unclear-mode') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
             const targetMode = tabId === 'emergency' ? 'emergency' : (tabId === 'recovery-mode' ? 'recovery' : 'unclear');
-            if (window.TempoMode) {
+            if (window.TempoMode && window.TempoMode.getMode() !== targetMode) {
                 window.TempoMode.requestMode(targetMode);
+                return;
             }
-            return;
         }
 
         currentTab = tabId;

@@ -556,6 +556,11 @@ window.TempoPlanStore = (function() {
         return !!(activePlans[planType] || readLocal(getActiveKey(userId, planType)));
     }
 
+    function getActivePlan(planType = 'emergency') {
+        const userId = getUserId();
+        return activePlans[planType] || readLocal(getActiveKey(userId, planType)) || null;
+    }
+
     function hasDraft(planType = 'emergency') {
         const userId = getUserId();
         return !!(activeDrafts[planType] || readLocal(getDraftKey(userId, planType)));
@@ -702,6 +707,7 @@ window.TempoPlanStore = (function() {
         loadActivePlan,
         archiveActivePlan,
         hasActivePlan,
+        getActivePlan,
         // Entity Mutation APIs
         updateTaskState,
         updateSubtaskState
