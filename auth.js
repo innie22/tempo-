@@ -17,8 +17,8 @@ window.TempoAuth = (function() {
         resolveAuthReady = resolve;
     });
 
-    // Pre-auth localization state & dictionary
-    let currentAuthLang = 'en';
+    // Pre-auth localization state & dictionary (Vietnamese-first)
+    let currentAuthLang = (window.TempoI18n && window.TempoI18n.getLanguage) ? window.TempoI18n.getLanguage() : 'vi';
 
     const AUTH_I18N = {
         en: {
@@ -77,12 +77,19 @@ window.TempoAuth = (function() {
         }
     };
 
-    function setAuthLanguage(lang) {
+    function setAuthLanguage(lang, syncGlobal = true) {
         if (!['en', 'vi'].includes(lang)) return;
         currentAuthLang = lang;
         try {
             localStorage.setItem('tempo_auth_lang', lang);
+            localStorage.setItem('tempo_language', lang);
         } catch (e) {}
+
+        if (syncGlobal && window.TempoI18n && typeof window.TempoI18n.setLanguage === 'function') {
+            if (window.TempoI18n.getLanguage() !== lang) {
+                window.TempoI18n.setLanguage(lang);
+            }
+        }
 
         const dict = AUTH_I18N[lang];
         if (!dict) return;
@@ -138,6 +145,14 @@ window.TempoAuth = (function() {
                 btn.className = 'auth-lang-btn text-stone-400 hover:text-stone-700 cursor-pointer';
             }
         });
+
+        // Update navbar auth buttons
+        const btnHeaderSignin = document.getElementById('btn-header-signin');
+        if (btnHeaderSignin) btnHeaderSignin.textContent = lang === 'vi' ? 'Đăng nhập' : 'Sign In';
+        const btnHeaderRegister = document.getElementById('btn-header-register');
+        if (btnHeaderRegister) btnHeaderRegister.textContent = lang === 'vi' ? 'Đăng ký' : 'Register';
+        const btnHeaderSignout = document.getElementById('btn-header-signout');
+        if (btnHeaderSignout) btnHeaderSignout.textContent = lang === 'vi' ? 'Đăng xuất' : 'Sign Out';
     }
 
     /**
@@ -204,9 +219,15 @@ window.TempoAuth = (function() {
     async function init() {
         bindEvents();
         try {
-            const savedLang = localStorage.getItem('tempo_auth_lang');
-            if (savedLang && ['en', 'vi'].includes(savedLang)) {
-                setAuthLanguage(savedLang);
+            const initialLang = (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function')
+                ? window.TempoI18n.getLanguage()
+                : (localStorage.getItem('tempo_language') || localStorage.getItem('tempo_auth_lang') || 'vi');
+            setAuthLanguage(initialLang, false);
+
+            if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+                window.TempoI18n.onLanguageChange((lang) => {
+                    setAuthLanguage(lang, false);
+                });
             }
         } catch (e) {}
         updateUserGreeting(null);
@@ -1103,6 +1124,8 @@ window.TempoAuth = (function() {
         openSignInModal,
         closeModal: closeAllAuthModals,
         closeAllAuthModals,
+        closeRegisterModal: closeAllAuthModals,
+        closeSignInModal: closeAllAuthModals,
         register: registerWithCredentials,
         signUp: registerWithCredentials,
         signIn: signInWithCredentials,

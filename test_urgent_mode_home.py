@@ -240,7 +240,7 @@ def run_tests():
         """)
 
         assert header_info['btnExists'], "Mode selector button #btn-home-mode-selector should exist"
-        assert "Urgent Mode" in header_info['btnText'], f"Button should say 'Urgent Mode', got: {header_info['btnText']}"
+        assert any(m in header_info['btnText'] for m in ["Urgent Mode", "Chế độ Khẩn"]), f"Button should say 'Urgent Mode' or 'Chế độ Khẩn', got: {header_info['btnText']}"
         assert "⚡" in header_info['btnText'], "Button should display lightning icon ⚡"
         assert not header_info['h1Exists'], f"Large hero H1 should NOT exist in Urgent Mode Home, found: {header_info['h1Text']}"
         assert header_info['ringHidden'], "Oversized decorative hero ring must be removed/hidden"
@@ -268,10 +268,10 @@ def run_tests():
         assert dropdown_state['isOpen'], "Dropdown should open on button click"
         # Popover does NOT repeat Urgent Mode; lists Recovery, Unclear, and Take a break
         assert dropdown_state['itemsCount'] == 3, f"Dropdown should contain 3 destination items, got: {dropdown_state['itemsCount']}"
-        assert "Urgent Mode" not in dropdown_state['dropdownText'], "Dropdown popover should NOT redundantly list active Urgent Mode"
-        assert "Recovery Mode" in dropdown_state['dropdownText'], "Dropdown should list Recovery Mode"
-        assert "Unclear Mode" in dropdown_state['dropdownText'], "Dropdown should list Unclear Mode"
-        assert "Take a break from modes" in dropdown_state['dropdownText'], "Dropdown should list Take a break from modes"
+        assert not any(m in dropdown_state['dropdownText'] for m in ["⚡ Urgent Mode", "⚡ Chế độ Khẩn"]), "Dropdown popover should NOT redundantly list active Urgent Mode"
+        assert any(m in dropdown_state['dropdownText'] for m in ["Recovery Mode", "Chế độ Hồi phục", "Chế độ Phục hồi"]), "Dropdown should list Recovery Mode"
+        assert any(m in dropdown_state['dropdownText'] for m in ["Unclear Mode", "Chế độ Chưa rõ"]), "Dropdown should list Unclear Mode"
+        assert any(m in dropdown_state['dropdownText'] for m in ["Take a break from modes", "Tạm nghỉ các chế độ", "Tạm nghỉ"]), "Dropdown should list Take a break from modes"
         assert dropdown_state['isClosed'], "Dropdown should close on Escape key"
         log("✓ Mode dropdown opening, destination options (excluding active mode), and keyboard closing verified.")
 
@@ -294,14 +294,14 @@ def run_tests():
             })()
         """)
 
-        assert name_tests['fallbackNull']['isFallback'] and name_tests['fallbackNull']['greetingText'] == 'Hi there 👋', f"Null profile failed: {name_tests['fallbackNull']}"
-        assert name_tests['rawDigits']['isFallback'] and name_tests['rawDigits']['greetingText'] == 'Hi there 👋', f"Raw digits failed: {name_tests['rawDigits']}"
-        assert name_tests['emailFormat']['isFallback'] and name_tests['emailFormat']['greetingText'] == 'Hi there 👋', f"Email format failed: {name_tests['emailFormat']}"
-        assert name_tests['technicalSymbols']['isFallback'] and name_tests['technicalSymbols']['greetingText'] == 'Hi there 👋', f"Technical symbols failed: {name_tests['technicalSymbols']}"
-        assert name_tests['overlyLong']['isFallback'] and name_tests['overlyLong']['greetingText'] == 'Hi there 👋', f"Overly long name failed: {name_tests['overlyLong']}"
-        assert not name_tests['cleanFullName']['isFallback'] and name_tests['cleanFullName']['greetingText'] == 'Hi, Sarah 👋', f"Clean full name failed: {name_tests['cleanFullName']}"
-        assert not name_tests['cleanPrefName']['isFallback'] and name_tests['cleanPrefName']['greetingText'] == 'Hi, Alex 👋', f"Preferred name failed: {name_tests['cleanPrefName']}"
-        assert not name_tests['cleanDisplayName']['isFallback'] and name_tests['cleanDisplayName']['greetingText'] == 'Hi, Jordan 👋', f"Display name failed: {name_tests['cleanDisplayName']}"
+        assert name_tests['fallbackNull']['isFallback'] and any(g in name_tests['fallbackNull']['greetingText'] for g in ['Hi there', 'Chào bạn']), f"Null profile failed: {name_tests['fallbackNull']}"
+        assert name_tests['rawDigits']['isFallback'] and any(g in name_tests['rawDigits']['greetingText'] for g in ['Hi there', 'Chào bạn']), f"Raw digits failed: {name_tests['rawDigits']}"
+        assert name_tests['emailFormat']['isFallback'] and any(g in name_tests['emailFormat']['greetingText'] for g in ['Hi there', 'Chào bạn']), f"Email format failed: {name_tests['emailFormat']}"
+        assert name_tests['technicalSymbols']['isFallback'] and any(g in name_tests['technicalSymbols']['greetingText'] for g in ['Hi there', 'Chào bạn']), f"Technical symbols failed: {name_tests['technicalSymbols']}"
+        assert name_tests['overlyLong']['isFallback'] and any(g in name_tests['overlyLong']['greetingText'] for g in ['Hi there', 'Chào bạn']), f"Overly long name failed: {name_tests['overlyLong']}"
+        assert not name_tests['cleanFullName']['isFallback'] and any(g in name_tests['cleanFullName']['greetingText'] for g in ['Hi, Sarah', 'Chào Sarah']), f"Clean full name failed: {name_tests['cleanFullName']}"
+        assert not name_tests['cleanPrefName']['isFallback'] and any(g in name_tests['cleanPrefName']['greetingText'] for g in ['Hi, Alex', 'Chào Alex']), f"Preferred name failed: {name_tests['cleanPrefName']}"
+        assert not name_tests['cleanDisplayName']['isFallback'] and any(g in name_tests['cleanDisplayName']['greetingText'] for g in ['Hi, Jordan', 'Chào Jordan']), f"Display name failed: {name_tests['cleanDisplayName']}"
         log("✓ Safe display name resolution and sanitization rules verified.")
 
         # =====================================================================
@@ -334,13 +334,13 @@ def run_tests():
         """)
 
         assert now_info is not None, "Priority #1 'Your Task for Now' card should be rendered"
-        assert "Hi" in now_info['greetingText'], f"Greeting should be inside urgent-card-now, got: {now_info['greetingText']}"
-        assert "YOUR TASK FOR NOW" in now_info['label'], f"Label should say 'YOUR TASK FOR NOW', got: {now_info['label']}"
+        assert any(g in now_info['greetingText'] for g in ["Hi", "Chào"]), f"Greeting should be inside urgent-card-now, got: {now_info['greetingText']}"
+        assert any(l in now_info['label'] for l in ["YOUR TASK FOR NOW", "VIỆC CẦN LÀM NGAY"]), f"Label should say 'YOUR TASK FOR NOW', got: {now_info['label']}"
         assert now_info['hasNowBadge'], "Card should display NOW badge"
         assert now_info['title'] == 'Marketing Report', f"Title should be 'Marketing Report', got: {now_info['title']}"
         assert now_info['subtitle'] == 'Finish competitor analysis section', f"Subtitle should show first unfinished subtask, got: {now_info['subtitle']}"
-        assert "Focus on this task" in now_info['focusBtnText'], f"Focus button mismatch: {now_info['focusBtnText']}"
-        assert "View task" in now_info['viewBtnText'], f"View task button mismatch: {now_info['viewBtnText']}"
+        assert any(b in now_info['focusBtnText'] for b in ["Focus on this task", "Tập trung vào việc này"]), f"Focus button mismatch: {now_info['focusBtnText']}"
+        assert any(b in now_info['viewBtnText'] for b in ["View task", "Xem công việc"]), f"View task button mismatch: {now_info['viewBtnText']}"
         log("✓ Priority #1 'Your Task for Now' structure with internal greeting verified.")
 
         # Test Clicking "Focus on this task" opens Focus Zone with task-u1
@@ -406,16 +406,16 @@ def run_tests():
         """)
 
         assert plan_info is not None, "Right column should be rendered"
-        assert plan_info['headerText'] == 'Your plan for today', f"Header mismatch: {plan_info['headerText']}"
-        assert "View / Edit Plan" in plan_info['viewPlanText'], f"Button text mismatch: {plan_info['viewPlanText']}"
-        assert "1 of 3 completed" in plan_info['progressText'], f"Progress text mismatch: {plan_info['progressText']}"
+        assert any(h in plan_info['headerText'] for h in ['Your plan for today', 'Kế hoạch hôm nay']), f"Header mismatch: {plan_info['headerText']}"
+        assert any(v in plan_info['viewPlanText'] for v in ["View / Edit Plan", "Xem / Sửa kế hoạch", "Xem / Chỉnh sửa kế hoạch", "Xem / chỉnh sửa"]), f"Button text mismatch: {plan_info['viewPlanText']}"
+        assert any(p in plan_info['progressText'] for p in ["1 of 3 completed", "1/3 hoàn thành", "1/3 đã hoàn thành", "1 trên 3"]), f"Progress text mismatch: {plan_info['progressText']}"
         assert plan_info['timelineCount'] == 3, f"Today has 3 planned tasks, got: {plan_info['timelineCount']}"
         assert plan_info['lineCount'] == 2, f"Should have connector lines between items (3 items = 2 lines), got: {plan_info['lineCount']}"
 
         # Check badges
-        assert plan_info['items'][0]['title'] == 'Marketing Report' and plan_info['items'][0]['badge'] == 'NOW'
-        assert plan_info['items'][1]['title'] == 'Read chapter 4' and plan_info['items'][1]['badge'] == 'Completed' and plan_info['items'][1]['isStrikethrough']
-        assert plan_info['items'][2]['title'] == 'Prepare slides' and plan_info['items'][2]['badge'] == 'UP NEXT'
+        assert plan_info['items'][0]['title'] == 'Marketing Report' and (plan_info['items'][0]['badge'] in ['NOW', 'ĐANG LÀM', 'Đang làm'])
+        assert plan_info['items'][1]['title'] == 'Read chapter 4' and (plan_info['items'][1]['badge'] in ['Completed', 'Đã xong', 'Đã hoàn thành', 'Hoàn thành']) and plan_info['items'][1]['isStrikethrough']
+        assert plan_info['items'][2]['title'] == 'Prepare slides' and (plan_info['items'][2]['badge'] in ['UP NEXT', 'TIẾP THEO', 'Tiếp theo'])
         log("✓ Priority #2 'Your plan for today' vertical timeline, connectors, badges, and progress bar verified.")
 
         # Test Toggling Completion from Home
@@ -428,7 +428,7 @@ def run_tests():
                 return progressText;
             })()
         """)
-        assert "2 of 3 completed" in toggle_res, f"Progress text should update to 2 of 3, got: {toggle_res}"
+        assert any(p in toggle_res for p in ["2 of 3 completed", "2/3 hoàn thành", "2/3 đã hoàn thành", "2 trên 3"]), f"Progress text should update to 2 of 3, got: {toggle_res}"
         log("✓ Task completion toggle updates progress and re-renders timeline accurately.")
 
         # =====================================================================
@@ -548,10 +548,10 @@ def run_tests():
             })()
         """)
         incomplete_text = eval_js("document.getElementById('emode-home-content').textContent")
-        assert "You're still setting up your plan." in incomplete_text, "PLAN_INCOMPLETE state should be rendered"
-        assert "YOUR URGENT PLAN" in incomplete_text, "PLAN_INCOMPLETE should use 'YOUR URGENT PLAN'"
-        assert "Continue building my plan" in incomplete_text, "PLAN_INCOMPLETE should show continue button"
-        assert "Feeling overwhelmed?" in incomplete_text, "Support row should be accessible in PLAN_INCOMPLETE"
+        assert any(t in incomplete_text for t in ["You're still setting up your plan.", "Bạn vẫn đang thiết lập kế hoạch của mình."]), "PLAN_INCOMPLETE state should be rendered"
+        assert any(t in incomplete_text for t in ["YOUR URGENT PLAN", "KẾ HOẠCH KHẨN CỦA BẠN"]), "PLAN_INCOMPLETE should use 'YOUR URGENT PLAN'"
+        assert any(t in incomplete_text for t in ["Continue building my plan", "Tiếp tục tạo kế hoạch của tôi"]), "PLAN_INCOMPLETE should show continue button"
+        assert any(t in incomplete_text for t in ["Feeling overwhelmed?", "Cảm thấy quá tải?"]), "Support row should be accessible in PLAN_INCOMPLETE"
         assert "Tempo Posts" in incomplete_text, "Tempo Posts should be accessible in PLAN_INCOMPLETE"
         log("✓ State PLAN_INCOMPLETE verified.")
 
@@ -566,10 +566,10 @@ def run_tests():
             })()
         """)
         today_done_text = eval_js("document.getElementById('emode-home-content').textContent")
-        assert "You're done for today." in today_done_text, "TODAY_COMPLETE state should be rendered"
-        assert "TODAY'S WORK DONE" in today_done_text, "Should show TODAY'S WORK DONE badge"
-        assert "Tomorrow" in today_done_text, "Should reference next scheduled work tomorrow"
-        assert "Feeling overwhelmed?" in today_done_text, "Support row should be accessible in TODAY_COMPLETE"
+        assert any(t in today_done_text for t in ["You're done for today.", "Bạn đã hoàn thành việc hôm nay.", "Bạn đã hoàn thành công việc hôm nay."]), "TODAY_COMPLETE state should be rendered"
+        assert any(t in today_done_text for t in ["TODAY'S WORK DONE", "ĐÃ XONG VIỆC HÔM NAY", "CÔNG VIỆC HÔM NAY ĐÃ XONG"]), "Should show TODAY'S WORK DONE badge"
+        assert any(t in today_done_text for t in ["Tomorrow", "Ngày mai"]), "Should reference next scheduled work tomorrow"
+        assert any(t in today_done_text for t in ["Feeling overwhelmed?", "Cảm thấy quá tải?"]), "Support row should be accessible in TODAY_COMPLETE"
         assert "Tempo Posts" in today_done_text, "Tempo Posts should be accessible in TODAY_COMPLETE"
         log("✓ State TODAY_COMPLETE verified (does not pull tomorrow's work into today).")
 
@@ -585,9 +585,9 @@ def run_tests():
             })()
         """)
         plan_done_text = eval_js("document.getElementById('emode-home-content').textContent")
-        assert "Your Urgent Plan is complete." in plan_done_text, "PLAN_COMPLETE state should be rendered"
-        assert "Shift to Recovery Mode" in plan_done_text, "Should recommend shifting to Recovery Mode"
-        assert "Stay in Urgent Mode" in plan_done_text, "Should provide option to stay in Urgent Mode"
+        assert any(t in plan_done_text for t in ["Your Urgent Plan is complete.", "Kế hoạch Khẩn của bạn đã hoàn tất.", "Kế hoạch Khẩn của bạn đã hoàn thành."]), "PLAN_COMPLETE state should be rendered"
+        assert any(t in plan_done_text for t in ["Shift to Recovery Mode", "Chuyển sang Chế độ Hồi phục", "Chuyển sang Chế độ Phục hồi"]), "Should recommend shifting to Recovery Mode"
+        assert any(t in plan_done_text for t in ["Stay in Urgent Mode", "Ở lại Chế độ Khẩn"]), "Should provide option to stay in Urgent Mode"
         log("✓ State PLAN_COMPLETE verified.")
 
         # =====================================================================
@@ -612,7 +612,7 @@ def run_tests():
             })()
         """)
 
-        assert "Urgent Mode" in badge_text, f"Navbar badge should say 'Urgent Mode', got: {badge_text}"
+        assert any(m in badge_text for m in ["Urgent Mode", "Chế độ Khẩn"]), f"Navbar badge should say 'Urgent Mode' or 'Chế độ Khẩn', got: {badge_text}"
         assert "Emergency Mode" not in home_text, f"Home page should not contain 'Emergency Mode', found: {home_text}"
         assert "Emergency Plan" not in home_text, f"Home page should not contain 'Emergency Plan', found: {home_text}"
 

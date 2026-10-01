@@ -433,6 +433,7 @@ window.TempoCommunity = (function() {
         renderUrgentPreview,
         renderRecoveryPreview,
         renderPostCardHTML,
-        getAllPosts
+        getAllPosts,
+        getPosts: getAllPosts
     };
 })();

@@ -713,7 +713,7 @@
         // STATE 1: NO HISTORY (0 check-ins)
         if (checkinCount === 0) {
             return `
-                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full">
+                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
                     <div class="space-y-3">
                         <div class="flex items-center space-x-2">
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">RECENTLY</span>
@@ -733,7 +733,7 @@
         // STATE 2: INSUFFICIENT HISTORY (1–2 check-ins)
         if (checkinCount < 3) {
             return `
-                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full">
+                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
                     <div class="space-y-3">
                         <div class="flex items-center space-x-2">
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">RECENTLY</span>
@@ -767,7 +767,7 @@
                 : '';
 
             return `
-                <div class="recovery-card-something-notice bg-gradient-to-br from-[#FFFBF7] to-[#FFF5EC] border-2 border-[#FFD2BA] rounded-3xl p-6 space-y-4 shadow-xs">
+                <div class="recovery-card-something-notice bg-gradient-to-br from-[#FFFBF7] to-[#FFF5EC] border-2 border-[#FFD2BA] rounded-3xl p-6 space-y-4 shadow-xs" data-tempo-ui="recovery-recently">
                     <div class="flex items-center space-x-2">
                         <span class="w-2.5 h-2.5 rounded-full bg-[#B83D08] inline-block animate-pulse"></span>
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#B83D08]">
@@ -822,7 +822,7 @@
         const observations = window.TempoSelfCheckPatterns ? window.TempoSelfCheckPatterns.getRecentlyObservations() : [];
 
         return `
-            <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full">
+            <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
                 <div class="space-y-3">
                     <div class="flex items-center space-x-2">
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">RECENTLY</span>

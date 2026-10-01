@@ -285,7 +285,7 @@ def run_tests():
             const btn = document.getElementById('plan-workspace-back-home');
             return btn ? btn.textContent.trim() : '';
         })()""")
-        assert "Home" in test_b_label, f"Back button must say Home, got: {test_b_label}"
+        assert any(h in test_b_label for h in ["Home", "Trang chủ"]), f"Back button must say Home or Trang chủ, got: {test_b_label}"
 
         # Click ← Home
         eval_js("window.TempoPlanWorkspace.navigateHome()")
@@ -480,14 +480,14 @@ def run_tests():
         test_h = eval_js("""(() => {
             const root = document.getElementById('plan-workspace-root');
             const html = root ? root.innerHTML : '';
-            const hasTodayHeader = html.includes('TODAY');
-            const hasTomorrowHeader = html.includes('TOMORROW');
-            const hasDoThisBadge = html.includes('DO THIS');
-            const hasThenBadge = html.includes('THEN');
-            const hasLaterBadge = html.includes('LATER');
+            const hasTodayHeader = html.includes('TODAY') || html.includes('HÔM NAY') || html.includes('Hôm nay');
+            const hasTomorrowHeader = html.includes('TOMORROW') || html.includes('NGÀY MAI') || html.includes('Ngày mai');
+            const hasDoThisBadge = html.includes('DO THIS') || html.includes('LÀM VIỆC NÀY');
+            const hasThenBadge = html.includes('THEN') || html.includes('SAU ĐÓ');
+            const hasLaterBadge = html.includes('LATER') || html.includes('SAU NỮA');
             
             // Check execution status separate from position badge
-            const hasStatusLabel = html.includes('Not started') || html.includes('In progress');
+            const hasStatusLabel = html.includes('Not started') || html.includes('Chưa bắt đầu') || html.includes('In progress') || html.includes('Đang làm');
 
             return {
                 hasTodayHeader,
@@ -527,7 +527,7 @@ def run_tests():
                 hasScheduledTime: text.includes('09:00') || text.includes('10:45'),
                 hasDeadline: text.includes('11:59') || text.includes('23:59') || text.includes('PM') || text.includes('Sep') || text.includes('Oct'),
                 hasEstimate: text.includes('1h 30m') || text.includes('90m') || text.includes('1.5h'),
-                hasStatus: text.includes('NOT STARTED') || text.includes('Not started') || text.includes('In progress'),
+                hasStatus: text.includes('NOT STARTED') || text.includes('Not started') || text.includes('CHƯA BẮT ĐẦU') || text.includes('Chưa bắt đầu') || text.includes('IN PROGRESS') || text.includes('In progress') || text.includes('ĐANG LÀM') || text.includes('Đang làm'),
                 hasSteps: text.includes('Write outline and thesis') && text.includes('Draft body paragraphs')
             };
         })()""")
@@ -615,7 +615,7 @@ def run_tests():
             const root = document.getElementById('plan-workspace-root');
             const text = root ? root.textContent : '';
             return {
-                hasNotScheduledYet: text.includes('NOT SCHEDULED YET') || text.includes('Not Scheduled Yet'),
+                hasNotScheduledYet: text.includes('NOT SCHEDULED YET') || text.includes('Not Scheduled Yet') || text.includes('CHƯA LÊN LỊCH') || text.includes('Chưa lên lịch'),
                 hasUnarrangedTask: text.includes('Physics Pre-lab Quiz')
             };
         })()""")

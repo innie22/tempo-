@@ -54,6 +54,9 @@ window.TempoPlanWorkspace = (function() {
 
     // Helper: Human deadline
     function formatDeadline(dateStr, timeStr) {
+        if (window.TempoI18n && typeof window.TempoI18n.formatDeadline === 'function') {
+            return window.TempoI18n.formatDeadline(dateStr, timeStr);
+        }
         if (!dateStr) return 'No fixed deadline';
         if (dateStr.includes(' ') && !timeStr) {
             const parts = dateStr.split(' ');
@@ -735,17 +738,17 @@ window.TempoPlanWorkspace = (function() {
                         📋
                     </div>
                     <div class="space-y-1.5">
-                        <h2 class="font-heading text-2xl font-bold text-[#202124]">No active Urgent Plan found</h2>
+                        <h2 class="font-heading text-2xl font-bold text-[#202124]">${window.t ? window.t('workspace.noPlanTitle', {}, 'No active Urgent Plan found') : 'No active Urgent Plan found'}</h2>
                         <p class="text-xs sm:text-sm text-[#6F6B68]">
-                            You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance.
+                            ${window.t ? window.t('workspace.noPlanDesc', {}, "You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance.") : "You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance."}
                         </p>
                     </div>
                     <div class="pt-2 flex items-center justify-center gap-3">
                         <button onclick="window.TempoPlanWorkspace.navigateHome()" class="px-5 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                            ← Home
+                            ← ${window.t ? window.t('workspace.home', {}, 'Home') : 'Home'}
                         </button>
                         <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('entry');" class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-md transition">
-                            Create an Urgent Plan →
+                            ${window.t ? window.t('workspace.createUrgentPlan', {}, 'Create an Urgent Plan →') : 'Create an Urgent Plan →'}
                         </button>
                     </div>
                 </div>
@@ -781,7 +784,13 @@ window.TempoPlanWorkspace = (function() {
             }
         });
 
-        const durationSummary = `~${formatDuration(totalFocusedMinutes)} focused work${unestimatedTasksCount > 0 ? ` (+${unestimatedTasksCount} unestimated)` : ''}`;
+        const unestimatedText = unestimatedTasksCount > 0 ? (window.t ? window.t('workspace.unestimatedCount', { count: unestimatedTasksCount }, ` (+${unestimatedTasksCount} unestimated)`) : ` (+${unestimatedTasksCount} unestimated)`) : '';
+        const durationSummary = window.t
+            ? window.t('workspace.durationSummary', {
+                duration: formatDuration(totalFocusedMinutes),
+                unestimated: unestimatedText
+              }, `~${formatDuration(totalFocusedMinutes)} focused work${unestimatedText}`)
+            : `~${formatDuration(totalFocusedMinutes)} focused work${unestimatedText}`;
 
         // Group arranged tasks by date
         const todayStr = getTodayISO();
@@ -794,8 +803,8 @@ window.TempoPlanWorkspace = (function() {
             item.globalIndex = globalIdx;
             const dDate = item.dayDate || 'unscheduled';
             let dLabel = item.dayLabel || dDate;
-            if (dDate === todayStr) dLabel = 'TODAY';
-            else if (dDate === tomorrowStr) dLabel = 'TOMORROW';
+            if (dDate === todayStr) dLabel = window.t ? window.t('common.today', {}, 'TODAY').toUpperCase() : 'TODAY';
+            else if (dDate === tomorrowStr) dLabel = window.t ? window.t('common.tomorrow', {}, 'TOMORROW').toUpperCase() : 'TOMORROW';
 
             if (!daysMap[dDate]) {
                 daysMap[dDate] = { label: dLabel, date: dDate, items: [] };
@@ -822,7 +831,7 @@ window.TempoPlanWorkspace = (function() {
         }
 
         root.innerHTML = `
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" data-tempo-ui="plan-workspace">
                 <!-- TOP HEADER -->
                 <div class="space-y-4 pb-4 border-b border-[#EAE4DF]">
                     <div class="flex items-center justify-between">
@@ -830,24 +839,24 @@ window.TempoPlanWorkspace = (function() {
                         <button id="plan-workspace-back-home"
                                 onclick="window.TempoPlanWorkspace.navigateHome()" 
                                 class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] flex items-center space-x-1.5 transition py-1 group"
-                                title="Return to Home Dashboard">
+                                title="${window.t ? window.t('workspace.returnToHome', {}, 'Return to Home Dashboard') : 'Return to Home Dashboard'}">
                             <span class="group-hover:-translate-x-0.5 transition-transform">←</span>
-                            <span>Home</span>
+                            <span>${window.t ? window.t('workspace.home', {}, 'Home') : 'Home'}</span>
                         </button>
                     </div>
 
                     <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
                         <div class="space-y-1">
-                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#FF6B2C] block">YOUR URGENT PLAN</span>
+                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#FF6B2C] block">${window.t ? window.t('modes.urgent.planForTodayUpper', {}, 'YOUR URGENT PLAN') : 'YOUR URGENT PLAN'}</span>
                             <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                                Here's what you're working through right now.
+                                ${window.t ? window.t('workspace.headerSubtitle', {}, "Here's what you're working through right now.") : "Here's what you're working through right now."}
                             </h1>
                             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6F6B68] font-medium pt-1">
-                                <span>${totalTasksCount} task${totalTasksCount === 1 ? '' : 's'}</span>
+                                <span>${totalTasksCount} ${window.t ? window.t('workspace.tasksCount', { count: totalTasksCount }, totalTasksCount === 1 ? 'task' : 'tasks') : (totalTasksCount === 1 ? '1 task' : totalTasksCount + ' tasks')}</span>
                                 <span>•</span>
                                 <span>${durationSummary}</span>
                                 <span>•</span>
-                                <span>${completedTasksCount} completed</span>
+                                <span>${completedTasksCount} ${window.t ? window.t('workspace.completedCount', { count: completedTasksCount }, 'completed') : 'completed'}</span>
                             </div>
                         </div>
 
@@ -857,17 +866,17 @@ window.TempoPlanWorkspace = (function() {
                             <button id="plan-workspace-start-focus"
                                     onclick="window.TempoPlanWorkspace.startGlobalFocus()"
                                     class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition">
-                                <span>▶ Start Focus Now</span>
+                                <span>▶ ${window.t ? window.t('workspace.startFocusNow', {}, 'Start Focus Now') : 'Start Focus Now'}</span>
                             </button>
                             <!-- Secondary: Add Task -->
                             <button onclick="window.TempoPlanWorkspace.openAddTaskModal()"
                                     class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                                + Add task
+                                ${window.t ? window.t('workspace.addTask', {}, '+ Add task') : '+ Add task'}
                             </button>
                             <!-- Secondary: Adjust Availability -->
                             <button onclick="window.TempoPlanWorkspace.openAdjustAvailabilityModal()"
                                     class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                                Adjust availability
+                                ${window.t ? window.t('workspace.adjustAvailability', {}, 'Adjust availability') : 'Adjust availability'}
                             </button>
                         </div>
                     </div>
@@ -889,7 +898,7 @@ window.TempoPlanWorkspace = (function() {
                                             <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-[#6F6B68]">
                                                 ${escapeHTML(group.label)} · ${escapeHTML(group.date)}
                                             </h3>
-                                            <span class="text-[11px] font-semibold text-emerald-700">All planned work done ✓</span>
+                                            <span class="text-[11px] font-semibold text-emerald-700">${window.t ? window.t('workspace.allPlannedWorkDone', {}, 'All planned work done ✓') : 'All planned work done ✓'}</span>
                                         </div>
                                     </div>
                                 `;
@@ -906,7 +915,7 @@ window.TempoPlanWorkspace = (function() {
                                             </h3>
                                         </div>
                                         <span class="text-[11px] font-medium text-[#6F6B68]">
-                                            ${activeItems.length} active task${activeItems.length === 1 ? '' : 's'}
+                                            ${activeItems.length} ${window.t ? window.t('workspace.activeTasksCount', { count: activeItems.length }, activeItems.length === 1 ? 'active task' : 'active tasks') : (activeItems.length === 1 ? '1 active task' : activeItems.length + ' active tasks')}
                                         </span>
                                     </div>
 
@@ -915,8 +924,14 @@ window.TempoPlanWorkspace = (function() {
                                         ${activeItems.map((item, idx) => {
                                             const task = item.task;
                                             const isSelected = selectedTaskId === task.id;
-                                            const badgeLabel = item.planPositionBadge || (item.globalIndex === 0 ? 'DO THIS' : (item.globalIndex === 1 ? 'THEN' : 'LATER'));
-                                            const badgeClass = badgeLabel === 'DO THIS' ? 'bg-[#FFE9DC] text-[#B83D08]' : (badgeLabel === 'THEN' ? 'bg-orange-100 text-[#B83D08]' : 'bg-stone-100 text-stone-700');
+                                            const rawBadge = item.planPositionBadge || (item.globalIndex === 0 ? 'DO THIS' : (item.globalIndex === 1 ? 'THEN' : 'LATER'));
+                                            let badgeLabel = rawBadge;
+                                            if (window.t) {
+                                                if (rawBadge === 'DO THIS') badgeLabel = window.t('workspace.doThis', {}, 'DO THIS');
+                                                else if (rawBadge === 'THEN') badgeLabel = window.t('workspace.then', {}, 'THEN');
+                                                else if (rawBadge === 'LATER') badgeLabel = window.t('workspace.later', {}, 'LATER');
+                                            }
+                                            const badgeClass = rawBadge === 'DO THIS' ? 'bg-[#FFE9DC] text-[#B83D08]' : (rawBadge === 'THEN' ? 'bg-orange-100 text-[#B83D08]' : 'bg-stone-100 text-stone-700');
                                             const subtaskCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
                                             const completedSubtasks = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
 
@@ -951,7 +966,7 @@ window.TempoPlanWorkspace = (function() {
                                                                 </span>
                                                             ` : `
                                                                 <span class="text-xs font-medium text-[#6F6B68]">
-                                                                    ~${task.durationLabel || 'Flexible'}
+                                                                    ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}
                                                                 </span>
                                                             `}
                                                         </div>
@@ -967,12 +982,12 @@ window.TempoPlanWorkspace = (function() {
 
                                                         <!-- Meta Info Line -->
                                                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6F6B68]">
-                                                            <span>Estimate: ~${task.durationLabel || 'Flexible'}</span>
+                                                            <span>${window.t ? window.t('workspace.estimate', {}, 'Estimate:') : 'Estimate:'} ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}</span>
                                                             <span>•</span>
-                                                            <span>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
+                                                            <span>${window.t ? window.t('workspace.due', {}, 'Due:') : 'Due:'} ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
                                                             ${subtaskCount > 0 ? `
                                                                 <span>•</span>
-                                                                <span>${completedSubtasks}/${subtaskCount} action steps</span>
+                                                                <span>${completedSubtasks}/${subtaskCount} ${window.t ? window.t('modes.urgent.actionSteps', {}, 'action steps') : 'action steps'}</span>
                                                             ` : ''}
                                                         </div>
                                                     </div>
@@ -981,7 +996,7 @@ window.TempoPlanWorkspace = (function() {
                                                     ${item.hasDeadlineConflict ? `
                                                         <div class="mt-2.5 p-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center space-x-1.5">
                                                             <span>⚠️</span>
-                                                            <span><strong>May finish after deadline</strong></span>
+                                                            <span><strong>${window.t ? window.t('workspace.mayFinishAfterDeadline', {}, 'May finish after deadline') : 'May finish after deadline'}</strong></span>
                                                         </div>
                                                     ` : ''}
 
@@ -989,7 +1004,7 @@ window.TempoPlanWorkspace = (function() {
                                                     <div class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                                                         <div class="flex items-center space-x-2">
                                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${task.completed ? 'bg-emerald-100 text-emerald-800' : (task.isInProgress ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600')}">
-                                                                ${task.completed ? '✓ Completed' : (task.isInProgress ? '● In progress' : 'Not started')}
+                                                                ${task.completed ? ('✓ ' + (window.t ? window.t('workspace.completed', {}, 'Completed') : 'Completed')) : (task.isInProgress ? ('● ' + (window.t ? window.t('workspace.inProgress', {}, 'In progress') : 'In progress')) : (window.t ? window.t('workspace.notStarted', {}, 'Not started') : 'Not started'))}
                                                             </span>
                                                         </div>
 
@@ -997,7 +1012,7 @@ window.TempoPlanWorkspace = (function() {
                                                             <button type="button" 
                                                                     onclick="event.stopPropagation(); window.TempoPlanWorkspace.startTaskFocus('${task.id}')"
                                                                     class="btn-primary px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-xs inline-flex items-center space-x-1 transition">
-                                                                <span>${task.isInProgress ? 'Continue Focus' : 'Start'}</span>
+                                                                <span>${task.isInProgress ? (window.t ? window.t('workspace.continueFocus', {}, 'Continue Focus') : 'Continue Focus') : (window.t ? window.t('workspace.start', {}, 'Start') : 'Start')}</span>
                                                                 <span>→</span>
                                                             </button>
                                                         </div>
@@ -1010,7 +1025,7 @@ window.TempoPlanWorkspace = (function() {
                                     <!-- Add another task button -->
                                     <button onclick="window.TempoPlanWorkspace.openAddTaskModal()"
                                             class="w-full py-2.5 rounded-xl border border-dashed border-stone-300 hover:border-[#FF6B2C] text-xs font-semibold text-stone-600 hover:text-[#FF6B2C] bg-[#FFFDFB] hover:bg-white transition flex items-center justify-center space-x-1">
-                                        <span>+ Add another task to this plan</span>
+                                        <span>${window.t ? window.t('workspace.addAnotherTask', {}, '+ Add another task to this plan') : '+ Add another task to this plan'}</span>
                                     </button>
                                 </div>
                             `;
@@ -1020,16 +1035,16 @@ window.TempoPlanWorkspace = (function() {
                         <div class="space-y-4 pt-4 border-t border-gray-200">
                             <div class="flex items-center justify-between pb-1">
                                 <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-[#6F6B68]">
-                                    NOT SCHEDULED YET
+                                    ${window.t ? window.t('workspace.notScheduledYet', {}, 'NOT SCHEDULED YET') : 'NOT SCHEDULED YET'}
                                 </h3>
                                 <span class="text-[11px] font-medium text-[#6F6B68]">
-                                    ${unarrangedTasks.filter(t => !t.completed).length} unscheduled
+                                    ${unarrangedTasks.filter(t => !t.completed).length} ${window.t ? window.t('workspace.unscheduled', {}, 'unscheduled') : 'unscheduled'}
                                 </span>
                             </div>
 
                             ${unarrangedTasks.filter(t => !t.completed).length === 0 ? `
                                 <div class="p-4 bg-stone-50 border border-dashed border-[#EAE4DF] rounded-2xl text-center text-xs text-[#8E8A85]">
-                                    All active tasks have been placed into your schedule.
+                                    ${window.t ? window.t('workspace.allActiveScheduled', {}, 'All active tasks have been placed into your schedule.') : 'All active tasks have been placed into your schedule.'}
                                 </div>
                             ` : `
                                 <div class="space-y-3">
@@ -1039,15 +1054,15 @@ window.TempoPlanWorkspace = (function() {
                                             <div class="min-w-0 pr-2">
                                                 <h4 class="font-bold text-sm text-[#202124] truncate">${escapeHTML(task.name)}</h4>
                                                 <div class="flex items-center space-x-2 text-[11px] text-[#6F6B68] pt-0.5">
-                                                    <span>Estimate: ~${task.durationLabel || 'Flexible'}</span>
+                                                    <span>${window.t ? window.t('workspace.estimate', {}, 'Estimate:') : 'Estimate:'} ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}</span>
                                                     <span>•</span>
-                                                    <span>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
+                                                    <span>${window.t ? window.t('workspace.due', {}, 'Due:') : 'Due:'} ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
                                                 </div>
                                             </div>
                                             <button type="button" 
                                                     onclick="event.stopPropagation(); window.TempoPlanWorkspace.openRescheduleModal('${task.id}')"
                                                     class="btn-primary px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-xs shrink-0 transition">
-                                                Schedule task →
+                                                ${window.t ? window.t('workspace.scheduleTask', {}, 'Schedule task →') : 'Schedule task →'}
                                             </button>
                                         </div>
                                     `).join('')}
@@ -1062,7 +1077,7 @@ window.TempoPlanWorkspace = (function() {
                                     <summary class="flex items-center justify-between cursor-pointer font-heading text-xs font-bold text-[#6F6B68] uppercase tracking-wider select-none">
                                         <span class="flex items-center space-x-2">
                                             <span>✓</span>
-                                            <span>COMPLETED (${allCompleted.length})</span>
+                                            <span>${window.t ? window.t('common.done', {}, 'COMPLETED') : 'COMPLETED'} (${allCompleted.length})</span>
                                         </span>
                                         <span class="text-xs group-open:rotate-180 transition-transform">▼</span>
                                     </summary>
@@ -1076,7 +1091,7 @@ window.TempoPlanWorkspace = (function() {
                                                 <button type="button" 
                                                         onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
                                                         class="text-[11px] text-stone-500 hover:text-[#202124] underline">
-                                                    Undo
+                                                    ${window.t ? window.t('workspace.undo', {}, 'Undo') : 'Undo'}
                                                 </button>
                                             </div>
                                         `).join('')}
@@ -1088,13 +1103,13 @@ window.TempoPlanWorkspace = (function() {
 
                     <!-- TASK DETAIL DRAWER COLUMN (Desktop side drawer / Mobile modal) -->
                     ${isDrawerOpen && selectedTask ? `
-                        <div id="plan-workspace-drawer" class="lg:col-span-5 fixed inset-0 z-50 bg-black/40 lg:bg-transparent lg:static lg:z-auto flex justify-end">
+                        <div id="plan-workspace-drawer" data-tempo-ui="plan-drawer" class="lg:col-span-5 fixed inset-0 z-50 bg-black/40 lg:bg-transparent lg:static lg:z-auto flex justify-end">
                             <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 space-y-5 shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto lg:sticky lg:top-24">
                                 <!-- Drawer Header -->
                                 <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                                     <div class="flex items-center space-x-2">
                                         <span class="text-sm font-bold tracking-widest text-gray-400">⋮⋮</span>
-                                        <h3 class="font-heading text-base font-bold text-[#202124]">Edit Task</h3>
+                                        <h3 class="font-heading text-base font-bold text-[#202124]">${window.t ? window.t('workspace.editTask', {}, 'Edit Task') : 'Edit Task'}</h3>
                                     </div>
                                     <button onclick="window.TempoPlanWorkspace.closeDrawer()" 
                                             class="text-gray-400 hover:text-gray-600 p-1 text-sm font-bold"
@@ -1119,7 +1134,7 @@ window.TempoPlanWorkspace = (function() {
                                     </div>
                                     <div class="flex items-center space-x-2 pl-9 text-xs">
                                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${selectedTask.completed ? 'bg-emerald-100 text-emerald-800' : (selectedTask.isInProgress ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-700')}">
-                                            ${selectedTask.completed ? 'COMPLETED' : (selectedTask.isInProgress ? 'IN PROGRESS' : 'NOT STARTED')}
+                                            ${selectedTask.completed ? (window.t ? window.t('workspace.completed', {}, 'COMPLETED') : 'COMPLETED') : (selectedTask.isInProgress ? (window.t ? window.t('workspace.inProgress', {}, 'IN PROGRESS') : 'IN PROGRESS') : (window.t ? window.t('workspace.notStarted', {}, 'NOT STARTED') : 'NOT STARTED'))}
                                         </span>
                                     </div>
                                 </div>
@@ -1127,26 +1142,26 @@ window.TempoPlanWorkspace = (function() {
                                 <!-- SCHEDULED TIME -->
                                 <div class="p-3.5 bg-stone-50 rounded-2xl space-y-1.5 border border-stone-100 text-xs">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">SCHEDULED</span>
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.scheduledUpper', {}, 'SCHEDULED') : 'SCHEDULED'}</span>
                                         <button onclick="window.TempoPlanWorkspace.openRescheduleModal('${selectedTask.id}')"
                                                 class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            Reschedule
+                                            ${window.t ? window.t('workspace.reschedule', {}, 'Reschedule') : 'Reschedule'}
                                         </button>
                                     </div>
                                     <p class="font-bold text-stone-800">
                                         ${selectedPlanItem && (selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime) && (selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime) ? 
                                             `${selectedPlanItem.dayLabel || selectedPlanItem.dayDate} · ${selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime} – ${selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime}` : 
-                                            'Not scheduled yet'}
+                                            (window.t ? window.t('workspace.notScheduledYetDesc', {}, 'Not scheduled yet') : 'Not scheduled yet')}
                                     </p>
                                 </div>
 
                                 <!-- DEADLINE (INLINE EDIT) -->
                                 <div class="p-3.5 bg-stone-50 rounded-2xl space-y-2 border border-stone-100 text-xs">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">DEADLINE</span>
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.deadlineUpper', {}, 'DEADLINE') : 'DEADLINE'}</span>
                                         <button onclick="window.TempoPlanWorkspace.toggleDeadlineEdit()"
                                                 class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            ${isEditingDeadline ? 'Cancel' : 'Edit'}
+                                            ${isEditingDeadline ? (window.t ? window.t('common.cancel', {}, 'Cancel') : 'Cancel') : (window.t ? window.t('common.edit', {}, 'Edit') : 'Edit')}
                                         </button>
                                     </div>
 
@@ -1171,12 +1186,12 @@ window.TempoPlanWorkspace = (function() {
                                             <div class="flex items-center space-x-2">
                                                 <input id="pw-edit-no-deadline" type="checkbox" ${!selectedTask.hasDeadline ? 'checked' : ''}
                                                        class="rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                                                <label for="pw-edit-no-deadline" class="text-xs text-stone-700">No fixed deadline</label>
+                                                <label for="pw-edit-no-deadline" class="text-xs text-stone-700">${window.t ? window.t('workspace.noFixedDeadline', {}, 'No fixed deadline') : 'No fixed deadline'}</label>
                                             </div>
                                             <div class="flex justify-end space-x-2 pt-1">
                                                 <button onclick="window.TempoPlanWorkspace.saveDeadlineEdit('${selectedTask.id}')"
                                                         class="btn-primary px-3 py-1 rounded-lg text-xs font-bold">
-                                                    Save deadline
+                                                    ${window.t ? window.t('workspace.saveDeadline', {}, 'Save deadline') : 'Save deadline'}
                                                 </button>
                                             </div>
                                         </div>
@@ -1186,14 +1201,14 @@ window.TempoPlanWorkspace = (function() {
                                 <!-- ESTIMATE -->
                                 <div class="p-3.5 bg-stone-50 rounded-2xl space-y-1.5 border border-stone-100 text-xs">
                                     <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">ESTIMATE</span>
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.estimateUpper', {}, 'ESTIMATE') : 'ESTIMATE'}</span>
                                         <button onclick="window.TempoPlanWorkspace.openEstimateEdit('${selectedTask.id}')"
                                                 class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            Edit
+                                            ${window.t ? window.t('common.edit', {}, 'Edit') : 'Edit'}
                                         </button>
                                     </div>
                                     <p class="font-bold text-stone-800">
-                                        ~${selectedTask.durationLabel || 'Flexible focused work'}
+                                        ~${selectedTask.durationLabel || (window.t ? window.t('workspace.flexibleFocusedWork', {}, 'Flexible focused work') : 'Flexible focused work')}
                                     </p>
                                 </div>
 
@@ -1201,7 +1216,7 @@ window.TempoPlanWorkspace = (function() {
                                 <div class="space-y-2 pt-2">
                                     <div class="flex items-center justify-between">
                                         <span class="text-xs font-bold text-[#202124] uppercase tracking-wider">
-                                            ACTION STEPS (${selectedTask.subtasks ? selectedTask.subtasks.length : 0})
+                                            ${window.t ? window.t('workspace.actionStepsUpper', {}, 'ACTION STEPS') : 'ACTION STEPS'} (${selectedTask.subtasks ? selectedTask.subtasks.length : 0})
                                         </span>
                                     </div>
 
@@ -1232,12 +1247,12 @@ window.TempoPlanWorkspace = (function() {
 
                                     <!-- Add Step Input -->
                                     <div class="flex items-center gap-2 pt-1">
-                                        <input id="pw-new-subtask-title" type="text" placeholder="Add next step..."
+                                        <input id="pw-new-subtask-title" type="text" placeholder="${window.t ? window.t('workspace.addNextStep', {}, 'Add next step...') : 'Add next step...'}"
                                                onkeydown="if(event.key === 'Enter') window.TempoPlanWorkspace.addSubtask('${selectedTask.id}')"
                                                class="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
                                         <button onclick="window.TempoPlanWorkspace.addSubtask('${selectedTask.id}')"
                                                 class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold shrink-0">
-                                            + Add
+                                            ${window.t ? window.t('workspace.add', {}, '+ Add') : '+ Add'}
                                         </button>
                                     </div>
                                 </div>
@@ -1246,12 +1261,12 @@ window.TempoPlanWorkspace = (function() {
                                 <div class="pt-4 border-t border-gray-100 flex flex-col gap-2.5">
                                     <button onclick="window.TempoPlanWorkspace.startTaskFocus('${selectedTask.id}')"
                                             class="btn-primary w-full py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
-                                        <span>▶ Start Focus on this task</span>
+                                        <span>▶ ${window.t ? window.t('workspace.startFocusOnTask', {}, 'Start Focus on this task') : 'Start Focus on this task'}</span>
                                     </button>
 
                                     <button onclick="window.TempoPlanWorkspace.removeTask('${selectedTask.id}')"
                                             class="w-full py-2 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition">
-                                        Remove from plan
+                                        ${window.t ? window.t('workspace.removeFromPlan', {}, 'Remove from plan') : 'Remove from plan'}
                                     </button>
                                 </div>
                             </div>
@@ -1281,19 +1296,19 @@ window.TempoPlanWorkspace = (function() {
                 <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
                     <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full">
                         <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                            <h3 class="font-heading text-lg font-bold text-[#202124]">Add a task</h3>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">${window.t ? window.t('workspace.addTaskModalTitle', {}, 'Add a task') : 'Add a task'}</h3>
                             <button onclick="window.TempoPlanWorkspace.closeAddTaskModal()" class="text-gray-400 hover:text-gray-600 text-sm">✕</button>
                         </div>
 
                         <div class="space-y-4 text-xs">
                             <div class="space-y-1">
-                                <label class="block font-bold text-gray-700">Task Name</label>
-                                <input id="pw-add-task-name" type="text" placeholder="e.g. Research Literature Review"
+                                <label class="block font-bold text-gray-700">${window.t ? window.t('workspace.taskName', {}, 'Task Name') : 'Task Name'}</label>
+                                <input id="pw-add-task-name" type="text" placeholder="${window.t ? window.t('workspace.taskNamePlaceholder', {}, 'e.g. Research Literature Review') : 'e.g. Research Literature Review'}"
                                        class="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none">
                             </div>
 
                             <div class="space-y-1.5">
-                                <label class="block font-bold text-gray-700">Deadline</label>
+                                <label class="block font-bold text-gray-700">${window.t ? window.t('workspace.deadlineUpper', {}, 'Deadline') : 'Deadline'}</label>
                                 <div class="grid grid-cols-2 gap-2">
                                     <input id="pw-add-task-date" type="date" value="${tomorrowStr}"
                                            class="px-2.5 py-1.5 border border-gray-300 rounded-xl text-xs">
@@ -1304,25 +1319,25 @@ window.TempoPlanWorkspace = (function() {
                                     <input id="pw-add-task-no-deadline" type="checkbox"
                                            onchange="document.getElementById('pw-add-task-date').disabled = this.checked; document.getElementById('pw-add-task-time').disabled = this.checked;"
                                            class="rounded text-[#FF6B2C]">
-                                    <label for="pw-add-task-no-deadline" class="text-stone-600">No fixed deadline</label>
+                                    <label for="pw-add-task-no-deadline" class="text-stone-600">${window.t ? window.t('workspace.noFixedDeadline', {}, 'No fixed deadline') : 'No fixed deadline'}</label>
                                 </div>
                             </div>
 
                             <div class="space-y-1.5">
-                                <label class="block font-bold text-gray-700">Focused-work Estimate</label>
+                                <label class="block font-bold text-gray-700">${window.t ? window.t('workspace.focusedEstimate', {}, 'Focused-work Estimate') : 'Focused-work Estimate'}</label>
                                 <div class="flex items-center space-x-2">
                                     <input id="pw-add-task-dur-val" type="number" min="0.5" step="0.5" value="1.5"
                                            class="w-20 px-3 py-1.5 border border-gray-300 rounded-xl text-center font-bold">
                                     <select id="pw-add-task-dur-unit" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-xl bg-white">
-                                        <option value="hours" selected>hours</option>
-                                        <option value="minutes">minutes</option>
+                                        <option value="hours" selected>${window.t ? window.t('common.hours', {}, 'hours') : 'hours'}</option>
+                                        <option value="minutes">${window.t ? window.t('common.minutes', {}, 'minutes') : 'minutes'}</option>
                                     </select>
                                 </div>
                                 <div class="flex items-center space-x-2 pt-1">
                                     <input id="pw-add-task-dur-not-sure" type="checkbox"
                                            onchange="document.getElementById('pw-add-task-dur-val').disabled = this.checked;"
                                            class="rounded text-[#FF6B2C]">
-                                    <label for="pw-add-task-dur-not-sure" class="text-stone-600">Not sure yet</label>
+                                    <label for="pw-add-task-dur-not-sure" class="text-stone-600">${window.t ? window.t('workspace.notSureYet', {}, 'Not sure yet') : 'Not sure yet'}</label>
                                 </div>
                             </div>
                         </div>
@@ -1330,11 +1345,11 @@ window.TempoPlanWorkspace = (function() {
                         <div class="pt-3 border-t border-gray-100 flex items-center justify-end space-x-2">
                             <button onclick="window.TempoPlanWorkspace.closeAddTaskModal()" 
                                     class="px-4 py-2 border border-gray-200 text-xs font-semibold text-gray-600 rounded-xl hover:bg-stone-50">
-                                Cancel
+                                ${window.t ? window.t('common.cancel', {}, 'Cancel') : 'Cancel'}
                             </button>
                             <button onclick="window.TempoPlanWorkspace.submitAddTask()"
                                     class="btn-primary px-5 py-2 rounded-xl font-bold text-xs shadow-sm">
-                                Add task
+                                ${window.t ? window.t('workspace.addTaskBtn', {}, 'Add task') : 'Add task'}
                             </button>
                         </div>
                     </div>
@@ -1350,18 +1365,18 @@ window.TempoPlanWorkspace = (function() {
                             ✓
                         </div>
                         <div class="space-y-1">
-                            <h3 class="font-heading text-lg font-bold text-[#202124]">Task added</h3>
-                            <p class="text-xs text-[#6F6B68]">"${escapeHTML(pendingAddedTask.name)}" is ready.</p>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">${window.t ? window.t('workspace.taskAdded', {}, 'Task added') : 'Task added'}</h3>
+                            <p class="text-xs text-[#6F6B68]">${window.t ? window.t('workspace.taskReadyDesc', { name: escapeHTML(pendingAddedTask.name) }, '"' + escapeHTML(pendingAddedTask.name) + '" is ready.') : ('"' + escapeHTML(pendingAddedTask.name) + '" is ready.')}</p>
                         </div>
 
                         <div class="pt-2 space-y-2">
                             <button onclick="window.TempoPlanWorkspace.handleFitTaskChoice('fit')"
                                     class="btn-primary w-full py-3 rounded-xl font-bold text-xs shadow-md transition">
-                                Fit it into my plan
+                                ${window.t ? window.t('workspace.fitIntoPlan', {}, 'Fit it into my plan') : 'Fit it into my plan'}
                             </button>
                             <button onclick="window.TempoPlanWorkspace.handleFitTaskChoice('unscheduled')"
                                     class="w-full py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
-                                Leave it unscheduled for now
+                                ${window.t ? window.t('workspace.leaveUnscheduled', {}, 'Leave it unscheduled for now') : 'Leave it unscheduled for now'}
                             </button>
                         </div>
                     </div>
@@ -1385,14 +1400,14 @@ window.TempoPlanWorkspace = (function() {
                     <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full">
                         <div class="flex items-center justify-between pb-2 border-b border-gray-100">
                             <div>
-                                <h3 class="font-heading text-lg font-bold text-[#202124]">Reschedule task</h3>
+                                <h3 class="font-heading text-lg font-bold text-[#202124]">${window.t ? window.t('workspace.rescheduleTaskModalTitle', {}, 'Reschedule task') : 'Reschedule task'}</h3>
                                 <p class="text-xs text-[#6F6B68] truncate max-w-xs">${escapeHTML(task.name)}</p>
                             </div>
                             <button onclick="window.TempoPlanWorkspace.closeRescheduleModal()" class="text-gray-400 hover:text-gray-600 text-sm">✕</button>
                         </div>
 
                         <div class="space-y-3 text-xs">
-                            <span class="block font-bold text-gray-700 uppercase text-[10px] tracking-wider">YOUR AVAILABLE TIME</span>
+                            <span class="block font-bold text-gray-700 uppercase text-[10px] tracking-wider">${window.t ? window.t('workspace.yourAvailableTime', {}, 'YOUR AVAILABLE TIME') : 'YOUR AVAILABLE TIME'}</span>
 
                             <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 ${days.map(d => `
@@ -1404,7 +1419,7 @@ window.TempoPlanWorkspace = (function() {
                                         <div class="flex-1">
                                             <span class="font-bold text-[#202124] block">${escapeHTML(d.label || d.date)}</span>
                                             <span class="text-[11px] text-[#6F6B68]">
-                                                ${d.blocks && d.blocks.length > 0 ? d.blocks.map(b => `${formatTime12H(b.start)} – ${formatTime12H(b.end)}`).join(', ') : 'No time blocks defined'}
+                                                ${d.blocks && d.blocks.length > 0 ? d.blocks.map(b => `${formatTime12H(b.start)} – ${formatTime12H(b.end)}`).join(', ') : (window.t ? window.t('workspace.noTimeBlocks', {}, 'No time blocks defined') : 'No time blocks defined')}
                                             </span>
                                         </div>
                                     </label>
@@ -1415,7 +1430,7 @@ window.TempoPlanWorkspace = (function() {
                             <div class="pt-2 border-t border-gray-100">
                                 <button onclick="window.TempoPlanWorkspace.scheduleTaskAsUnarranged('${task.id}')"
                                         class="w-full py-2.5 rounded-xl border border-dashed border-stone-300 hover:border-[#FF6B2C] bg-stone-50 hover:bg-white text-xs font-semibold text-stone-700 text-center transition">
-                                    I'll figure it out later (Move to Unscheduled)
+                                    ${window.t ? window.t('workspace.figureOutLater', {}, "I'll figure it out later (Move to Unscheduled)") : "I'll figure it out later (Move to Unscheduled)"}
                                 </button>
                             </div>
                         </div>
@@ -1423,11 +1438,11 @@ window.TempoPlanWorkspace = (function() {
                         <div class="pt-3 border-t border-gray-100 flex items-center justify-end space-x-2">
                             <button onclick="window.TempoPlanWorkspace.closeRescheduleModal()"
                                     class="px-4 py-2 border border-gray-200 text-xs font-semibold text-gray-600 rounded-xl hover:bg-stone-50">
-                                Cancel
+                                ${window.t ? window.t('common.cancel', {}, 'Cancel') : 'Cancel'}
                             </button>
                             <button onclick="window.TempoPlanWorkspace.executeReschedule('${task.id}', window.TempoPlanWorkspace.getRescheduleSelectedWindow())"
                                     class="btn-primary px-5 py-2 rounded-xl font-bold text-xs shadow-sm">
-                                Schedule
+                                ${window.t ? window.t('workspace.schedule', {}, 'Schedule') : 'Schedule'}
                             </button>
                         </div>
                     </div>
@@ -1442,7 +1457,7 @@ window.TempoPlanWorkspace = (function() {
                 <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
                     <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
                         <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                            <h3 class="font-heading text-lg font-bold text-[#202124]">Your available time</h3>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">${window.t ? window.t('workspace.yourAvailableTimeTitle', {}, 'Your available time') : 'Your available time'}</h3>
                             <button onclick="window.TempoPlanWorkspace.closeAdjustAvailabilityModal()" class="text-gray-400 hover:text-gray-600 text-sm">✕</button>
                         </div>
 
@@ -1468,27 +1483,27 @@ window.TempoPlanWorkspace = (function() {
 
                             <!-- Add availability block form -->
                             <div class="p-3.5 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl space-y-2">
-                                <span class="font-bold text-[#B83D08] block text-[11px] uppercase tracking-wider">+ Add Available Time Window</span>
+                                <span class="font-bold text-[#B83D08] block text-[11px] uppercase tracking-wider">${window.t ? window.t('workspace.addTimeWindow', {}, '+ Add Available Time Window') : '+ Add Available Time Window'}</span>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                     <div>
-                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">Date</label>
+                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${window.t ? window.t('common.date', {}, 'Date') : 'Date'}</label>
                                         <input id="pw-avail-add-date" type="date" value="${getTodayISO()}"
                                                class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">From</label>
+                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${window.t ? window.t('common.from', {}, 'From') : 'From'}</label>
                                         <input id="pw-avail-add-start" type="time" value="18:00"
                                                class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">To</label>
+                                        <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${window.t ? window.t('common.to', {}, 'To') : 'To'}</label>
                                         <input id="pw-avail-add-end" type="time" value="22:00"
                                                class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                     </div>
                                 </div>
                                 <button onclick="window.TempoPlanWorkspace.addAvailabilityBlockInline()"
                                         class="btn-primary w-full py-1.5 rounded-lg text-xs font-bold mt-1">
-                                    Add window
+                                    ${window.t ? window.t('workspace.addWindowBtn', {}, 'Add window') : 'Add window'}
                                 </button>
                             </div>
                         </div>
@@ -1496,7 +1511,7 @@ window.TempoPlanWorkspace = (function() {
                         <div class="pt-3 border-t border-gray-100 flex justify-end">
                             <button onclick="window.TempoPlanWorkspace.closeAdjustAvailabilityModal()"
                                     class="btn-primary px-6 py-2 rounded-xl font-bold text-xs shadow-sm">
-                                Done
+                                ${window.t ? window.t('common.done', {}, 'Done') : 'Done'}
                             </button>
                         </div>
                     </div>
@@ -1620,6 +1635,15 @@ window.TempoPlanWorkspace = (function() {
         persistPlan(plan);
         render();
         return newTask;
+    }
+
+    if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+        window.TempoI18n.onLanguageChange(() => {
+            const wsScreen = document.getElementById('screen-plan-workspace');
+            if (wsScreen && !wsScreen.classList.contains('hidden')) {
+                render();
+            }
+        });
     }
 
     return {

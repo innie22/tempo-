@@ -187,7 +187,8 @@
 
     function isNoticeDismissed(weekStart) {
         try {
-            return localStorage.getItem(getDismissKey(weekStart)) === 'true';
+            const wk = (typeof weekStart === 'string' && weekStart) ? weekStart : (getLatestEligibleWeek() ? getLatestEligibleWeek().start : 'current_week');
+            return localStorage.getItem(getDismissKey(wk)) === 'true';
         } catch (e) {
             return false;
         }
@@ -195,7 +196,8 @@
 
     function snoozeOrDismissNotice(weekStart) {
         try {
-            localStorage.setItem(getDismissKey(weekStart), 'true');
+            const wk = (typeof weekStart === 'string' && weekStart) ? weekStart : (getLatestEligibleWeek() ? getLatestEligibleWeek().start : 'current_week');
+            localStorage.setItem(getDismissKey(wk), 'true');
         } catch (e) {}
         if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
             window.TempoMode.renderActiveModeHome();

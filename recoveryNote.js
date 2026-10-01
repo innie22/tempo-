@@ -171,9 +171,10 @@
         const idx = (note.items || []).findIndex(it => it.id === id);
         if (idx === -1) return null;
 
+        const patch = typeof updates === 'string' ? { text: updates.trim() } : (updates || {});
         note.items[idx] = {
             ...note.items[idx],
-            ...updates,
+            ...patch,
             updated_at: new Date().toISOString()
         };
         saveNote(note);
@@ -195,7 +196,7 @@
             const count = items.length;
 
             return `
-                <div class="recovery-card-note bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-xs relative overflow-hidden">
+                <div class="recovery-card-note bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-note">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-[#FF6B2C] inline-block"></span>
@@ -230,7 +231,7 @@
 
         // Empty state: subtle, gentle, unpunitive
         return `
-            <div class="recovery-card-note bg-white border border-[#EAE4DF] rounded-3xl p-5 space-y-3 shadow-xs">
+            <div class="recovery-card-note bg-white border border-[#EAE4DF] rounded-3xl p-5 space-y-3 shadow-xs" data-tempo-ui="recovery-note">
                 <div class="flex items-center space-x-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-stone-300 inline-block"></span>
                     <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">

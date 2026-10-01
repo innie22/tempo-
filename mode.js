@@ -22,6 +22,17 @@ window.TempoMode = (function() {
         UNCLEAR: 'unclear'
     };
 
+    const EPLAN_STATES = {
+        NO_PLAN: 'PLAN_NO_PLAN',
+        INCOMPLETE: 'PLAN_INCOMPLETE',
+        ACTIVE_TODAY: 'PLAN_ACTIVE_TODAY',
+        TODAY_COMPLETE: 'PLAN_TODAY_COMPLETE',
+        NO_WORK_TODAY: 'PLAN_NO_WORK_TODAY',
+        TIME_ENDED_INCOMPLETE: 'PLAN_TIME_ENDED_INCOMPLETE',
+        STALE: 'PLAN_STALE',
+        COMPLETE: 'PLAN_COMPLETE'
+    };
+
     // Single centralized source of truth for active mode
     let currentMode = MODES.DEFAULT;
 
@@ -37,6 +48,39 @@ window.TempoMode = (function() {
     // Expanded task cards on Default Home
     let dmodeExpandedTaskIds = new Set();
 
+    function hasEstablishedContext() {
+        try {
+            // 1. Established Urgent Plan / Workspace
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function') {
+                if (window.TempoPlanStore.hasActivePlan('emergency')) return true;
+            }
+            const savedPlan = localStorage.getItem('tempo_active_plan_emergency') || localStorage.getItem('tempo_confirmed_plan');
+            if (savedPlan) {
+                const parsed = JSON.parse(savedPlan);
+                if (parsed && ((Array.isArray(parsed.plannedTasks) && parsed.plannedTasks.length > 0) || (Array.isArray(parsed.tasks) && parsed.tasks.length > 0))) {
+                    return true;
+                }
+            }
+
+            // 2. Established Recovery Context
+            const recConfig = localStorage.getItem('tempo_recovery_selfcheck_config');
+            if (recConfig) {
+                const parsedRec = JSON.parse(recConfig);
+                if (parsedRec && parsedRec.type && parsedRec.type !== 'STATE_A') return true;
+            }
+            const recNote = localStorage.getItem('tempo_recovery_note_content');
+            if (recNote && recNote.trim().length > 0) return true;
+
+            // 3. User explicitly saved an active mode other than default
+            const savedMode = localStorage.getItem('tempo_current_mode');
+            if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY || savedMode === MODES.UNCLEAR) {
+                return true;
+            }
+        } catch (e) {}
+
+        return false;
+    }
+
     function init() {
         // Load persisted mode safely from localStorage
         try {
@@ -47,20 +91,21 @@ window.TempoMode = (function() {
             const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
             const hasActivePlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
 
-            if (savedMode && Object.values(MODES).includes(savedMode)) {
-                // If auth is still loading, NEVER reset saved mode!
-                if (authState === 'AUTH_LOADING') {
-                    currentMode = savedMode;
-                } else if (!isAuthenticated && savedMode !== MODES.DEFAULT) {
-                    // Confirmed anonymous user
-                    currentMode = MODES.DEFAULT;
-                    localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
-                } else {
+            if (authState === 'AUTH_LOADING') {
+                if (savedMode && Object.values(MODES).includes(savedMode)) {
                     currentMode = savedMode;
                 }
-            }
-
-            if (!savedMode && hasActivePlan && isAuthenticated && currentMode === MODES.DEFAULT) {
+            } else if (!isAuthenticated) {
+                // Anonymous user -> Always Entry Home (default)
+                currentMode = MODES.DEFAULT;
+                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+            } else if (!hasEstablishedContext()) {
+                // Authenticated user with no established workspace/context -> Entry Home
+                currentMode = MODES.DEFAULT;
+                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+            } else if (savedMode && Object.values(MODES).includes(savedMode)) {
+                currentMode = savedMode;
+            } else if (hasActivePlan) {
                 currentMode = MODES.EMERGENCY;
                 localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
             }
@@ -122,6 +167,14 @@ window.TempoMode = (function() {
     }
 
     function getModeDisplayName(mode) {
+        if (window.t) {
+            switch (mode) {
+                case MODES.EMERGENCY: return window.t('modes.urgent.name', {}, 'Urgent Mode');
+                case MODES.RECOVERY: return window.t('modes.recovery.name', {}, 'Recovery Mode');
+                case MODES.UNCLEAR: return window.t('modes.unclear.name', {}, 'Unclear Mode');
+                default: return window.t('modes.default.name', {}, 'Default Tempo');
+            }
+        }
         switch (mode) {
             case MODES.EMERGENCY: return 'Urgent Mode';
             case MODES.RECOVERY: return 'Recovery Mode';
@@ -311,15 +364,15 @@ window.TempoMode = (function() {
         if (currentMode === MODES.EMERGENCY) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '⚡';
-            label.textContent = 'Urgent Mode';
+            label.textContent = window.t ? window.t('modes.urgent.name', {}, 'Urgent Mode') : 'Urgent Mode';
         } else if (currentMode === MODES.RECOVERY) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#EDF7F1] text-[#166545] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '🌱';
-            label.textContent = 'Recovery Mode';
+            label.textContent = window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode';
         } else if (currentMode === MODES.UNCLEAR) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '🧭';
-            label.textContent = 'Unclear Mode';
+            label.textContent = window.t ? window.t('modes.unclear.name', {}, 'Unclear Mode') : 'Unclear Mode';
         }
     }
 
@@ -339,8 +392,8 @@ window.TempoMode = (function() {
                     <div class="flex items-start space-x-2.5">
                         <span class="text-base text-[#FF6B2C] mt-0.5 leading-none">⚡</span>
                         <div>
-                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition-colors">Urgent Mode</div>
-                            <div class="text-[11px] text-[#6F6B68]">Handle what's urgent</div>
+                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition-colors">${window.t ? window.t('modes.urgent.name', {}, 'Urgent Mode') : 'Urgent Mode'}</div>
+                            <div class="text-[11px] text-[#6F6B68]">${window.t ? window.t('modes.urgent.tagline', {}, "Handle what's urgent") : "Handle what's urgent"}</div>
                         </div>
                     </div>
                 </button>
@@ -355,8 +408,8 @@ window.TempoMode = (function() {
                     <div class="flex items-start space-x-2.5">
                         <span class="text-base text-[#166545] mt-0.5 leading-none">🌱</span>
                         <div>
-                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#166545] transition-colors">Recovery Mode</div>
-                            <div class="text-[11px] text-[#6F6B68]">Slow down and recover</div>
+                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#166545] transition-colors">${window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode'}</div>
+                            <div class="text-[11px] text-[#6F6B68]">${window.t ? window.t('modes.recovery.tagline', {}, 'Slow down and recover') : 'Slow down and recover'}</div>
                         </div>
                     </div>
                 </button>
@@ -371,8 +424,8 @@ window.TempoMode = (function() {
                     <div class="flex items-start space-x-2.5">
                         <span class="text-base text-[#9A5B13] mt-0.5 leading-none">🧭</span>
                         <div>
-                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#9A5B13] transition-colors">Unclear Mode</div>
-                            <div class="text-[11px] text-[#6F6B68]">Figure out what's going on</div>
+                            <div class="text-xs font-bold text-[#202124] group-hover:text-[#9A5B13] transition-colors">${window.t ? window.t('modes.unclear.name', {}, 'Unclear Mode') : 'Unclear Mode'}</div>
+                            <div class="text-[11px] text-[#6F6B68]">${window.t ? window.t('modes.unclear.tagline', {}, "Figure out what's going on") : "Figure out what's going on"}</div>
                         </div>
                     </div>
                 </button>
@@ -390,8 +443,8 @@ window.TempoMode = (function() {
                     <div class="flex items-start space-x-2.5">
                         <span class="text-base text-stone-500 mt-0.5 leading-none">○</span>
                         <div>
-                            <div class="text-xs font-bold text-[#202124] group-hover:text-stone-900 transition-colors">Take a break from modes</div>
-                            <div class="text-[11px] text-[#6F6B68]">Return to the default experience</div>
+                            <div class="text-xs font-bold text-[#202124] group-hover:text-stone-900 transition-colors">${window.t ? window.t('modes.selector.takeBreak', {}, 'Take a break from modes') : 'Take a break from modes'}</div>
+                            <div class="text-[11px] text-[#6F6B68]">${window.t ? window.t('modes.selector.takeBreakDesc', {}, 'Return to the default experience') : 'Return to the default experience'}</div>
                         </div>
                     </div>
                 </button>
@@ -658,7 +711,11 @@ window.TempoMode = (function() {
 
     function renderDmodeHeader(greetingInfo) {
         const todayObj = new Date();
-        const formattedDate = todayObj.toLocaleDateString('en-US', {
+        const formattedDate = window.TempoI18n ? window.TempoI18n.formatDate(todayObj, {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric'
+        }) : todayObj.toLocaleDateString('en-US', {
             weekday: 'long',
             month: 'short',
             day: 'numeric'
@@ -681,23 +738,23 @@ window.TempoMode = (function() {
 
         if (planData.state === 'BRAND_NEW' || planData.state === 'NO_WORK_TODAY') {
             const tomorrowLine = planData.tomorrowTasksCount > 0
-                ? `<p class="text-xs text-[#8C8782] font-medium pt-0.5">Next planned work: Tomorrow (${planData.tomorrowTasksCount} task${planData.tomorrowTasksCount === 1 ? '' : 's'})</p>`
+                ? `<p class="text-xs text-[#8C8782] font-medium pt-0.5">${window.t ? window.t('modes.urgent.nextScheduledWork', {}, 'Next planned work: Tomorrow') : 'Next planned work: Tomorrow'} (${planData.tomorrowTasksCount} ${window.t ? window.t('workspace.tasksCount', { count: planData.tomorrowTasksCount }, 'tasks') : 'tasks'})</p>`
                 : '';
 
             contentHTML = `
                 <div class="py-5 px-4 text-center space-y-2 bg-[#FAF8F5] rounded-xl border border-dashed border-[#E8E4E1]">
-                    <p class="font-heading text-base font-bold text-[#202124]">Nothing planned for today.</p>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">You don't need to fill the space. Start with whatever matters today.</p>
+                    <p class="font-heading text-base font-bold text-[#202124]">${window.t ? window.t('modes.default.nothingPlannedToday', {}, 'Nothing planned for today.') : 'Nothing planned for today.'}</p>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">${window.t ? window.t('modes.default.nothingPlannedSubtitle', {}, "You don't need to fill the space. Start with whatever matters today.") : "You don't need to fill the space. Start with whatever matters today."}</p>
                     ${tomorrowLine}
                     <div class="pt-1.5 flex items-center justify-center gap-2.5">
                         <button type="button" onclick="window.TempoMode.openPlanWorkspace()"
                                 class="btn-primary px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
-                            <span>+ Add a task</span>
+                            <span>${window.t ? window.t('modes.default.addTask', {}, '+ Add a task') : '+ Add a task'}</span>
                         </button>
                         ${planData.hasActivePlan ? `
                             <button type="button" onclick="window.TempoMode.openPlanWorkspace()"
                                     class="px-4 py-2 rounded-xl text-xs font-semibold text-[#202124] bg-white border border-[#D5CEC8] hover:bg-stone-50 transition shadow-xs cursor-pointer">
-                                View my plan
+                                ${window.t ? window.t('modes.default.viewMyPlan', {}, 'View my plan') : 'View my plan'}
                             </button>
                         ` : ''}
                     </div>
@@ -705,7 +762,7 @@ window.TempoMode = (function() {
             `;
         } else if (planData.state === 'TODAY_COMPLETE') {
             const tomorrowLine = planData.tomorrowTasksCount > 0
-                ? `<p class="text-xs text-[#4A7C59] font-medium">Next planned work: Tomorrow</p>`
+                ? `<p class="text-xs text-[#4A7C59] font-medium">${window.t ? window.t('modes.urgent.nextScheduledWork', {}, 'Next planned work: Tomorrow') : 'Next planned work: Tomorrow'}</p>`
                 : '';
 
             const completedTasksHTML = planData.todayItems.map(pt => renderDmodeTaskRow(pt, false)).join('');
@@ -713,7 +770,7 @@ window.TempoMode = (function() {
             contentHTML = `
                 <div class="space-y-4">
                     <div class="py-4 px-4 text-center space-y-1.5 bg-[#EDF7F1] rounded-xl border border-[#CDE9DA]">
-                        <p class="font-heading text-base font-bold text-[#166545]">✓ You're done with what was planned for today.</p>
+                        <p class="font-heading text-base font-bold text-[#166545]">✓ ${window.t ? window.t('modes.default.todayComplete', {}, "You're done with what was planned for today.") : "You're done with what was planned for today."}</p>
                         ${tomorrowLine}
                     </div>
                     <div class="space-y-2">
@@ -751,15 +808,15 @@ window.TempoMode = (function() {
                     <div class="space-y-0.5">
                         <div class="flex items-center space-x-2">
                             <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                                Your Day
+                                ${window.t ? window.t('modes.default.yourDay', {}, 'Your Day') : 'Your Day'}
                             </h3>
-                            <span class="text-xs text-[#6F6B68] font-medium hidden sm:inline">• Today's planned work</span>
+                            <span class="text-xs text-[#6F6B68] font-medium hidden sm:inline">• ${window.t ? window.t('modes.default.todaysPlannedWork', {}, "Today's planned work") : "Today's planned work"}</span>
                         </div>
                     </div>
                     <button type="button" 
                             onclick="window.TempoMode.openPlanWorkspace()" 
                             class="text-xs font-bold text-[#FF6B2C] hover:text-[#E05316] flex items-center space-x-1 transition cursor-pointer">
-                        <span>View my plan</span>
+                        <span>${window.t ? window.t('modes.default.viewMyPlan', {}, 'View my plan') : 'View my plan'}</span>
                         <span>→</span>
                     </button>
                 </div>
@@ -811,7 +868,7 @@ window.TempoMode = (function() {
             : (isInProgress ? 'font-bold text-[#202124]' : 'font-semibold text-[#202124]');
 
         // Metadata: Planned time
-        const timeStr = pt.scheduledStartTime ? formatTime12H(pt.scheduledStartTime) : 'Flexible';
+        const timeStr = pt.scheduledStartTime ? formatTime12H(pt.scheduledStartTime) : (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible');
 
         // Metadata: Estimate
         const durationStr = (task.durationMinutes && task.durationMinutes > 0)
@@ -827,7 +884,7 @@ window.TempoMode = (function() {
                 <button type="button" 
                         onclick="window.TempoMode.toggleDmodeSubtasksExpanded('${task.id}', event)"
                         class="text-xs text-[#8C8782] hover:text-[#202124] flex items-center space-x-1 cursor-pointer transition">
-                    <span>${doneCount} of ${subtasks.length} steps</span>
+                    <span>${doneCount} / ${subtasks.length} ${window.t ? window.t('modes.default.steps', {}, 'steps') : 'steps'}</span>
                     <span class="text-[9px] transform ${isExpanded ? 'rotate-180' : ''} transition-transform">▼</span>
                 </button>
             `;
@@ -841,7 +898,7 @@ window.TempoMode = (function() {
                     <button type="button" 
                             onclick="window.TempoMode.startDmodeTaskFocus('${task.id}')"
                             class="btn-primary px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs inline-flex items-center space-x-1 transition cursor-pointer flex-shrink-0">
-                        <span>Continue</span>
+                        <span>${window.t ? window.t('modes.default.continue', {}, 'Continue') : 'Continue'}</span>
                         <span>→</span>
                     </button>
                 `;
@@ -850,7 +907,7 @@ window.TempoMode = (function() {
                     <button type="button" 
                             onclick="window.TempoMode.startDmodeTaskFocus('${task.id}')"
                             class="text-xs font-semibold text-[#FF6B2C] hover:text-[#E05316] hover:bg-[#FFE9DC] px-2.5 py-1.5 rounded-lg transition inline-flex items-center space-x-1 cursor-pointer flex-shrink-0">
-                        <span>Focus</span>
+                        <span>${window.t ? window.t('modes.default.focus', {}, 'Focus') : 'Focus'}</span>
                         <span>→</span>
                     </button>
                 `;
@@ -1101,12 +1158,12 @@ window.TempoMode = (function() {
             <div id="dmode-mode-switch-bar" class="flex items-center justify-between px-4 py-2.5 bg-[#FAF8F5] border border-[#EAE4DF] rounded-2xl text-xs text-[#6F6B68]">
                 <div class="flex items-center space-x-2">
                     <span class="text-stone-400">🧭</span>
-                    <span class="font-medium text-[#202124]">Need a different kind of support?</span>
+                    <span class="font-medium text-[#202124]">${window.t ? window.t('modes.default.needDifferentSupport', {}, 'Need a different kind of support?') : 'Need a different kind of support?'}</span>
                 </div>
                 <button type="button" 
                         onclick="window.TempoMode.openChangeModeModal()" 
                         class="font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                    <span>Change mode</span>
+                    <span>${window.t ? window.t('modes.selector.switchMode', {}, 'Change mode') : 'Change mode'}</span>
                     <span>→</span>
                 </button>
             </div>
@@ -1117,13 +1174,224 @@ window.TempoMode = (function() {
         return `
             <div id="dmode-guest-invitation" class="p-4 sm:p-5 bg-gradient-to-r from-[#FFFBF7] to-[#FAF8F5] border border-[#EAE4DF] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div class="space-y-1">
-                    <span class="font-bold text-[#202124] text-sm">Save your progress across sessions</span>
-                    <p class="text-[#6F6B68]">Create a free account to plan your days, track habits, and preserve your work.</p>
+                    <span class="font-bold text-[#202124] text-sm">${window.t ? window.t('modes.default.guestSaveProgressTitle', {}, 'Save your progress across sessions') : 'Save your progress across sessions'}</span>
+                    <p class="text-[#6F6B68]">${window.t ? window.t('modes.default.guestSaveProgressDesc', {}, 'Create a free account to plan your days, track habits, and preserve your work.') : 'Create a free account to plan your days, track habits, and preserve your work.'}</p>
                 </div>
                 <button type="button" onclick="if (window.TempoAuth) window.TempoAuth.openSignUpModal();"
                         class="btn-primary px-4 py-2 rounded-xl font-bold text-xs shrink-0 self-start sm:self-auto shadow-xs transition cursor-pointer">
-                    Create free account →
+                    ${window.t ? window.t('common.register', {}, 'Create free account') : 'Create free account'} →
                 </button>
+            </div>
+        `;
+    }
+
+    function renderEntryHomeHTML() {
+        const posts = (window.TempoCommunity && typeof window.TempoCommunity.getAllPosts === 'function')
+            ? window.TempoCommunity.getAllPosts().slice(0, 2)
+            : [];
+        const postsCardsHTML = (posts.length > 0 && window.TempoCommunity && typeof window.TempoCommunity.renderPostCardHTML === 'function')
+            ? posts.map(p => window.TempoCommunity.renderPostCardHTML(p)).join('')
+            : '';
+
+        return `
+            <div class="space-y-8 sm:space-y-10" data-tempo-ui="entry-home">
+                <!-- ROW 1: DESKTOP 2-COLUMN (PRIMARY ENTRY CARD + COMMUNITY PANEL) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
+                    <!-- LEFT: Large Primary Entry Card (Substantially wider than right panel) -->
+                    <div class="lg:col-span-8 flex flex-col">
+                        <div class="relative bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border border-[#FFD2BA] rounded-3xl p-7 sm:p-10 lg:p-12 shadow-xs overflow-hidden flex flex-col justify-between flex-1" data-tempo-ui="entry-card-primary">
+                            <!-- Subtle warm glowing decorative shape in background (matching screenshot) -->
+                            <div class="absolute -right-16 -top-16 w-72 h-72 bg-[#FF6B2C]/10 rounded-full blur-3xl pointer-events-none"></div>
+                            <div class="absolute right-4 bottom-0 w-80 h-80 bg-gradient-to-tl from-[#FF6B2C]/15 via-[#FF8A50]/10 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+
+                            <div class="relative z-10 space-y-4 sm:space-y-5">
+                                <!-- Small Orange Welcome Eyebrow -->
+                                <span class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#FF6B2C] block">
+                                    ${window.t ? window.t('modes.default.welcomeEyebrow', {}, 'WELCOME TO TEMPO') : 'WELCOME TO TEMPO'}
+                                </span>
+
+                                <!-- Large Dominant Question -->
+                                <h1 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#202124] tracking-tight leading-tight max-w-xl">
+                                    ${window.t ? window.t('modes.default.whatDoYouNeed', {}, 'What do you need right now?') : 'What do you need right now?'}
+                                </h1>
+
+                                <!-- Supporting Explanatory Copy -->
+                                <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed max-w-lg">
+                                    ${window.t ? window.t('modes.default.explainCopy', {}, 'You don’t need to figure it out alone.<br class="hidden sm:inline"> Tell Tempo your current situation, and we’ll help you find the next step.') : 'You don’t need to figure it out alone.<br class="hidden sm:inline"> Tell Tempo your current situation, and we’ll help you find the next step.'}
+                                </p>
+
+                                <!-- Large Orange CTA Button -->
+                                <div class="pt-2 sm:pt-3">
+                                    <button type="button"
+                                            onclick="if (window.TempoMode && window.TempoMode.setMode) { window.TempoMode.setMode('unclear'); } else if (window.TempoMode && window.TempoMode.openChangeModeModal) { window.TempoMode.openChangeModeModal(); }"
+                                            class="btn-primary px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base shadow-sm hover:shadow-md transition cursor-pointer inline-flex items-center space-x-2.5">
+                                        <span>${window.t ? window.t('modes.default.helpMeStart', {}, 'Help me figure out where to start') : 'Help me figure out where to start'}</span>
+                                        <span class="text-base sm:text-lg">→</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Small Supporting Reassurance Row -->
+                            <div class="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold text-[#6F6B68] pt-6 sm:pt-8">
+                                <div class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 text-[#FF6B2C] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                        <polyline points="12 6 12 12 16 14" stroke-width="2"/>
+                                    </svg>
+                                    <span>${window.t ? window.t('modes.default.takesLessOneMin', {}, 'Takes less than 1 minute') : 'Takes less than 1 minute'}</span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 text-[#FF6B2C] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                    </svg>
+                                    <span>${window.t ? window.t('modes.default.personalizedGuidance', {}, 'Personalized guidance') : 'Personalized guidance'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Tempo Community Panel (Social Peer Posts) -->
+                    <div class="lg:col-span-4 flex flex-col">
+                        <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 flex-1" data-tempo-ui="entry-community-panel">
+                            <!-- Header -->
+                            <div class="flex items-center justify-between pb-1 border-b border-[#F0ECE9]">
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-6 h-6 rounded-lg bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center text-xs shrink-0 font-bold">
+                                        💬
+                                    </div>
+                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124]">
+                                        ${window.t ? window.t('modes.default.fromCommunity', {}, 'From the Tempo community') : 'From the Tempo community'}
+                                    </h3>
+                                </div>
+                                <button type="button"
+                                        onclick="if (window.TempoCommunity && window.TempoCommunity.openCommunityModal) { window.TempoCommunity.openCommunityModal(); }"
+                                        class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
+                                    <span>${window.t ? window.t('modes.default.seeAll', {}, 'See all') : 'See all'}</span>
+                                    <span>→</span>
+                                </button>
+                            </div>
+
+                            <!-- Social Peer Posts Container -->
+                            <div id="homepage-community-posts-list" class="space-y-3.5 flex-1">
+                                ${postsCardsHTML}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROW 2: QUICK TOOLS (Spanning Main Content Width) -->
+                <div class="space-y-4 pt-2" data-tempo-ui="entry-quick-tools">
+                    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                        <div>
+                            <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                                ${window.t ? window.t('modes.default.quickTools', {}, 'Quick Tools') : 'Quick Tools'}
+                            </h2>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] mt-0.5">
+                                ${window.t ? window.t('modes.default.quickToolsSubtitle', {}, 'Simple tools to help you feel better and get through your day.') : 'Simple tools to help you feel better and get through your day.'}
+                            </p>
+                        </div>
+                        <button type="button"
+                                onclick="if (window.TempoApp && window.TempoApp.navigateTo) { window.TempoApp.navigateTo('tools'); }"
+                                class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer shrink-0 self-start sm:self-auto">
+                            <span>${window.t ? window.t('modes.default.viewAllTools', {}, 'View all tools') : 'View all tools'}</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Tool 1: Focus Zone -->
+                        <div onclick="if (window.TempoFocusZone && window.TempoFocusZone.openQuickEntry) { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoTriage && window.TempoTriage.launchFocusMode) { window.TempoTriage.launchFocusMode(); }"
+                             class="bg-white border border-[#EAE4DF] hover:border-[#FFD2BA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
+                            <div class="space-y-3">
+                                <div class="w-10 h-10 rounded-2xl bg-[#FFF3EB] text-[#FF6B2C] flex items-center justify-center text-lg">
+                                    ⏰
+                                </div>
+                                <div>
+                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
+                                        ${window.t ? window.t('modes.default.focusZone', {}, 'Focus Zone') : 'Focus Zone'}
+                                    </h3>
+                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
+                                        ${window.t ? window.t('modes.default.focusZoneDesc', {}, 'Focus with intentional breaks. Default 45 min focus / 15 min rest.') : 'Focus with intentional breaks. Default 45 min focus / 15 min rest.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end pt-1">
+                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#FFE9DC] text-stone-600 group-hover:text-[#B83D08] flex items-center justify-center text-xs transition">
+                                    →
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tool 2: Breathing -->
+                        <div onclick="if (window.TempoBreathing && window.TempoBreathing.openModal) { window.TempoBreathing.openModal(); } else if (window.TempoTriage && window.TempoTriage.openBoxBreathingModal) { window.TempoTriage.openBoxBreathingModal(); }"
+                             class="bg-white border border-[#EAE4DF] hover:border-[#CDE9DA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
+                            <div class="space-y-3">
+                                <div class="w-10 h-10 rounded-2xl bg-[#EDF7F1] text-[#166545] flex items-center justify-center text-lg">
+                                    💨
+                                </div>
+                                <div>
+                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#166545] transition-colors">
+                                        ${window.t ? window.t('modes.default.breathing', {}, 'Breathing') : 'Breathing'}
+                                    </h3>
+                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
+                                        ${window.t ? window.t('modes.default.breathingDesc', {}, 'A quick breathing exercise to calm your mind.') : 'A quick breathing exercise to calm your mind.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end pt-1">
+                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#DDF0E5] text-stone-600 group-hover:text-[#166545] flex items-center justify-center text-xs transition">
+                                    →
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tool 3: Quick Stress Relief -->
+                        <div onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
+                             class="bg-white border border-[#EAE4DF] hover:border-[#FFD2BA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
+                            <div class="space-y-3">
+                                <div class="w-10 h-10 rounded-2xl bg-[#FFF9F5] text-[#FF6B2C] flex items-center justify-center text-lg">
+                                    ⚡
+                                </div>
+                                <div>
+                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
+                                        ${window.t ? window.t('modes.default.quickStressRelief', {}, 'Quick Stress Relief') : 'Quick Stress Relief'}
+                                    </h3>
+                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
+                                        ${window.t ? window.t('modes.default.quickStressReliefDesc', {}, 'Feel overwhelmed? Try a simple action to ease stress in a few minutes.') : 'Feel overwhelmed? Try a simple action to ease stress in a few minutes.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end pt-1">
+                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#FFE9DC] text-stone-600 group-hover:text-[#B83D08] flex items-center justify-center text-xs transition">
+                                    →
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tool 4: Self-check -->
+                        <div onclick="if (window.TempoRecoverySetup && window.TempoRecoverySetup.open) { window.TempoRecoverySetup.open(1); } else if (window.TempoRecoverySelfCheck && window.TempoRecoverySelfCheck.openSetup) { window.TempoRecoverySelfCheck.openSetup(); }"
+                             class="bg-white border border-[#EAE4DF] hover:border-stone-300 rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
+                            <div class="space-y-3">
+                                <div class="w-10 h-10 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center text-lg">
+                                    📊
+                                </div>
+                                <div>
+                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-stone-900 transition-colors">
+                                        ${window.t ? window.t('modes.default.selfCheck', {}, 'Self-check') : 'Self-check'}
+                                    </h3>
+                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
+                                        ${window.t ? window.t('modes.default.selfCheckDesc', {}, 'Track your stress signals and wellbeing habits.') : 'Track your stress signals and wellbeing habits.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end pt-1">
+                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-stone-200 text-stone-600 group-hover:text-stone-900 flex items-center justify-center text-xs transition">
+                                    →
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -1134,27 +1402,14 @@ window.TempoMode = (function() {
         const dmodeBox = document.getElementById('dmode-home-content');
         if (!dmodeBox) return;
 
-        const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
-        const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
-        const greetingInfo = getSafeGreetingInfo(profile);
-        const planData = getSharedPlanTodayTasks();
-
-        dmodeBox.innerHTML = `
-            ${renderDmodeHeader(greetingInfo)}
-            ${renderDmodeModeSwitchEntry()}
-            ${renderDmodeYourDay(planData)}
-            ${renderDmodeSelfCheckCard()}
-            ${renderDmodeContextualCard()}
-            ${renderDmodeTools()}
-            ${renderDmodeLearnSolve()}
-            ${renderDmodePostsSection()}
-            ${!isAuthenticated ? renderDmodeGuestInvitation() : ''}
-        `;
+        dmodeBox.innerHTML = renderEntryHomeHTML();
 
         if (window.TempoCommunity && typeof window.TempoCommunity.renderHomepagePreview === 'function') {
             window.TempoCommunity.renderHomepagePreview();
         }
     }
+
+    const renderEntryHome = renderDmodeHome;
 
     function toggleDmodeTask(taskId, e) {
         if (e && e.stopPropagation) e.stopPropagation();
@@ -1285,16 +1540,21 @@ window.TempoMode = (function() {
     }
 
     function getSafeGreetingInfo(profile) {
+        const fallbackText = window.t ? window.t('modes.default.greetingFallback', {}, 'Hi there 👋') : 'Hi there 👋';
         if (!profile) {
-            return { name: 'there', greetingText: 'Hi there 👋', isFallback: true };
+            return { name: 'there', greetingText: fallbackText, isFallback: true };
         }
+
+        const makeGreeting = (clean) => {
+            return window.t ? window.t('modes.default.greeting', { name: clean }, `Hi, ${clean} 👋`) : `Hi, ${clean} 👋`;
+        };
 
         // 0) Intelligent cultural greeting extraction (Vietnamese given name last vs Western given name first)
         if (window.TempoAuth && typeof window.TempoAuth.extractGreetingName === 'function') {
             const extracted = window.TempoAuth.extractGreetingName(profile.display_name || profile.full_name);
             if (extracted && isCleanShortName(extracted)) {
                 const clean = formatCapitalized(extracted);
-                return { name: clean, greetingText: `Hi, ${clean} 👋`, isFallback: false };
+                return { name: clean, greetingText: makeGreeting(clean), isFallback: false };
             }
         }
 
@@ -1302,14 +1562,14 @@ window.TempoMode = (function() {
         const pref = profile.preferred_name || profile.display_name;
         if (pref && isCleanShortName(pref)) {
             const clean = formatCapitalized(pref);
-            return { name: clean, greetingText: `Hi, ${clean} 👋`, isFallback: false };
+            return { name: clean, greetingText: makeGreeting(clean), isFallback: false };
         }
 
         // 2) first_name
         const first = profile.first_name;
         if (first && isCleanShortName(first)) {
             const clean = formatCapitalized(first);
-            return { name: clean, greetingText: `Hi, ${clean} 👋`, isFallback: false };
+            return { name: clean, greetingText: makeGreeting(clean), isFallback: false };
         }
 
         // 3) clean short extracted from full_name
@@ -1318,12 +1578,12 @@ window.TempoMode = (function() {
             const firstToken = full.trim().split(/\s+/)[0];
             if (firstToken && isCleanShortName(firstToken)) {
                 const clean = formatCapitalized(firstToken);
-                return { name: clean, greetingText: `Hi, ${clean} 👋`, isFallback: false };
+                return { name: clean, greetingText: makeGreeting(clean), isFallback: false };
             }
         }
 
         // 4) Fallback
-        return { name: 'there', greetingText: 'Hi there 👋', isFallback: true };
+        return { name: 'there', greetingText: fallbackText, isFallback: true };
     }
 
     function renderEmodeHome() {
@@ -1399,16 +1659,16 @@ window.TempoMode = (function() {
 
         // Render appropriate view according to state with stable ~65 / 35 outer shell
         emodeBox.innerHTML = `
-            <div class="relative space-y-5">
+            <div class="relative space-y-5" data-tempo-ui="urgent-home-shell">
                 ${renderEmodeHeader()}
                 <div class="urgent-home-main-grid">
                     <!-- LEFT COLUMN (~65%) -->
-                    <div class="urgent-left-col">
+                    <div class="urgent-left-col" data-tempo-ui="urgent-left-col">
                         ${renderEmodePrimarySection(activeHomeState, { confirmedPlan, currentStage, availabilityDays, todayStr, greetingInfo })}
                         ${renderSupportRowHTML()}
                     </div>
                     <!-- RIGHT COLUMN (~35%) -->
-                    <div class="urgent-right-col bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-xs flex flex-col justify-between">
+                    <div class="urgent-right-col bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-xs flex flex-col justify-between" data-tempo-ui="urgent-plan-today">
                         ${renderEmodeRightCol(activeHomeState, { confirmedPlan, todayStr, currentStage })}
                     </div>
                 </div>
@@ -1424,7 +1684,11 @@ window.TempoMode = (function() {
 
     function renderEmodeHeader() {
         const todayObj = new Date();
-        const formattedDate = todayObj.toLocaleDateString('en-US', {
+        const formattedDate = window.TempoI18n ? window.TempoI18n.formatDate(todayObj, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+        }) : todayObj.toLocaleDateString('en-US', {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
@@ -1438,13 +1702,14 @@ window.TempoMode = (function() {
                     <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
                         <button id="btn-home-mode-selector" 
                                 type="button" 
+                                data-tempo-ui="mode-selector-btn"
                                 onclick="window.TempoMode.toggleModeDropdown(event)" 
                                 class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] hover:bg-[#FFDFC9] border border-[#FFD2BA] transition flex items-center space-x-1.5 shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] focus:ring-offset-1"
                                 aria-haspopup="true"
                                 aria-expanded="false"
                                 title="Switch Tempo Mode">
                             <span>⚡</span>
-                            <span class="font-extrabold">Urgent Mode</span>
+                            <span class="font-extrabold">${window.t ? window.t('modes.urgent.name', {}, 'Urgent Mode') : 'Urgent Mode'}</span>
                             <span class="text-[10px] ml-0.5 opacity-80">▾</span>
                         </button>
                         <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
@@ -1513,29 +1778,28 @@ window.TempoMode = (function() {
                 <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
                 <div class="relative z-10 space-y-1.5">
                     <span class="px-3 py-1 rounded-full text-[11px] font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
-                        YOUR URGENT PLAN
+                        ${window.t ? window.t('modes.urgent.yourUrgentPlanUpper', {}, 'YOUR URGENT PLAN') : 'YOUR URGENT PLAN'}
                     </span>
                     <div class="text-xs sm:text-sm font-semibold text-[#6F6B68] pt-1">
                         ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        You're still setting up your plan.
+                        ${window.t ? window.t('modes.urgent.statePlanIncomplete', {}, "You're still setting up your plan.") : "You're still setting up your plan."}
                     </h3>
                     <p class="text-xs sm:text-sm text-[#6F6B68] max-w-lg leading-relaxed">
-                        Your urgent plan setup is in progress at step: <strong class="text-[#202124]">${escapeHTML(currentStageTitle)}</strong>.
-                        All of your task entries and estimates are safely preserved.
+                        ${window.t ? window.t('modes.urgent.statePlanIncompleteDesc', {}, 'Your urgent plan setup is in progress.') : 'Your urgent plan setup is in progress at step:'} <strong class="text-[#202124]">${escapeHTML(currentStageTitle)}</strong>.
                     </p>
                 </div>
 
                 <div class="relative z-10 pt-1 flex flex-wrap items-center gap-3">
                     <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('${currentStage}');"
                             class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm inline-flex items-center space-x-2 transition cursor-pointer">
-                        <span>Continue building my plan</span>
+                        <span>${window.t ? window.t('modes.urgent.continueBuilding', {}, 'Continue building my plan') : 'Continue building my plan'}</span>
                         <span>→</span>
                     </button>
                     <button onclick="window.TempoMode.openChangeModeModal()" 
                             class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
-                        Switch mode
+                        ${window.t ? window.t('modes.selector.switchMode', {}, 'Switch mode') : 'Switch mode'}
                     </button>
                 </div>
             </div>
@@ -1555,15 +1819,15 @@ window.TempoMode = (function() {
                     🎉
                 </div>
                 <div class="relative z-10 space-y-1.5 max-w-md mx-auto">
-                    <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#166545]">ACUTE CRISIS CLEARED</span>
+                    <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#166545]">${window.t ? window.t('modes.urgent.completed', {}, 'ACUTE CRISIS CLEARED') : 'ACUTE CRISIS CLEARED'}</span>
                     <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
                         ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        Your Urgent Plan is complete.
+                        ${window.t ? window.t('modes.urgent.statePlanComplete', {}, 'Your Urgent Plan is complete.') : 'Your Urgent Plan is complete.'}
                     </h3>
                     <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        No urgent tasks are waiting in this plan. You worked through ${totalTasks} planned task${totalTasks === 1 ? '' : 's'} step by step.
+                        ${window.t ? window.t('modes.urgent.statePlanCompleteDesc', {}, 'All tasks in this urgent plan are finished.') : 'All tasks in this urgent plan are finished.'}
                     </p>
                 </div>
 
@@ -1572,22 +1836,22 @@ window.TempoMode = (function() {
                     <span class="text-base">🌱</span>
                     <div class="space-y-0.5">
                         <p class="font-bold">Tempo Recommendation:</p>
-                        <p class="text-[#202124] leading-relaxed">Your workload has eased up. Shifting toward <strong>Recovery Mode</strong> can help you restore energy and rebuild a sustainable pace.</p>
+                        <p class="text-[#202124] leading-relaxed">Your workload has eased up. Shifting toward <strong>${window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode'}</strong> can help you restore energy and rebuild a sustainable pace.</p>
                     </div>
                 </div>
 
                 <div class="relative z-10 pt-1 flex flex-col sm:flex-row items-center justify-center gap-2.5">
                     <button onclick="window.TempoMode.setMode('recovery')" 
                             class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                        Shift to Recovery Mode →
+                        ${window.t ? window.t('modes.urgent.shiftToRecovery', {}, 'Shift to Recovery Mode →') : 'Shift to Recovery Mode →'}
                     </button>
                     <button onclick="window.TempoMode.openChangeModeModal()" 
                             class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition cursor-pointer">
-                        Change mode
+                        ${window.t ? window.t('modes.selector.switchMode', {}, 'Change mode') : 'Change mode'}
                     </button>
                     <button onclick="window.TempoApp.showToast('Remaining in Urgent Mode.')" 
                             class="px-3 py-2 text-xs text-[#6F6B68] hover:text-[#202124] underline cursor-pointer">
-                        Stay in Urgent Mode
+                        ${window.t ? window.t('modes.urgent.stayInUrgent', {}, 'Stay in Urgent Mode') : 'Stay in Urgent Mode'}
                     </button>
                 </div>
             </div>
@@ -1613,10 +1877,10 @@ window.TempoMode = (function() {
                             ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                         </div>
                         <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                            Your plan needs an update.
+                            ${window.t ? window.t('modes.urgent.statePlanStale', {}, 'Your plan needs an update.') : 'Your plan needs an update.'}
                         </h3>
                         <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                            Some planned work dates have passed while tasks are still unfinished. We don't reschedule automatically—let's review and adjust your plan calmly together.
+                            ${window.t ? window.t('modes.urgent.statePlanStaleDesc', {}, 'Some planned work dates have passed while tasks are still unfinished. We don\'t reschedule automatically—let\'s review and adjust your plan calmly together.') : 'Some planned work dates have passed while tasks are still unfinished. We don\'t reschedule automatically—let\'s review and adjust your plan calmly together.'}
                         </p>
                     </div>
                 </div>
@@ -1634,7 +1898,7 @@ window.TempoMode = (function() {
                 <div class="relative z-10 pt-1 flex flex-wrap items-center gap-3">
                     <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                             class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition cursor-pointer">
-                        Review & update plan →
+                        ${window.t ? window.t('modes.urgent.updateSchedule', {}, 'Review & update plan →') : 'Review & update plan →'}
                     </button>
                     <button onclick="window.TempoMode.dismissStaleWarning()" 
                             class="px-4 py-2.5 rounded-xl border border-[#FFD2BA] text-xs font-semibold text-[#B83D08] bg-white hover:bg-[#FFE9DC]/50 transition cursor-pointer">
@@ -1670,7 +1934,7 @@ window.TempoMode = (function() {
                             ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                         </div>
                         <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                            Your planned work time for today has ended.
+                            ${window.t ? window.t('modes.urgent.stateTimeEnded', {}, 'Your planned work time for today has ended.') : 'Your planned work time for today has ended.'}
                         </h3>
                         <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
                             <strong class="text-[#202124]">${escapeHTML(taskName)}</strong> is still in progress.
@@ -1728,7 +1992,7 @@ window.TempoMode = (function() {
                 <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
                 <div class="relative z-10 flex items-center space-x-2">
                     <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
-                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">TODAY'S WORK DONE</span>
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">${window.t ? window.t('modes.urgent.todaysWorkDone', {}, "TODAY'S WORK DONE") : "TODAY'S WORK DONE"}</span>
                 </div>
 
                 <div class="relative z-10 space-y-1">
@@ -1736,10 +2000,10 @@ window.TempoMode = (function() {
                         ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        You're done for today.
+                        ${window.t ? window.t('modes.urgent.stateTodayComplete', {}, "You're done for today.") : "You're done for today."}
                     </h3>
                     <p class="text-xs sm:text-sm text-[#6F6B68]">
-                        You've completed what you planned for today. Protect your rest.
+                        ${window.t ? window.t('modes.urgent.stateTodayCompleteDesc', {}, 'You\'ve completed what you planned for today. Protect your rest.') : 'You\'ve completed what you planned for today. Protect your rest.'}
                     </p>
                 </div>
 
@@ -1777,10 +2041,10 @@ window.TempoMode = (function() {
                         ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                     </div>
                     <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                        Nothing planned for today.
+                        ${window.t ? window.t('modes.urgent.stateNoWork', {}, 'Nothing planned for today.') : 'Nothing planned for today.'}
                     </h3>
                     <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        Your Urgent Plan continues on <strong>${escapeHTML(nextDateLabel)}</strong>.
+                        ${window.t ? window.t('modes.urgent.stateNoWorkDesc', {}, 'Your Urgent Plan continues on a future date.') : 'Your Urgent Plan continues on'} <strong>${escapeHTML(nextDateLabel)}</strong>.
                     </p>
                 </div>
 
@@ -1827,11 +2091,11 @@ window.TempoMode = (function() {
         }
 
         const deadlineText = nowItem && nowItem.task.hasDeadline
-            ? `Due ${formatHumanDeadline(nowItem.task.deadlineDate, nowItem.task.deadlineTime)}`
-            : "No fixed deadline";
+            ? `${window.t ? window.t('modes.urgent.due', {}, 'Due') : 'Due'} ${window.TempoI18n ? window.TempoI18n.formatDeadline(nowItem.task.deadlineDate, nowItem.task.deadlineTime) : formatHumanDeadline(nowItem.task.deadlineDate, nowItem.task.deadlineTime)}`
+            : (window.t ? window.t('workspace.noDeadline', {}, 'No fixed deadline') : 'No fixed deadline');
 
         const durationText = nowItem
-            ? (nowItem.task.isUnknownDuration ? "Time not estimated" : `~ ${nowItem.task.durationLabel || '45 min'}`)
+            ? (nowItem.task.isUnknownDuration ? (window.t ? window.t('common.notEstimated', {}, 'Time not estimated') : 'Time not estimated') : `~ ${nowItem.task.durationLabel || '45 min'}`)
             : "~ 45 min";
 
         // Check for "Needs Attention" items (ONLY if actual issues exist!)
@@ -1840,7 +2104,7 @@ window.TempoMode = (function() {
         return `
             <!-- Priority #1: YOUR TASK FOR NOW -->
             ${nowItem ? `
-                <div class="urgent-card-now bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm relative overflow-hidden">
+                <div class="urgent-card-now bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm relative overflow-hidden" data-tempo-ui="urgent-task-now">
                     <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
                     <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
 
@@ -1849,11 +2113,11 @@ window.TempoMode = (function() {
                         <div class="flex items-center space-x-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-[#FF6B2C] animate-pulse inline-block"></span>
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#B83D08]">
-                                YOUR TASK FOR NOW
+                                ${window.t ? window.t('modes.urgent.taskForNow', {}, 'YOUR TASK FOR NOW') : 'YOUR TASK FOR NOW'}
                             </span>
                         </div>
                         <span class="px-3 py-1 rounded-full text-[10px] font-extrabold bg-[#FF6B2C] text-white tracking-wider shadow-xs">
-                            NOW
+                            ${window.t ? window.t('common.now', {}, 'NOW') : 'NOW'}
                         </span>
                     </div>
 
@@ -1899,12 +2163,11 @@ window.TempoMode = (function() {
                         <button onclick="window.TempoMode.startTaskFocus('${nowItem.task.id}')"
                                 class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition cursor-pointer">
                             <span class="text-xs">▶</span>
-                            <span>Focus on this task →</span>
+                            <span>${window.t ? window.t('modes.urgent.focusOnTask', {}, 'Focus on this task →') : 'Focus on this task →'}</span>
                         </button>
                         <button onclick="window.TempoApp.navigateTo('plan-workspace'); if (window.TempoPlanWorkspace && window.TempoPlanWorkspace.selectTask) { window.TempoPlanWorkspace.selectTask('${nowItem.task.id}'); }"
                                 class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-bold text-[#202124] bg-white hover:bg-stone-50 transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
-                            <span>View task</span>
-                            <span>→</span>
+                            <span>${window.t ? window.t('modes.urgent.viewTask', {}, 'View task →') : 'View task →'}</span>
                         </button>
                     </div>
                 </div>
@@ -1947,7 +2210,7 @@ window.TempoMode = (function() {
                 <div class="space-y-4">
                     <div class="flex items-center justify-between pb-1">
                         <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                            Your plan for today
+                            ${window.t ? window.t('modes.urgent.planForToday', {}, 'Your plan for today') : 'Your plan for today'}
                         </h3>
                         <button onclick="window.TempoApp.navigateTo('emergency'); if (window.TempoEmergencyFlow && window.TempoEmergencyFlow.goToStage) { window.TempoEmergencyFlow.goToStage('${currentStage || 'entry'}'); }"
                                 class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
@@ -1963,7 +2226,7 @@ window.TempoMode = (function() {
                 <div class="pt-4 border-t border-stone-100 flex items-center justify-between text-xs text-[#8C8782]">
                     <span>Step: <strong>${escapeHTML(currentStage || 'entry')}</strong></span>
                     <button onclick="window.TempoMode.openChangeModeModal()" class="hover:text-[#202124] underline cursor-pointer">
-                        Switch mode
+                        ${window.t ? window.t('modes.selector.switchMode', {}, 'Switch mode') : 'Switch mode'}
                     </button>
                 </div>
             `;
@@ -1981,11 +2244,11 @@ window.TempoMode = (function() {
                 <div class="space-y-4">
                     <div class="flex items-center justify-between pb-1">
                         <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                            Your plan for today
+                            ${window.t ? window.t('modes.urgent.planForToday', {}, 'Your plan for today') : 'Your plan for today'}
                         </h3>
                         <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                                 class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                            <span>View / Edit Plan</span>
+                            <span>${window.t ? window.t('modes.urgent.viewEditPlan', {}, 'View / Edit Plan') : 'View / Edit Plan'}</span>
                             <span>→</span>
                         </button>
                     </div>
@@ -2020,11 +2283,11 @@ window.TempoMode = (function() {
                 <!-- Header -->
                 <div class="flex items-center justify-between pb-1">
                     <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                        Your plan for today
+                        ${window.t ? window.t('modes.urgent.planForToday', {}, 'Your plan for today') : 'Your plan for today'}
                     </h3>
                     <button onclick="window.TempoApp.navigateTo('plan-workspace');"
                             class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                        <span>View / Edit Plan</span>
+                        <span>${window.t ? window.t('modes.urgent.viewEditPlan', {}, 'View / Edit Plan') : 'View / Edit Plan'}</span>
                         <span>→</span>
                     </button>
                 </div>
@@ -2032,7 +2295,7 @@ window.TempoMode = (function() {
                 <!-- Progress Header & Bar -->
                 <div class="space-y-1.5">
                     <div class="flex items-center justify-between text-xs">
-                        <span class="text-[#6F6B68] font-medium">${completedTodayCount} of ${todayTasks.length} completed</span>
+                        <span class="text-[#6F6B68] font-medium">${window.t ? window.t('modes.urgent.completedOf', { completed: completedTodayCount, total: todayTasks.length }, `${completedTodayCount} of ${todayTasks.length} completed`) : `${completedTodayCount} of ${todayTasks.length} completed`}</span>
                         <span class="font-bold text-[#202124]">${completionPercent}%</span>
                     </div>
                     <div class="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
@@ -2068,14 +2331,14 @@ window.TempoMode = (function() {
 
                         let badgeHTML = '';
                         if (isDone) {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>`;
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${window.t ? window.t('modes.urgent.completedBadge', {}, 'Completed') : 'Completed'}</span>`;
                         } else if (isNow) {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE9DC] text-[#B83D08]">NOW</span>`;
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFE9DC] text-[#B83D08]">${window.t ? window.t('common.now', {}, 'NOW') : 'NOW'}</span>`;
                         } else {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600">UP NEXT</span>`;
+                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600">${window.t ? window.t('common.upNext', {}, 'UP NEXT') : 'UP NEXT'}</span>`;
                         }
 
-                        const timeDurationStr = `${item.startTime || ''}${item.startTime ? ' · ' : ''}~${item.task.isUnknownDuration ? 'Not estimated' : (item.task.durationLabel || '45 min')}`;
+                        const timeDurationStr = `${item.startTime || ''}${item.startTime ? ' · ' : ''}~${item.task.isUnknownDuration ? (window.t ? window.t('common.notEstimated', {}, 'Not estimated') : 'Not estimated') : (item.task.durationLabel || '45 min')}`;
 
                         return `
                             <div class="urgent-timeline-item flex items-start space-x-3 group relative">
@@ -2127,7 +2390,7 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     function renderSupportRowHTML() {
         return `
-            <div class="urgent-support-row">
+            <div class="urgent-support-row" data-tempo-ui="urgent-support">
                 <!-- Card 1: Feeling overwhelmed? -->
                 <div class="urgent-card-overwhelmed bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border border-[#FFD2BA] rounded-3xl p-5 sm:p-6 space-y-3.5 shadow-xs">
                     <div class="flex items-center space-x-3">
@@ -2136,10 +2399,10 @@ window.TempoMode = (function() {
                         </div>
                         <div>
                             <h4 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
-                                Feeling overwhelmed?
+                                ${window.t ? window.t('modes.urgent.overwhelmed', {}, 'Feeling overwhelmed?') : 'Feeling overwhelmed?'}
                             </h4>
                             <p class="text-xs text-[#6F6B68] leading-relaxed">
-                                Take a few minutes to calm things down and clear your head.
+                                ${window.t ? window.t('modes.urgent.overwhelmedDesc', {}, 'Take a few minutes to calm things down and clear your head.') : 'Take a few minutes to calm things down and clear your head.'}
                             </p>
                         </div>
                     </div>
@@ -2147,14 +2410,14 @@ window.TempoMode = (function() {
                         <button type="button"
                                 onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
                                 class="btn-primary px-4 py-2 rounded-xl font-bold text-xs shadow-xs inline-flex items-center space-x-1.5 transition cursor-pointer">
-                            <span>Quick Stress Relief</span>
+                            <span>${window.t ? window.t('modes.urgent.quickStressRelief', {}, 'Quick Stress Relief') : 'Quick Stress Relief'}</span>
                             <span>→</span>
                         </button>
                         <button type="button"
                                 onclick="if (window.TempoTriage && window.TempoTriage.openBoxBreathingModal) { window.TempoTriage.openBoxBreathingModal(); } else if (window.TempoBreathing && window.TempoBreathing.openModal) { window.TempoBreathing.openModal(); }"
                                 class="px-3.5 py-2 rounded-xl border border-[#FFD2BA] bg-white text-xs font-bold text-[#B83D08] hover:bg-[#FFF9F5] transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
                             <span>💨</span>
-                            <span>Breathing</span>
+                            <span>${window.t ? window.t('modes.urgent.breathing', {}, 'Breathing') : 'Breathing'}</span>
                         </button>
                     </div>
                 </div>
@@ -2167,10 +2430,10 @@ window.TempoMode = (function() {
                         </div>
                         <div>
                             <h4 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
-                                Focus now
+                                ${window.t ? window.t('modes.urgent.focusNow', {}, 'Focus now') : 'Focus now'}
                             </h4>
                             <p class="text-xs text-[#6F6B68] leading-relaxed">
-                                Start a Focus session at your own pace.
+                                ${window.t ? window.t('modes.urgent.focusNowDesc', {}, 'Start a Focus session at your own pace.') : 'Start a Focus session at your own pace.'}
                             </p>
                         </div>
                     </div>
@@ -2178,8 +2441,7 @@ window.TempoMode = (function() {
                         <button type="button"
                                 onclick="if (window.TempoFocusZone && window.TempoFocusZone.openQuickEntry) { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoTriage && window.TempoTriage.launchFocusMode) { window.TempoTriage.launchFocusMode(); }"
                                 class="px-4 py-2 rounded-xl bg-[#FFE9DC] hover:bg-[#FFDFC9] text-[#B83D08] font-bold text-xs border border-[#FFD2BA] transition shadow-xs inline-flex items-center space-x-1.5 cursor-pointer">
-                            <span>Start Focus</span>
-                            <span>→</span>
+                            <span>${window.t ? window.t('modes.urgent.startFocus', {}, 'Start Focus →') : 'Start Focus →'}</span>
                         </button>
                     </div>
                 </div>
@@ -2201,13 +2463,13 @@ window.TempoMode = (function() {
             : '';
 
         return `
-            <div class="urgent-section-posts space-y-4 pt-2">
+            <div class="urgent-section-posts space-y-4 pt-2" data-tempo-ui="urgent-posts">
                 <!-- Header -->
                 <div class="flex items-center justify-between">
                     <div class="space-y-0.5">
                         <div class="flex items-center space-x-2">
                             <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                                Tempo Posts
+                                ${window.t ? window.t('posts.title', {}, 'Tempo Posts') : 'Tempo Posts'}
                             </h3>
                             <span class="text-xs text-[#6F6B68] font-medium hidden sm:inline">• A little something for when you have space.</span>
                         </div>
@@ -2216,8 +2478,7 @@ window.TempoMode = (function() {
                     <button type="button" 
                             onclick="if (window.TempoCommunity) { window.TempoCommunity.openCommunityModal(); }" 
                             class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                        <span>See all posts</span>
-                        <span>→</span>
+                        <span>${window.t ? window.t('posts.seeAllPosts', {}, 'See all posts →') : 'See all posts →'}</span>
                     </button>
                 </div>
 
@@ -2383,7 +2644,7 @@ window.TempoMode = (function() {
         rmodeBox.innerHTML = `
             ${renderRmodeHeader()}
             ${renderRecoveryIntroBanner()}
-            <div class="space-y-8">
+            <div class="space-y-8" data-tempo-ui="recovery-home-shell">
                 <!-- Main Asymmetric Grid: ~65% Left / ~35% Right on Desktop -->
                 <div class="recovery-home-main-grid">
                     <!-- LEFT COLUMN (~65%) -->
@@ -2423,7 +2684,11 @@ window.TempoMode = (function() {
         if (!umodeBox) return;
 
         const todayObj = new Date();
-        const formattedDate = todayObj.toLocaleDateString('en-US', {
+        const formattedDate = window.TempoI18n ? window.TempoI18n.formatDate(todayObj, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+        }) : todayObj.toLocaleDateString('en-US', {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
@@ -2441,7 +2706,7 @@ window.TempoMode = (function() {
                                 aria-expanded="false"
                                 title="Switch Tempo Mode">
                             <span>🧭</span>
-                            <span class="font-extrabold">Unclear Mode</span>
+                            <span class="font-extrabold">${window.t ? window.t('modes.unclear.name', {}, 'Unclear Mode') : 'Unclear Mode'}</span>
                             <span class="text-[10px] ml-0.5 opacity-80">▾</span>
                         </button>
                         <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
@@ -2455,6 +2720,7 @@ window.TempoMode = (function() {
     }
 
     function renderActiveModeHome() {
+        renderShellIndicator();
         switch (currentMode) {
             case MODES.EMERGENCY:
                 renderEmodeHome();
@@ -2474,7 +2740,11 @@ window.TempoMode = (function() {
 
     function renderRmodeHeader() {
         const todayObj = new Date();
-        const formattedDate = todayObj.toLocaleDateString('en-US', {
+        const formattedDate = window.TempoI18n ? window.TempoI18n.formatDate(todayObj, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+        }) : todayObj.toLocaleDateString('en-US', {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
@@ -2488,13 +2758,14 @@ window.TempoMode = (function() {
                     <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
                         <button id="btn-home-mode-selector" 
                                 type="button" 
+                                data-tempo-ui="mode-selector-btn"
                                 onclick="window.TempoMode.toggleModeDropdown(event)" 
                                 class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#EDF7F1] text-[#166545] hover:bg-[#DDF0E5] border border-[#CDE9DA] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
                                 aria-haspopup="true"
                                 aria-expanded="false"
                                 title="Switch Tempo Mode">
                             <span>🌱</span>
-                            <span class="font-extrabold">Recovery Mode</span>
+                            <span class="font-extrabold">${window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode'}</span>
                             <span class="text-[10px] ml-0.5 opacity-80">▾</span>
                         </button>
                         <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
@@ -2523,17 +2794,17 @@ window.TempoMode = (function() {
                     <span class="text-xl sm:text-2xl mt-0.5 select-none">🌱</span>
                     <div class="space-y-1">
                         <h4 class="font-heading text-sm sm:text-base font-bold text-[#166545]">
-                            You're in Recovery Mode
+                            ${window.t ? window.t('modes.recovery.name', {}, "You're in Recovery Mode") : "You're in Recovery Mode"}
                         </h4>
                         <p class="text-xs sm:text-sm text-[#2D6A4F] leading-relaxed max-w-2xl">
-                            Nothing you need to complete here. Use this space to slow things down, check in when you want to, or simply take a little breathing room.
+                            ${window.t ? window.t('modes.recovery.introBanner', {}, 'Nothing you need to complete here. Use this space to slow things down, check in when you want to, or simply take a little breathing room.') : 'Nothing you need to complete here. Use this space to slow things down, check in when you want to, or simply take a little breathing room.'}
                         </p>
                     </div>
                 </div>
                 <button type="button" 
                         onclick="window.TempoMode.dismissRecoveryIntro()" 
                         class="px-4 py-2 bg-white hover:bg-stone-50 text-[#166545] border border-[#CDE9DA] font-bold text-xs rounded-xl shadow-xs shrink-0 self-start sm:self-auto transition cursor-pointer">
-                    Got it
+                    ${window.t ? window.t('modes.recovery.dismissBanner', {}, 'Got it') : 'Got it'}
                 </button>
             </div>
         `;
@@ -2549,21 +2820,21 @@ window.TempoMode = (function() {
             const dayStatus = selfCheckState.dayStatus || ['done', 'done', 'done', 'done', 'done', 'done', 'pending'];
 
             return `
-                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden">
+                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
                     <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
                         ${escapeHTML(greetingText)}
                     </div>
                     <div class="flex items-center space-x-2">
                         <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                            SELF-CHECK
+                            ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
                         </span>
                     </div>
                     <div class="space-y-1">
                         <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
                             How have things been today?
                         </h3>
-                        <p class="text-xs text-[#6F6B68] font-medium">${streakCount} day check-in streak</p>
+                        <p class="text-xs text-[#6F6B68] font-medium">${window.t ? window.t('modes.recovery.streakCount', { count: streakCount }, `${streakCount}-day streak`) : `${streakCount} day check-in streak`}</p>
                     </div>
 
                     <!-- Streak Calendar Row -->
@@ -2583,17 +2854,17 @@ window.TempoMode = (function() {
                     <div class="pt-2 flex flex-wrap items-center gap-3">
                         <button onclick="window.TempoMode.handleSelfCheckAction('checkin')"
                                 class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>Check in</span>
+                            <span>${window.t ? window.t('modes.recovery.checkInToday', {}, 'Check in') : 'Check in'}</span>
                             <span>→</span>
                         </button>
                         <button onclick="window.TempoMode.handleSelfCheckAction('manage')"
                                 class="text-xs font-semibold text-[#166545] hover:text-[#0E4A32] transition cursor-pointer">
-                            Manage Self-check
+                            ${window.t ? window.t('modes.recovery.manageSelfCheck', {}, 'Manage Self-check') : 'Manage Self-check'}
                         </button>
                         <span class="text-stone-300">·</span>
                         <button onclick="window.TempoMode.handleSelfCheckAction('history')"
                                 class="text-xs font-semibold text-[#166545] hover:text-[#0E4A32] transition cursor-pointer">
-                            View history
+                            ${window.t ? window.t('modes.recovery.viewHistory', {}, 'View history') : 'View history'}
                         </button>
                     </div>
                 </div>
@@ -2608,7 +2879,7 @@ window.TempoMode = (function() {
             const dayStatus = selfCheckState.dayStatus || ['done', 'done', 'done', 'done', 'done', 'done', 'done'];
 
             return `
-                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden">
+                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
                     <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
                         ${escapeHTML(greetingText)}
                     </div>
@@ -2616,18 +2887,18 @@ window.TempoMode = (function() {
                         <div class="flex items-center space-x-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                                SELF-CHECK
+                                ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
                             </span>
                         </div>
                         <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]">
-                            ✓ Checked in today
+                            ✓ ${window.t ? window.t('modes.recovery.viewToday', {}, 'Checked in today') : 'Checked in today'}
                         </span>
                     </div>
                     <div class="space-y-1">
                         <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
                             Checked in for today
                         </h3>
-                        <p class="text-xs text-[#6F6B68] font-medium">${streakCount} day check-in streak</p>
+                        <p class="text-xs text-[#6F6B68] font-medium">${window.t ? window.t('modes.recovery.streakCount', { count: streakCount }, `${streakCount}-day streak`) : `${streakCount} day check-in streak`}</p>
                     </div>
 
                     <!-- Streak Calendar Row -->
@@ -2646,15 +2917,15 @@ window.TempoMode = (function() {
                     <div class="pt-2 flex flex-wrap items-center gap-3">
                         <button onclick="window.TempoMode.handleSelfCheckAction('view')"
                                 class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#166545] hover:bg-[#115237] text-white shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>View today's check-in</span>
+                            <span>${window.t ? window.t('modes.recovery.viewToday', {}, "View today's check-in") : "View today's check-in"}</span>
                             <span>→</span>
                         </button>
                         <div class="flex items-center space-x-2 text-xs font-semibold text-[#166545]">
                             <button onclick="window.TempoMode.handleSelfCheckAction('edit')" class="hover:text-[#0E4A32] transition cursor-pointer">Edit check-in</button>
                             <span class="text-stone-300">·</span>
-                            <button onclick="window.TempoMode.handleSelfCheckAction('manage')" class="hover:text-[#0E4A32] transition cursor-pointer">Manage Self-check</button>
+                            <button onclick="window.TempoMode.handleSelfCheckAction('manage')" class="hover:text-[#0E4A32] transition cursor-pointer">${window.t ? window.t('modes.recovery.manageSelfCheck', {}, 'Manage Self-check') : 'Manage Self-check'}</button>
                             <span class="text-stone-300">·</span>
-                            <button onclick="window.TempoMode.handleSelfCheckAction('history')" class="hover:text-[#0E4A32] transition cursor-pointer">History</button>
+                            <button onclick="window.TempoMode.handleSelfCheckAction('history')" class="hover:text-[#0E4A32] transition cursor-pointer">${window.t ? window.t('modes.recovery.viewHistory', {}, 'History') : 'History'}</button>
                         </div>
                     </div>
                 </div>
@@ -2663,19 +2934,19 @@ window.TempoMode = (function() {
 
         // DEFAULT: STATE A — NO SELF-CHECK CONFIGURED
         return `
-            <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs relative overflow-hidden">
+            <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
                 <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
                     ${escapeHTML(greetingText)}
                 </div>
                 <div class="flex items-center space-x-2">
                     <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
                     <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                        SELF-CHECK
+                        ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
                     </span>
                 </div>
                 <div class="space-y-1.5">
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124] tracking-tight">
-                        What would you like to keep an eye on?
+                        ${window.t ? window.t('modes.recovery.selfCheckDesc', {}, 'What would you like to keep an eye on?') : 'What would you like to keep an eye on?'}
                     </h3>
                     <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed max-w-lg">
                         Create your own check-in with the things that matter to you — stress signs, supportive habits, or anything else.
@@ -2685,7 +2956,7 @@ window.TempoMode = (function() {
                     <button type="button" 
                             onclick="window.TempoMode.handleSelfCheckSetupClick()"
                             class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                        <span>Set up Self-check</span>
+                        <span>${window.t ? window.t('modes.recovery.setupSelfCheck', {}, 'Set up Self-check') : 'Set up Self-check'}</span>
                         <span>→</span>
                     </button>
                 </div>
@@ -2698,8 +2969,10 @@ window.TempoMode = (function() {
     // -------------------------------------------------------------------------
     function renderRecoverySharedEcosystem() {
         return `
-            ${window.TempoTools ? window.TempoTools.renderSectionHTML() : ''}
-            ${window.TempoLearnSolve ? `<div id="rmode-learn-solve-container">${window.TempoLearnSolve.renderSectionHTML()}</div>` : ''}
+            <div id="recovery-shared-ecosystem-container" data-tempo-ui="recovery-tools" class="space-y-8">
+                ${window.TempoTools ? window.TempoTools.renderSectionHTML() : ''}
+                ${window.TempoLearnSolve ? `<div id="rmode-learn-solve-container">${window.TempoLearnSolve.renderSectionHTML()}</div>` : ''}
+            </div>
         `;
     }
 
@@ -2715,18 +2988,18 @@ window.TempoMode = (function() {
 
         if (recentlyState && recentlyState.type === 'NOT_ENOUGH') {
             return `
-                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full">
+                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
                     <div class="space-y-3">
                         <div class="flex items-center space-x-2">
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">
-                                RECENTLY
+                                ${window.t ? window.t('modes.recovery.recently', {}, 'RECENTLY') : 'RECENTLY'}
                             </span>
                         </div>
                         <h4 class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            You're just getting started.
+                            ${window.t ? window.t('modes.recovery.recentlyJustStarted', {}, "You're just getting started.") : "You're just getting started."}
                         </h4>
                         <p class="text-xs text-[#6F6B68] leading-relaxed">
-                            There's not enough history to compare yet. Keep checking in at your own pace.
+                            ${window.t ? window.t('modes.recovery.recentlyJustStartedDesc', {}, "There's not enough history to compare yet. Keep checking in at your own pace.") : "There's not enough history to compare yet. Keep checking in at your own pace."}
                         </p>
                     </div>
                     <div class="pt-4 border-t border-stone-100 text-[11px] text-[#6F6B68]">
@@ -2738,22 +3011,22 @@ window.TempoMode = (function() {
 
         // DEFAULT: HONEST EMPTY STATE FOR PHASE 1
         return `
-            <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full">
+            <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
                 <div class="space-y-3">
                     <div class="flex items-center space-x-2">
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">
-                            RECENTLY
+                            ${window.t ? window.t('modes.recovery.recently', {}, 'RECENTLY') : 'RECENTLY'}
                         </span>
                     </div>
                     <h4 class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                        Nothing here yet.
+                        ${window.t ? window.t('modes.recovery.recentlyEmpty', {}, 'Nothing here yet.') : 'Nothing here yet.'}
                     </h4>
                     <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        Once you start checking in, this space can help you look back at what you've been noticing over time.
+                        ${window.t ? window.t('modes.recovery.recentlyEmptyDesc', {}, "Once you start checking in, this space can help you look back at what you've been noticing over time.") : "Once you start checking in, this space can help you look back at what you've been noticing over time."}
                     </p>
                 </div>
                 <div class="pt-4 border-t border-stone-100 text-[11px] text-[#6F6B68]">
-                    <span>Nothing needs to be recorded until you're ready.</span>
+                    <span>${window.t ? window.t('modes.recovery.nothingNeedsRecorded', {}, 'Nothing needs to be recorded until you\'re ready.') : 'Nothing needs to be recorded until you\'re ready.'}</span>
                 </div>
             </div>
         `;
@@ -2800,7 +3073,7 @@ window.TempoMode = (function() {
         if (!isReady) return ''; // Hidden when dismissed or ineligible
 
         return `
-            <div class="recovery-card-weeklyreview bg-gradient-to-br from-[#F4FAF6] to-[#EDF7F1] border border-[#CDE9DA] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs">
+            <div class="recovery-card-weeklyreview bg-gradient-to-br from-[#F4FAF6] to-[#EDF7F1] border border-[#CDE9DA] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs" data-tempo-ui="recovery-weekly-review">
                 <div class="flex items-center space-x-2">
                     <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">
                         YOUR WEEKLY REVIEW IS READY
@@ -2914,7 +3187,7 @@ window.TempoMode = (function() {
         }
 
         return `
-            <div class="recovery-section-today space-y-3 pt-1">
+            <div id="recovery-today-section" class="recovery-section-today space-y-3 pt-1" data-tempo-ui="recovery-today">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-2">
                         <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
@@ -2950,7 +3223,7 @@ window.TempoMode = (function() {
             : '';
 
         return `
-            <div class="recovery-section-posts space-y-4 pt-2">
+            <div class="recovery-section-posts space-y-4 pt-2" data-tempo-ui="recovery-posts">
                 <!-- Header -->
                 <div class="flex items-center justify-between">
                     <div class="space-y-0.5">
@@ -3166,6 +3439,9 @@ window.TempoMode = (function() {
         renderRmodeHome,
         renderUmodeHome,
         renderDmodeHome,
+        renderEntryHome,
+        renderEntryHomeHTML,
+        hasEstablishedContext,
         renderDmodeModeSwitchEntry,
         restoreDefaultHome,
         renderActiveModeHome,
@@ -3192,7 +3468,8 @@ window.TempoMode = (function() {
         stopForToday,
         keepWorkingToday,
         dismissStaleWarning,
-        getSafeGreetingInfo
+        getSafeGreetingInfo,
+        EPLAN_STATES
     };
 })();
 

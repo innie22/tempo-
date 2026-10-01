@@ -5521,11 +5521,30 @@ window.TempoEmergencyFlow = (function() {
         return availabilityDays;
     }
 
+    function setConfirmedPlan(plan) {
+        confirmedPlan = plan;
+        if (plan && Array.isArray(plan.plannedTasks)) {
+            tasks = plan.plannedTasks.map(pt => pt.task).filter(Boolean);
+        } else if (plan && Array.isArray(plan.tasks)) {
+            tasks = [...plan.tasks];
+        }
+    }
+
     function toggleTaskCompleted(taskId) {
         let task = tasks.find(t => t.id === taskId);
         if (!task && confirmedPlan && confirmedPlan.plannedTasks) {
-            const item = confirmedPlan.plannedTasks.find(pt => pt.task.id === taskId);
+            const item = confirmedPlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
             if (item) task = item.task;
+        }
+        if (!task && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            const storePlan = window.TempoPlanStore.getActivePlan('emergency');
+            if (storePlan && storePlan.plannedTasks) {
+                const item = storePlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
+                if (item) {
+                    task = item.task;
+                    if (!confirmedPlan) confirmedPlan = storePlan;
+                }
+            }
         }
         if (task) {
             task.completed = !task.completed;
@@ -5547,8 +5566,18 @@ window.TempoEmergencyFlow = (function() {
     function setTaskInProgress(taskId, inProgress = true) {
         let task = tasks.find(t => t.id === taskId);
         if (!task && confirmedPlan && confirmedPlan.plannedTasks) {
-            const item = confirmedPlan.plannedTasks.find(pt => pt.task.id === taskId);
+            const item = confirmedPlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
             if (item) task = item.task;
+        }
+        if (!task && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            const storePlan = window.TempoPlanStore.getActivePlan('emergency');
+            if (storePlan && storePlan.plannedTasks) {
+                const item = storePlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
+                if (item) {
+                    task = item.task;
+                    if (!confirmedPlan) confirmedPlan = storePlan;
+                }
+            }
         }
         if (task) {
             task.isInProgress = inProgress;
@@ -5567,6 +5596,7 @@ window.TempoEmergencyFlow = (function() {
         getCurrentStage,
         getTasks,
         getConfirmedPlan,
+        setConfirmedPlan,
         getAvailabilityDays,
         toggleTaskCompleted,
         setTaskInProgress,
