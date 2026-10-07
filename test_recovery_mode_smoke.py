@@ -106,6 +106,10 @@ def run_tests():
         title = eval_js("document.title")
         log(f"✓ Step 1: App loaded with title: '{title}'")
 
+        # Set language to 'en' to align with test assertions
+        eval_js("if (window.TempoI18n && typeof window.TempoI18n.setLanguage === 'function') { window.TempoI18n.setLanguage('en'); } else { localStorage.setItem('tempo_language', 'en'); }")
+        time.sleep(0.2)
+
         # Check safe greeting fallback first
         greeting_fallback = eval_js("window.TempoMode.getSafeGreetingInfo(null)")
         assert greeting_fallback['greetingText'] == 'Hi there 👋'
@@ -153,7 +157,7 @@ def run_tests():
         dropdown_html = eval_js("document.getElementById('home-mode-selector-dropdown').innerHTML")
         assert "Urgent Mode" in dropdown_html
         assert "Unclear Mode" in dropdown_html
-        assert "Take a break from modes" in dropdown_html
+        assert "Take a break from modes" not in dropdown_html, "Take a break from modes must not be in dropdown (Tmode removed)"
         assert "Recovery Mode" not in dropdown_html, "Recovery Mode should not be listed as destination when already active"
         assert "SOS" not in dropdown_html, "SOS must not be inside mode dropdown"
         eval_js("window.TempoMode.closeAllModeDropdowns();")

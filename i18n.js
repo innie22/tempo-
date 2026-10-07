@@ -237,8 +237,6 @@
                 },
                 selector: {
                     switchMode: "Chuyển chế độ",
-                    takeBreak: "Tạm nghỉ các chế độ",
-                    takeBreakDesc: "Trở về trải nghiệm Tempo mặc định",
                     activeBadge: "Đang bật"
                 }
             },
@@ -605,8 +603,6 @@
                 },
                 selector: {
                     switchMode: "Switch Mode",
-                    takeBreak: "Take a break from modes",
-                    takeBreakDesc: "Return to the default experience",
                     activeBadge: "Active"
                 }
             },

@@ -266,12 +266,12 @@ def run_tests():
         """)
 
         assert dropdown_state['isOpen'], "Dropdown should open on button click"
-        # Popover does NOT repeat Urgent Mode; lists Recovery, Unclear, and Take a break
-        assert dropdown_state['itemsCount'] == 3, f"Dropdown should contain 3 destination items, got: {dropdown_state['itemsCount']}"
+        # Popover does NOT repeat Urgent Mode; lists Recovery and Unclear (Take a break removed)
+        assert dropdown_state['itemsCount'] == 2, f"Dropdown should contain 2 destination items, got: {dropdown_state['itemsCount']}"
         assert not any(m in dropdown_state['dropdownText'] for m in ["⚡ Urgent Mode", "⚡ Chế độ Khẩn"]), "Dropdown popover should NOT redundantly list active Urgent Mode"
         assert any(m in dropdown_state['dropdownText'] for m in ["Recovery Mode", "Chế độ Hồi phục", "Chế độ Phục hồi"]), "Dropdown should list Recovery Mode"
         assert any(m in dropdown_state['dropdownText'] for m in ["Unclear Mode", "Chế độ Chưa rõ"]), "Dropdown should list Unclear Mode"
-        assert any(m in dropdown_state['dropdownText'] for m in ["Take a break from modes", "Tạm nghỉ các chế độ", "Tạm nghỉ"]), "Dropdown should list Take a break from modes"
+        assert not any(m in dropdown_state['dropdownText'] for m in ["Take a break from modes", "Tạm nghỉ các chế độ", "Tạm nghỉ"]), "Dropdown should NOT list Take a break from modes"
         assert dropdown_state['isClosed'], "Dropdown should close on Escape key"
         log("✓ Mode dropdown opening, destination options (excluding active mode), and keyboard closing verified.")
 

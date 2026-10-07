@@ -134,7 +134,7 @@ def run_tests():
                     isDropdownVisible,
                     hasUrgent: dropdownHtml.includes('Urgent Mode') || dropdownHtml.includes('Chế độ Khẩn'),
                     hasUnclear: dropdownHtml.includes('Unclear Mode') || dropdownHtml.includes('Chế độ Chưa rõ'),
-                    hasBreak: dropdownHtml.includes('Take a break') || dropdownHtml.includes('Tạm nghỉ') || dropdownHtml.includes('Default'),
+                    excludesBreak: !dropdownHtml.includes('Take a break') && !dropdownHtml.includes('Tạm nghỉ') && !dropdownHtml.includes('Default'),
                     excludesRecovery: !dropdownHtml.includes('Recovery Mode') && !dropdownHtml.includes('Chế độ Hồi phục') && !dropdownHtml.includes('Chế độ Phục hồi'),
                     excludesSOS: !dropdownHtml.includes('SOS')
                 };
@@ -146,7 +146,7 @@ def run_tests():
         assert mode_check['isDropdownVisible'], "Mode dropdown must open on toggle"
         assert mode_check['hasUrgent'], "Mode dropdown must include Urgent Mode"
         assert mode_check['hasUnclear'], "Mode dropdown must include Unclear Mode"
-        assert mode_check['hasBreak'], "Mode dropdown must include option to take a break / switch to default"
+        assert mode_check['excludesBreak'], "Mode dropdown must NOT include option to take a break / switch to default (Tmode removed)"
         assert mode_check['excludesRecovery'], "Mode dropdown must EXCLUDE Recovery Mode when already active"
         assert mode_check['excludesSOS'], "Mode dropdown must EXCLUDE SOS (SOS is separate safety modal)"
         log("✓ Mode identifier 'recovery' and mode dropdown destination exclusions verified.")

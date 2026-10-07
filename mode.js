@@ -33,11 +33,17 @@ window.TempoMode = (function() {
         COMPLETE: 'PLAN_COMPLETE'
     };
 
-    // Single centralized source of truth for active mode
-    let currentMode = MODES.DEFAULT;
+    // Central active context: exactly null (Entry Home) | MODES.EMERGENCY | MODES.RECOVERY
+    let activeContext = null;
 
-    // Remembers intended mode across the authentication gate
-    let pendingMode = null;
+    // Active shared assessment/tool session (e.g. 'ucheck')
+    let activeSharedTool = null;
+
+    // Source context for shared assessment / tools: 'entry' | 'emergency' | 'recovery'
+    let sourceContext = 'entry';
+
+    // Central pending intent across auth gate: null | { type: 'mode'|'tool', destination: string, tool?: string, sourceContext?: string }
+    let pendingIntent = null;
 
     // Session-level flags to prevent repeating dismissed alerts
     let sessionFlags = {
@@ -50,69 +56,78 @@ window.TempoMode = (function() {
 
     function hasEstablishedContext() {
         try {
-            // 1. Established Urgent Plan / Workspace
-            if (window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function') {
-                if (window.TempoPlanStore.hasActivePlan('emergency')) return true;
-            }
-            const savedPlan = localStorage.getItem('tempo_active_plan_emergency') || localStorage.getItem('tempo_confirmed_plan');
-            if (savedPlan) {
-                const parsed = JSON.parse(savedPlan);
-                if (parsed && ((Array.isArray(parsed.plannedTasks) && parsed.plannedTasks.length > 0) || (Array.isArray(parsed.tasks) && parsed.tasks.length > 0))) {
-                    return true;
-                }
+            const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+            if (uid) {
+                const userSaved = localStorage.getItem('tempo_user_established_context_' + uid);
+                if (userSaved === MODES.EMERGENCY || userSaved === MODES.RECOVERY) return true;
+                if (userSaved === MODES.DEFAULT) return false;
             }
 
-            // 2. Established Recovery Context
-            const recConfig = localStorage.getItem('tempo_recovery_selfcheck_config');
-            if (recConfig) {
-                const parsedRec = JSON.parse(recConfig);
-                if (parsedRec && parsedRec.type && parsedRec.type !== 'STATE_A') return true;
-            }
-            const recNote = localStorage.getItem('tempo_recovery_note_content');
-            if (recNote && recNote.trim().length > 0) return true;
+            const savedEstablished = localStorage.getItem('tempo_established_context');
+            if (savedEstablished === MODES.EMERGENCY || savedEstablished === MODES.RECOVERY) return true;
+            if (savedEstablished === MODES.DEFAULT) return false;
 
-            // 3. User explicitly saved an active mode other than default
             const savedMode = localStorage.getItem('tempo_current_mode');
-            if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY || savedMode === MODES.UNCLEAR) {
-                return true;
-            }
+            if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY) return true;
         } catch (e) {}
 
         return false;
     }
 
     function init() {
-        // Load persisted mode safely from localStorage
+        // Load persisted context safely from localStorage
         try {
-            const savedMode = localStorage.getItem('tempo_current_mode');
             const authState = window.TempoAuth && typeof window.TempoAuth.getAuthState === 'function'
                 ? window.TempoAuth.getAuthState()
                 : 'AUTH_LOADING';
             const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
-            const hasActivePlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
+            const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+
+            const userEstablished = uid ? localStorage.getItem('tempo_user_established_context_' + uid) : null;
+            const globalEstablished = localStorage.getItem('tempo_established_context');
+            const savedMode = localStorage.getItem('tempo_current_mode');
+
+            activeSharedTool = null;
 
             if (authState === 'AUTH_LOADING') {
-                if (savedMode && Object.values(MODES).includes(savedMode)) {
-                    currentMode = savedMode;
+                if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY) {
+                    activeContext = savedMode;
+                    sourceContext = savedMode;
+                } else {
+                    activeContext = null;
+                    sourceContext = 'entry';
                 }
             } else if (!isAuthenticated) {
-                // Anonymous user -> Always Entry Home (default)
-                currentMode = MODES.DEFAULT;
+                // Anonymous user -> Always Entry Home (activeContext = null)
+                activeContext = null;
+                sourceContext = 'entry';
                 localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
-            } else if (!hasEstablishedContext()) {
-                // Authenticated user with no established workspace/context -> Entry Home
-                currentMode = MODES.DEFAULT;
-                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
-            } else if (savedMode && Object.values(MODES).includes(savedMode)) {
-                currentMode = savedMode;
-            } else if (hasActivePlan) {
-                currentMode = MODES.EMERGENCY;
-                localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
+            } else {
+                // Authenticated user: restore their established context or default to Entry Home
+                const established = userEstablished;
+                if (established === MODES.EMERGENCY) {
+                    activeContext = MODES.EMERGENCY;
+                    sourceContext = 'emergency';
+                } else if (established === MODES.RECOVERY) {
+                    activeContext = MODES.RECOVERY;
+                    sourceContext = 'recovery';
+                } else {
+                    // Authenticated user with no established active context -> Entry Home
+                    activeContext = null;
+                    sourceContext = 'entry';
+                    localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+                }
             }
 
-            const savedPending = localStorage.getItem('tempo_pending_mode');
-            if (savedPending && Object.values(MODES).includes(savedPending)) {
-                pendingMode = savedPending;
+            const savedPendingIntent = localStorage.getItem('tempo_pending_intent');
+            if (savedPendingIntent) {
+                try { pendingIntent = JSON.parse(savedPendingIntent); } catch (e) {}
+            }
+            if (!pendingIntent) {
+                const savedPending = localStorage.getItem('tempo_pending_mode');
+                if (savedPending && Object.values(MODES).includes(savedPending)) {
+                    pendingIntent = { type: 'mode', destination: savedPending };
+                }
             }
         } catch (e) {
             console.warn("[TempoMode] localStorage access error:", e);
@@ -138,7 +153,7 @@ window.TempoMode = (function() {
 
         // Close mode selector dropdown on outside click
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('#home-mode-selector-wrapper') && !e.target.closest('#mode-indicator-shell')) {
+            if (!e.target.closest('#home-mode-selector-wrapper, [id^="home-mode-selector-wrapper"]') && !e.target.closest('#mode-indicator-shell')) {
                 closeAllModeDropdowns();
             }
         });
@@ -154,16 +169,77 @@ window.TempoMode = (function() {
         });
     }
 
+    function getActiveContext() {
+        return activeContext;
+    }
+
+    function hasActiveContext() {
+        return activeContext !== null;
+    }
+
+    function getSourceContext() {
+        return sourceContext;
+    }
+
+    function setSourceContext(ctx) {
+        if (ctx === 'emergency' || ctx === 'recovery' || ctx === 'entry') {
+            sourceContext = ctx;
+        } else {
+            sourceContext = 'entry';
+        }
+    }
+
+    function getActiveSharedTool() {
+        return activeSharedTool;
+    }
+
+    function getPendingIntent() {
+        return pendingIntent;
+    }
+
+    function setPendingIntent(intent) {
+        pendingIntent = intent;
+        try {
+            if (intent) {
+                localStorage.setItem('tempo_pending_intent', JSON.stringify(intent));
+                if (intent.type === 'mode') {
+                    localStorage.setItem('tempo_pending_mode', intent.destination);
+                }
+            } else {
+                localStorage.removeItem('tempo_pending_intent');
+                localStorage.removeItem('tempo_pending_mode');
+            }
+        } catch (e) {}
+    }
+
+    function clearPendingIntent() {
+        pendingIntent = null;
+        try {
+            localStorage.removeItem('tempo_pending_intent');
+            localStorage.removeItem('tempo_pending_mode');
+        } catch (e) {}
+    }
+
     function getMode() {
-        return currentMode;
+        if (activeSharedTool === 'ucheck') return MODES.UNCLEAR;
+        if (activeContext === MODES.EMERGENCY) return MODES.EMERGENCY;
+        if (activeContext === MODES.RECOVERY) return MODES.RECOVERY;
+        return MODES.DEFAULT;
     }
 
     function getPendingMode() {
-        return pendingMode;
+        if (pendingIntent && pendingIntent.type === 'mode') {
+            return pendingIntent.destination;
+        }
+        return null;
     }
 
     function hasPendingMode() {
-        return !!pendingMode;
+        return pendingIntent !== null;
+    }
+
+    function hasPendingIntent() {
+        return pendingIntent !== null;
     }
 
     function getModeDisplayName(mode) {
@@ -184,128 +260,40 @@ window.TempoMode = (function() {
     }
 
     /**
-     * Request entry into a mode.
-     * Enforces the authentication gate for Emode, Rmode, and Umode while
-     * keeping Dmode and SOS completely open to anonymous visitors.
+     * Central active context transition controller.
+     * Transitions activeContext only between: null, 'emergency', and 'recovery'.
      */
-    function requestMode(targetMode) {
-        if (!Object.values(MODES).includes(targetMode)) {
-            targetMode = MODES.DEFAULT;
+    function transitionContext(targetContext, options = {}) {
+        if (targetContext === 'urgent') targetContext = MODES.EMERGENCY;
+        if (targetContext === 'default') targetContext = null;
+        if (targetContext !== MODES.EMERGENCY && targetContext !== MODES.RECOVERY) {
+            targetContext = null;
         }
 
-        // Dmode is always accessible without authentication
-        if (targetMode === MODES.DEFAULT) {
-            setMode(MODES.DEFAULT);
-            if (window.TempoApp) window.TempoApp.navigateTo('today');
-            return;
-        }
+        const prevContext = activeContext;
+        activeContext = targetContext;
+        activeSharedTool = null;
 
-        const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
+        // Establish sourceContext according to new activeContext
+        sourceContext = targetContext === MODES.EMERGENCY ? 'emergency' : (targetContext === MODES.RECOVERY ? 'recovery' : 'entry');
 
-        if (isAuthenticated) {
-            // User is already authenticated: enter mode immediately
-            setMode(targetMode);
-            if (targetMode === MODES.EMERGENCY) {
-                const hasPlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
-                if (hasPlan) {
-                    if (window.TempoApp) window.TempoApp.navigateTo('today');
-                } else {
-                    if (window.TempoApp) window.TempoApp.navigateTo('emergency');
-                }
-            } else if (targetMode === MODES.RECOVERY) {
-                if (window.TempoApp) window.TempoApp.navigateTo('today');
-            } else if (targetMode === MODES.UNCLEAR) {
-                if (window.TempoApp) window.TempoApp.navigateTo('today');
-            }
-        } else {
-            // Anonymous user: remember intent, show auth gate, do not activate mode yet
-            pendingMode = targetMode;
-            try {
-                localStorage.setItem('tempo_pending_mode', targetMode);
-            } catch (e) {}
-
-            updateAuthGateBanners(targetMode);
-
-            if (window.TempoAuth) {
-                window.TempoAuth.openSignInModal();
-            }
-
-            if (window.TempoApp) {
-                window.TempoApp.showToast(`Sign in or create a free account to enter ${getModeDisplayName(targetMode)}.`);
-            }
-        }
-    }
-
-    /**
-     * Called immediately after successful sign in or sign up.
-     * Continues into the intended mode seamlessly without returning to generic Home.
-     */
-    function handleAuthSuccess() {
-        if (!pendingMode) {
-            try {
-                pendingMode = localStorage.getItem('tempo_pending_mode');
-            } catch (e) {}
-        }
-
-        if (pendingMode && Object.values(MODES).includes(pendingMode)) {
-            const target = pendingMode;
-            pendingMode = null;
-            try {
-                localStorage.removeItem('tempo_pending_mode');
-            } catch (e) {}
-
-            setMode(target, { silent: true });
-
-            if (target === MODES.EMERGENCY) {
-                if (window.TempoApp) {
-                    const hasPlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
-                    if (hasPlan) {
-                        window.TempoApp.navigateTo('today');
-                    } else {
-                        window.TempoApp.navigateTo('emergency');
-                    }
-                    window.TempoApp.showToast("Welcome! Resuming your Urgent Mode setup.");
-                }
-            } else if (target === MODES.RECOVERY) {
-                if (window.TempoApp) {
-                    window.TempoApp.navigateTo('today');
-                    window.TempoApp.showToast("Welcome! Entering Recovery Mode.");
-                }
-            } else if (target === MODES.UNCLEAR) {
-                if (window.TempoApp) {
-                    window.TempoApp.navigateTo('today');
-                    window.TempoApp.showToast("Welcome! Entering Unclear Mode.");
-                }
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Sets the centralized mode state.
-     * Persists across reloads without touching or modifying database schema.
-     */
-    function setMode(newMode, options = {}) {
-        if (newMode === 'urgent') {
-            newMode = MODES.EMERGENCY;
-        }
-        if (!Object.values(MODES).includes(newMode)) {
-            newMode = MODES.DEFAULT;
-        }
-
-        const prevMode = currentMode;
-        currentMode = newMode;
+        clearPendingIntent();
 
         try {
-            localStorage.setItem('tempo_current_mode', newMode);
-        } catch (e) {}
-
-        // Clear any pending mode once confirmed
-        pendingMode = null;
-        try {
-            localStorage.removeItem('tempo_pending_mode');
+            const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+            if (targetContext) {
+                localStorage.setItem('tempo_established_context', targetContext);
+                localStorage.setItem('tempo_current_mode', targetContext);
+                if (uid) {
+                    localStorage.setItem('tempo_user_established_context_' + uid, targetContext);
+                }
+            } else {
+                localStorage.setItem('tempo_established_context', MODES.DEFAULT);
+                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+                if (uid) {
+                    localStorage.setItem('tempo_user_established_context_' + uid, MODES.DEFAULT);
+                }
+            }
         } catch (e) {}
 
         renderShellIndicator();
@@ -313,14 +301,12 @@ window.TempoMode = (function() {
         closeAllModeDropdowns();
 
         if (!options.silent && window.TempoApp) {
-            if (newMode === MODES.EMERGENCY) {
+            if (targetContext === MODES.EMERGENCY) {
                 window.TempoApp.showToast("⚡ Urgent Mode active");
-            } else if (newMode === MODES.RECOVERY) {
+            } else if (targetContext === MODES.RECOVERY) {
                 window.TempoApp.showToast("🌱 Switched to Recovery Mode");
-            } else if (newMode === MODES.UNCLEAR) {
-                window.TempoApp.showToast("🧭 Switched to Unclear Mode");
-            } else if (newMode === MODES.DEFAULT) {
-                window.TempoApp.showToast("Returned to Default Tempo. All tasks remain saved.");
+            } else {
+                window.TempoApp.showToast("Returned to Entry Home. All tasks remain saved.");
             }
         }
 
@@ -331,7 +317,7 @@ window.TempoMode = (function() {
             window.TempoApp.navigateTo('today');
         }
 
-        if (newMode === MODES.RECOVERY) {
+        if (targetContext === MODES.RECOVERY) {
             if (!options.skipSetupCheck && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.shouldShowFirstTimeWelcome === 'function') {
                 if (window.TempoRecoverySetup.shouldShowFirstTimeWelcome()) {
                     window.TempoRecoverySetup.open(1);
@@ -340,19 +326,344 @@ window.TempoMode = (function() {
         }
     }
 
+    /**
+     * Request entry into an active context.
+     * Enforces auth gate for guest users while keeping Entry Home completely open.
+     */
+    function requestContext(targetContext, origin = 'entry') {
+        if (targetContext === 'urgent') targetContext = MODES.EMERGENCY;
+        if (targetContext === 'default') targetContext = null;
+        if (targetContext !== MODES.EMERGENCY && targetContext !== MODES.RECOVERY) {
+            transitionContext(null);
+            return;
+        }
+
+        const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
+
+        if (isAuthenticated) {
+            transitionContext(targetContext);
+            if (targetContext === MODES.EMERGENCY) {
+                const hasPlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
+                if (hasPlan) {
+                    if (window.TempoApp) window.TempoApp.navigateTo('today');
+                } else {
+                    if (window.TempoApp) window.TempoApp.navigateTo('emergency');
+                }
+            } else if (targetContext === MODES.RECOVERY) {
+                if (window.TempoApp) window.TempoApp.navigateTo('today');
+            }
+        } else {
+            // Guest user: save pending intent, show auth gate, do NOT activate context yet
+            setPendingIntent({
+                type: 'mode',
+                destination: targetContext,
+                sourceContext: origin || sourceContext || 'entry'
+            });
+
+            updateAuthGateBanners(targetContext);
+
+            if (window.TempoAuth) {
+                window.TempoAuth.openSignInModal();
+            }
+
+            if (window.TempoApp) {
+                window.TempoApp.showToast(`Sign in or create a free account to enter ${getModeDisplayName(targetContext)}.`);
+            }
+        }
+    }
+
+    /**
+     * Opens Ucheck shared assessment flow without mutating activeContext.
+     * Preserves sourceContext so exit returns exactly to origin.
+     * Enforces authentication boundary for guest users.
+     */
+    function openUcheck(options = {}) {
+        const src = options.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
+        sourceContext = src;
+
+        const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
+
+        if (!isAuthenticated) {
+            // Guest user: save pending intent for Ucheck, show auth gate, do NOT open Ucheck yet
+            setPendingIntent({
+                type: 'ucheck',
+                destination: 'ucheck',
+                options: options,
+                sourceContext: src
+            });
+
+            closeChangeModeModal();
+            closeAllModeDropdowns();
+
+            updateAuthGateBanners(MODES.UNCLEAR);
+
+            if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                window.TempoAuth.openSignInModal();
+            }
+
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Please sign in or create an account to access Unclear Mode assessment.");
+            }
+            return;
+        }
+
+        activeSharedTool = 'ucheck';
+
+        renderShellIndicator();
+        closeChangeModeModal();
+        closeAllModeDropdowns();
+
+        applyModeVisibility(MODES.UNCLEAR);
+
+        if (window.TempoUnclearMode) {
+            if (options.startNew) {
+                window.TempoUnclearMode.startNewCheckIn();
+            } else if (options.resumeDraftId) {
+                window.TempoUnclearMode.resumeDraft(options.resumeDraftId);
+            } else if (options.adjustVersionId) {
+                window.TempoUnclearMode.adjustCompletedCheckIn(options.adjustVersionId);
+            } else {
+                window.TempoUnclearMode.renderHome();
+            }
+        }
+
+        if (window.TempoApp) {
+            window.TempoApp.navigateTo('today');
+        }
+    }
+
+    /**
+     * Returns to the source context dashboard from which a tool/assessment was opened.
+     */
+    function returnToSourceContext() {
+        activeSharedTool = null;
+
+        if (sourceContext === 'emergency') {
+            activeContext = MODES.EMERGENCY;
+            renderActiveModeHome();
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
+        } else if (sourceContext === 'recovery') {
+            activeContext = MODES.RECOVERY;
+            renderActiveModeHome();
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
+        } else {
+            activeContext = null;
+            renderActiveModeHome();
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
+        }
+    }
+
+    /**
+     * Legacy adapter for requestMode.
+     */
+    function requestMode(targetMode) {
+        if (targetMode === MODES.UNCLEAR) {
+            openUcheck({ sourceContext: activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry') });
+            return;
+        }
+        if (targetMode === MODES.EMERGENCY || targetMode === 'urgent') {
+            requestContext(MODES.EMERGENCY, 'selector');
+            return;
+        }
+        if (targetMode === MODES.RECOVERY) {
+            requestContext(MODES.RECOVERY, 'selector');
+            return;
+        }
+        transitionContext(null);
+    }
+
+    /**
+     * Handles canceling the auth gate modal.
+     * Clears pendingIntent and returns to the original source context.
+     */
+    function handleAuthCancel() {
+        if (pendingIntent) {
+            const origin = pendingIntent.sourceContext || sourceContext || 'entry';
+            clearPendingIntent();
+            activeSharedTool = null;
+
+            if (origin === 'emergency') {
+                activeContext = MODES.EMERGENCY;
+                sourceContext = 'emergency';
+                renderActiveModeHome();
+            } else if (origin === 'recovery') {
+                activeContext = MODES.RECOVERY;
+                sourceContext = 'recovery';
+                renderActiveModeHome();
+            } else {
+                activeContext = null;
+                sourceContext = 'entry';
+                renderActiveModeHome();
+            }
+            if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                window.TempoApp.navigateTo('today');
+            }
+        }
+    }
+
+    /**
+     * Called immediately after successful sign in or sign up.
+     * Fulfills pendingIntent without incorrectly forcing emergency mode on Wplan tools.
+     */
+    function handleAuthSuccess() {
+        let intent = pendingIntent;
+        if (!intent) {
+            try {
+                const raw = localStorage.getItem('tempo_pending_intent');
+                if (raw) intent = JSON.parse(raw);
+            } catch (e) {}
+        }
+        if (!intent) {
+            const legacyPending = localStorage.getItem('tempo_pending_mode');
+            if (legacyPending && Object.values(MODES).includes(legacyPending)) {
+                intent = { type: 'mode', destination: legacyPending };
+            }
+        }
+
+        if (intent) {
+            clearPendingIntent();
+            if (intent.type === 'mode') {
+                const target = intent.destination;
+                transitionContext(target, { silent: true });
+
+                if (target === MODES.EMERGENCY) {
+                    if (window.TempoApp) {
+                        const hasPlan = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
+                        if (hasPlan) {
+                            window.TempoApp.navigateTo('today');
+                        } else {
+                            window.TempoApp.navigateTo('emergency');
+                        }
+                        window.TempoApp.showToast("Welcome! Resuming your Urgent Mode setup.");
+                    }
+                } else if (target === MODES.RECOVERY) {
+                    if (window.TempoApp) {
+                        window.TempoApp.navigateTo('today');
+                        window.TempoApp.showToast("Welcome! Entering Recovery Mode.");
+                    }
+                }
+                return true;
+            } else if (intent.type === 'ucheck' || (intent.type === 'tool' && (intent.tool === 'ucheck' || intent.destination === 'ucheck' || intent.destination === 'unclear-mode'))) {
+                // Resume Ucheck without changing activeContext
+                const savedSource = intent.sourceContext || sourceContext || 'entry';
+                sourceContext = savedSource;
+                // Preserve activeContext: do not transitionContext!
+                openUcheck(Object.assign({}, intent.options || {}, { sourceContext: savedSource }));
+                if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                    window.TempoApp.showToast("Signed in. Resuming Unclear Mode assessment.");
+                }
+                return true;
+            } else if (intent.type === 'tool') {
+                // Resume tool without forcing emergency mode
+                const dest = intent.destination || intent.tool;
+                if (dest && window.TempoApp) {
+                    window.TempoApp.navigateTo(dest);
+                    window.TempoApp.showToast("Signed in. Resuming your tool.");
+                }
+                return true;
+            }
+        }
+
+        // Case 2: User logged in normally with NO pendingIntent
+        // Restore user's last explicitly established active context or remain at Entry Home (null)
+        const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+        let established = null;
+        try {
+            if (uid) {
+                established = localStorage.getItem('tempo_user_established_context_' + uid);
+            } else {
+                established = localStorage.getItem('tempo_established_context');
+            }
+        } catch (e) {}
+
+        if (established === MODES.EMERGENCY) {
+            activeContext = MODES.EMERGENCY;
+            sourceContext = 'emergency';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
+                localStorage.setItem('tempo_established_context', MODES.EMERGENCY);
+            } catch (e) {}
+        } else if (established === MODES.RECOVERY) {
+            activeContext = MODES.RECOVERY;
+            sourceContext = 'recovery';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.RECOVERY);
+                localStorage.setItem('tempo_established_context', MODES.RECOVERY);
+            } catch (e) {}
+        } else {
+            activeContext = null;
+            sourceContext = 'entry';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+                localStorage.removeItem('tempo_established_context');
+            } catch (e) {}
+        }
+
+        renderShellIndicator();
+        renderActiveModeHome();
+        return false;
+    }
+
+    /**
+     * Handles user logout.
+     * Transitions in-memory session to Entry Home (activeContext = null) for the guest session.
+     * Clears session-scoped pendingIntent, activeSharedTool, and resets view to Entry Home.
+     * Preserves the signed-out user's established active context in localStorage
+     * so it can be resumed upon their next login.
+     */
+    function handleSignOut() {
+        activeContext = null;
+        activeSharedTool = null;
+        sourceContext = 'entry';
+        clearPendingIntent();
+
+        try {
+            localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+            localStorage.removeItem('tempo_established_context');
+        } catch (e) {}
+
+        renderShellIndicator();
+        closeChangeModeModal();
+        closeAllModeDropdowns();
+        renderActiveModeHome();
+    }
+
+    /**
+     * Sets the centralized mode state (legacy adapter).
+     */
+    function setMode(newMode, options = {}) {
+        if (newMode === 'urgent') {
+            newMode = MODES.EMERGENCY;
+        }
+        if (newMode === MODES.UNCLEAR) {
+            openUcheck({ sourceContext: activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry') });
+            return;
+        }
+        if (newMode === MODES.EMERGENCY) {
+            transitionContext(MODES.EMERGENCY, options);
+            return;
+        }
+        if (newMode === MODES.RECOVERY) {
+            transitionContext(MODES.RECOVERY, options);
+            return;
+        }
+        transitionContext(null, options);
+    }
+
     // =========================================================================
     // GLOBAL SHELL INDICATOR & MODE SELECTOR DROPDOWNS
     // =========================================================================
 
     function renderShellIndicator() {
         const shell = document.getElementById('mode-indicator-shell');
-        const badge = document.getElementById('mode-badge');
+        const badge = document.getElementById('mode-badge') || document.getElementById('btn-mode-indicator-trigger');
         const icon = document.getElementById('mode-badge-icon');
         const label = document.getElementById('mode-badge-label');
 
         if (!shell || !badge || !icon || !label) return;
 
-        if (currentMode === MODES.DEFAULT) {
+        const curMode = getMode();
+        if (curMode === MODES.DEFAULT) {
             shell.classList.add('hidden');
             shell.classList.remove('flex');
             return;
@@ -361,15 +672,15 @@ window.TempoMode = (function() {
         shell.classList.remove('hidden');
         shell.classList.add('flex');
 
-        if (currentMode === MODES.EMERGENCY) {
+        if (curMode === MODES.EMERGENCY) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '⚡';
             label.textContent = window.t ? window.t('modes.urgent.name', {}, 'Urgent Mode') : 'Urgent Mode';
-        } else if (currentMode === MODES.RECOVERY) {
+        } else if (curMode === MODES.RECOVERY) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#EDF7F1] text-[#166545] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '🌱';
             label.textContent = window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode';
-        } else if (currentMode === MODES.UNCLEAR) {
+        } else if (curMode === MODES.UNCLEAR) {
             badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] flex items-center space-x-1.5 shadow-sm';
             icon.textContent = '🧭';
             label.textContent = window.t ? window.t('modes.unclear.name', {}, 'Unclear Mode') : 'Unclear Mode';
@@ -377,10 +688,10 @@ window.TempoMode = (function() {
     }
 
     function renderModeDropdownHTML(origin = 'home') {
-        const showUrgent = currentMode !== MODES.EMERGENCY;
-        const showRecovery = currentMode !== MODES.RECOVERY;
-        const showUnclear = currentMode !== MODES.UNCLEAR;
-        const showDefault = currentMode !== MODES.DEFAULT;
+        const curMode = getMode();
+        const showUrgent = curMode !== MODES.EMERGENCY;
+        const showRecovery = curMode !== MODES.RECOVERY;
+        const showUnclear = curMode !== MODES.UNCLEAR;
 
         let itemsHTML = '';
 
@@ -432,25 +743,6 @@ window.TempoMode = (function() {
             `;
         }
 
-        if (showDefault) {
-            itemsHTML += `
-                <!-- Divider -->
-                <div class="border-t border-[#EAE4DF] my-1.5"></div>
-
-                <!-- Take a break / Default Mode -->
-                <button type="button" onclick="window.TempoMode.selectModeFromDropdown('${MODES.DEFAULT}', '${origin}')"
-                        class="w-full text-left p-2.5 rounded-xl hover:bg-stone-50 flex items-start justify-between group transition cursor-pointer" role="menuitem">
-                    <div class="flex items-start space-x-2.5">
-                        <span class="text-base text-stone-500 mt-0.5 leading-none">○</span>
-                        <div>
-                            <div class="text-xs font-bold text-[#202124] group-hover:text-stone-900 transition-colors">${window.t ? window.t('modes.selector.takeBreak', {}, 'Take a break from modes') : 'Take a break from modes'}</div>
-                            <div class="text-[11px] text-[#6F6B68]">${window.t ? window.t('modes.selector.takeBreakDesc', {}, 'Return to the default experience') : 'Return to the default experience'}</div>
-                        </div>
-                    </div>
-                </button>
-            `;
-        }
-
         return `
             <div class="py-1 space-y-1" role="menu" aria-orientation="vertical">
                 ${itemsHTML}
@@ -458,19 +750,91 @@ window.TempoMode = (function() {
         `;
     }
 
+    /**
+     * Synchronizes mode selector DOM elements across containers so the active
+     * container always holds the canonical IDs (#btn-home-mode-selector, #home-mode-selector-dropdown)
+     * and inactive containers do not hold conflicting/stale IDs.
+     */
+    function syncModeSelectorDOM(activeMode) {
+        const mode = activeMode || getMode();
+        const containers = [
+            { box: document.getElementById('emode-home-content'), mode: MODES.EMERGENCY },
+            { box: document.getElementById('rmode-home-content'), mode: MODES.RECOVERY },
+            { box: document.getElementById('umode-home-content'), mode: MODES.UNCLEAR }
+        ];
+
+        containers.forEach(({ box, mode: boxMode }) => {
+            if (!box) return;
+            const isActive = boxMode === mode;
+            const dropdown = box.querySelector('[id^="home-mode-selector-dropdown"]');
+            if (dropdown) {
+                dropdown.id = isActive ? 'home-mode-selector-dropdown' : 'home-mode-selector-dropdown-inactive';
+                if (!isActive) dropdown.classList.add('hidden');
+            }
+            const btn = box.querySelector('[id^="btn-home-mode-selector"]');
+            if (btn) {
+                btn.id = isActive ? 'btn-home-mode-selector' : 'btn-home-mode-selector-inactive';
+                if (!isActive) btn.setAttribute('aria-expanded', 'false');
+            }
+            const wrapper = box.querySelector('[id^="home-mode-selector-wrapper"]');
+            if (wrapper) {
+                wrapper.id = isActive ? 'home-mode-selector-wrapper' : 'home-mode-selector-wrapper-inactive';
+            }
+        });
+    }
+
+    function resolveHomeDropdownElements(event) {
+        const curMode = getMode();
+        syncModeSelectorDOM(curMode);
+
+        let trigger = null;
+        if (event && event.currentTarget) {
+            trigger = event.currentTarget;
+        } else if (event && event.target) {
+            trigger = event.target.closest('#btn-home-mode-selector, [data-tempo-ui="mode-selector-btn"], [id^="btn-home-mode-selector"]');
+        }
+        if (!trigger) {
+            const activeBox = document.querySelector('#screen-today > div:not(.hidden)');
+            if (activeBox) {
+                trigger = activeBox.querySelector('#btn-home-mode-selector, [data-tempo-ui="mode-selector-btn"]');
+            }
+        }
+        if (!trigger) {
+            trigger = document.getElementById('btn-home-mode-selector');
+        }
+
+        let dropdown = null;
+        if (trigger) {
+            const wrapper = trigger.closest('#home-mode-selector-wrapper, [id^="home-mode-selector-wrapper"]') || trigger.parentElement;
+            if (wrapper) {
+                dropdown = wrapper.querySelector('#home-mode-selector-dropdown, [id^="home-mode-selector-dropdown"]');
+            }
+        }
+        if (!dropdown) {
+            const activeBox = document.querySelector('#screen-today > div:not(.hidden)');
+            if (activeBox) {
+                dropdown = activeBox.querySelector('#home-mode-selector-dropdown, [id^="home-mode-selector-dropdown"]');
+            }
+        }
+        if (!dropdown) {
+            dropdown = document.getElementById('home-mode-selector-dropdown');
+        }
+
+        return { trigger, dropdown };
+    }
+
     function toggleModeDropdown(event) {
         if (event) {
             event.stopPropagation();
             event.preventDefault();
         }
-        const dropdown = document.getElementById('home-mode-selector-dropdown');
+        const { trigger, dropdown } = resolveHomeDropdownElements(event);
         if (!dropdown) return;
         const isHidden = dropdown.classList.contains('hidden');
         closeAllModeDropdowns();
         if (isHidden) {
             dropdown.innerHTML = renderModeDropdownHTML('home');
             dropdown.classList.remove('hidden');
-            const trigger = document.getElementById('btn-home-mode-selector');
             if (trigger) trigger.setAttribute('aria-expanded', 'true');
         }
     }
@@ -493,23 +857,23 @@ window.TempoMode = (function() {
     }
 
     function closeAllModeDropdowns() {
-        const homeDropdown = document.getElementById('home-mode-selector-dropdown');
-        if (homeDropdown) {
-            homeDropdown.classList.add('hidden');
-            const trigger = document.getElementById('btn-home-mode-selector');
-            if (trigger) trigger.setAttribute('aria-expanded', 'false');
-        }
-        const navDropdown = document.getElementById('navbar-mode-dropdown');
-        if (navDropdown) {
-            navDropdown.classList.add('hidden');
-            const trigger = document.getElementById('btn-mode-indicator-trigger');
-            if (trigger) trigger.setAttribute('aria-expanded', 'false');
-        }
+        document.querySelectorAll('#home-mode-selector-dropdown, [id^="home-mode-selector-dropdown"]').forEach(d => {
+            d.classList.add('hidden');
+        });
+        document.querySelectorAll('#btn-home-mode-selector, [data-tempo-ui="mode-selector-btn"], [id^="btn-home-mode-selector"]').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+        });
+        document.querySelectorAll('#navbar-mode-dropdown').forEach(d => {
+            d.classList.add('hidden');
+        });
+        document.querySelectorAll('#btn-mode-indicator-trigger').forEach(t => {
+            t.setAttribute('aria-expanded', 'false');
+        });
     }
 
     function selectModeFromDropdown(targetMode, origin = 'home') {
         closeAllModeDropdowns();
-        if (targetMode === currentMode) return;
+        if (targetMode === getMode()) return;
         requestMode(targetMode);
     }
 
@@ -520,16 +884,15 @@ window.TempoMode = (function() {
         const optEmergency = document.getElementById('change-mode-opt-emergency');
         const optRecovery = document.getElementById('change-mode-opt-recovery');
         const optUnclear = document.getElementById('change-mode-opt-unclear');
-        const optDefault = document.getElementById('change-mode-opt-default');
         const footerBtn = document.getElementById('change-mode-footer-btn');
 
-        if (optEmergency) optEmergency.classList.toggle('hidden', currentMode === MODES.EMERGENCY);
-        if (optRecovery) optRecovery.classList.toggle('hidden', currentMode === MODES.RECOVERY);
-        if (optUnclear) optUnclear.classList.toggle('hidden', currentMode === MODES.UNCLEAR);
-        if (optDefault) optDefault.classList.toggle('hidden', currentMode === MODES.DEFAULT);
+        const curMode = getMode();
+        if (optEmergency) optEmergency.classList.toggle('hidden', curMode === MODES.EMERGENCY);
+        if (optRecovery) optRecovery.classList.toggle('hidden', curMode === MODES.RECOVERY);
+        if (optUnclear) optUnclear.classList.toggle('hidden', curMode === MODES.UNCLEAR);
 
         if (footerBtn) {
-            footerBtn.textContent = `Stay in ${getModeDisplayName(currentMode)}`;
+            footerBtn.textContent = `Stay in ${getModeDisplayName(curMode)}`;
         }
 
         modal.classList.remove('hidden');
@@ -544,9 +907,31 @@ window.TempoMode = (function() {
         }
     }
 
+    function openHelpSelectionModal() {
+        if (window.TempoApp && typeof window.TempoApp.openRoutingModal === 'function') {
+            window.TempoApp.openRoutingModal();
+        } else {
+            const modal = document.getElementById('modal-routing-selection');
+            if (modal) {
+                modal.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+                const firstCard = modal.querySelector('.state-choice-card');
+                if (firstCard) firstCard.focus();
+            }
+        }
+    }
+
+    function closeHelpSelectionModal() {
+        const modal = document.getElementById('modal-routing-selection');
+        if (modal) {
+            modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+    }
+
     function selectModeOption(targetMode) {
         closeChangeModeModal();
-        if (targetMode === currentMode) return;
+        if (targetMode === getMode()) return;
         requestMode(targetMode);
     }
 
@@ -557,8 +942,13 @@ window.TempoMode = (function() {
 
             if (targetMode && targetMode !== MODES.DEFAULT) {
                 banner.classList.remove('hidden');
-                if (titleEl) titleEl.textContent = `${getModeDisplayName(targetMode)} requires an account`;
-                if (descEl) descEl.textContent = `Sign in or register below to save your plan. You will enter ${getModeDisplayName(targetMode)} immediately after.`;
+                if (targetMode === MODES.UNCLEAR || targetMode === 'ucheck') {
+                    if (titleEl) titleEl.textContent = 'Unclear Mode requires an account';
+                    if (descEl) descEl.textContent = 'Sign in or register below to save your assessment. You will resume Unclear Mode immediately after.';
+                } else {
+                    if (titleEl) titleEl.textContent = `${getModeDisplayName(targetMode)} requires an account`;
+                    if (descEl) descEl.textContent = `Sign in or register below to save your plan. You will enter ${getModeDisplayName(targetMode)} immediately after.`;
+                }
             } else {
                 banner.classList.add('hidden');
             }
@@ -571,7 +961,7 @@ window.TempoMode = (function() {
     // =========================================================================
 
     function applyModeVisibility(targetMode) {
-        const mode = targetMode || currentMode || MODES.DEFAULT;
+        const mode = targetMode || getMode();
         const dmodeBox = document.getElementById('dmode-home-content');
         const emodeBox = document.getElementById('emode-home-content');
         const rmodeBox = document.getElementById('rmode-home-content');
@@ -581,6 +971,8 @@ window.TempoMode = (function() {
         if (emodeBox) emodeBox.classList.toggle('hidden', mode !== MODES.EMERGENCY);
         if (rmodeBox) rmodeBox.classList.toggle('hidden', mode !== MODES.RECOVERY);
         if (umodeBox) umodeBox.classList.toggle('hidden', mode !== MODES.UNCLEAR);
+
+        syncModeSelectorDOM(mode);
     }
 
     // =========================================================================
@@ -1223,7 +1615,8 @@ window.TempoMode = (function() {
                                 <!-- Large Orange CTA Button -->
                                 <div class="pt-2 sm:pt-3">
                                     <button type="button"
-                                            onclick="if (window.TempoMode && window.TempoMode.setMode) { window.TempoMode.setMode('unclear'); } else if (window.TempoMode && window.TempoMode.openChangeModeModal) { window.TempoMode.openChangeModeModal(); }"
+                                            id="btn-hero-figure-start"
+                                            onclick="if (window.TempoApp && typeof window.TempoApp.openRoutingModal === 'function') { window.TempoApp.openRoutingModal(); } else if (window.TempoMode && typeof window.TempoMode.openHelpSelectionModal === 'function') { window.TempoMode.openHelpSelectionModal(); } else { const m = document.getElementById('modal-routing-selection'); if (m) { m.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); } }"
                                             class="btn-primary px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base shadow-sm hover:shadow-md transition cursor-pointer inline-flex items-center space-x-2.5">
                                         <span>${window.t ? window.t('modes.default.helpMeStart', {}, 'Help me figure out where to start') : 'Help me figure out where to start'}</span>
                                         <span class="text-base sm:text-lg">→</span>
@@ -1390,6 +1783,10 @@ window.TempoMode = (function() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="pt-2">
+                        ${renderDmodeModeSwitchEntry()}
                     </div>
                 </div>
             </div>
@@ -1675,6 +2072,8 @@ window.TempoMode = (function() {
                 ${renderTempoPostsSection()}
             </div>
         `;
+
+        syncModeSelectorDOM(MODES.EMERGENCY);
 
         // Trigger community posts preview sync for urgent feed
         if (window.TempoCommunity && typeof window.TempoCommunity.renderUrgentPreview === 'function') {
@@ -2066,35 +2465,35 @@ window.TempoMode = (function() {
         const todayTasks = allPlanned.filter(pt => pt.dayDate === todayStr);
 
         // Final plan execution order: find first in-progress or uncompleted task for today
-        let nowItem = todayTasks.find(pt => pt.task.isInProgress && !pt.task.completed);
+        let nowItem = todayTasks.find(pt => pt.task && pt.task.isInProgress && !pt.task.completed);
         if (!nowItem) {
-            nowItem = todayTasks.find(pt => !pt.task.completed);
+            nowItem = todayTasks.find(pt => pt.task && !pt.task.completed);
         }
         if (!nowItem) {
             nowItem = todayTasks[0];
         }
 
-        const completedTodayCount = todayTasks.filter(pt => pt.task.completed).length;
+        const completedTodayCount = todayTasks.filter(pt => pt.task && pt.task.completed).length;
         const completionPercent = todayTasks.length > 0 ? Math.round((completedTodayCount / todayTasks.length) * 100) : 0;
 
         // Subtask / next concrete action logic
         let nextActionText = "Begin focused preliminary work block.";
         let actionStepsLabel = "1 action step";
-        if (nowItem && nowItem.task.subtasks && nowItem.task.subtasks.length > 0) {
+        if (nowItem && nowItem.task && nowItem.task.subtasks && nowItem.task.subtasks.length > 0) {
             const incompleteSubtasks = nowItem.task.subtasks.filter(s => !s.completed);
             const completedSubtasksCount = nowItem.task.subtasks.filter(s => s.completed).length;
             const totalSubtasksCount = nowItem.task.subtasks.length;
             nextActionText = incompleteSubtasks.length > 0 ? incompleteSubtasks[0].title : (nowItem.task.description || "All preliminary steps completed.");
             actionStepsLabel = `${completedSubtasksCount} / ${totalSubtasksCount} action steps`;
-        } else if (nowItem && nowItem.task.description) {
+        } else if (nowItem && nowItem.task && nowItem.task.description) {
             nextActionText = nowItem.task.description;
         }
 
-        const deadlineText = nowItem && nowItem.task.hasDeadline
+        const deadlineText = (nowItem && nowItem.task && nowItem.task.hasDeadline)
             ? `${window.t ? window.t('modes.urgent.due', {}, 'Due') : 'Due'} ${window.TempoI18n ? window.TempoI18n.formatDeadline(nowItem.task.deadlineDate, nowItem.task.deadlineTime) : formatHumanDeadline(nowItem.task.deadlineDate, nowItem.task.deadlineTime)}`
             : (window.t ? window.t('workspace.noDeadline', {}, 'No fixed deadline') : 'No fixed deadline');
 
-        const durationText = nowItem
+        const durationText = (nowItem && nowItem.task)
             ? (nowItem.task.isUnknownDuration ? (window.t ? window.t('common.notEstimated', {}, 'Time not estimated') : 'Time not estimated') : `~ ${nowItem.task.durationLabel || '45 min'}`)
             : "~ 45 min";
 
@@ -2103,7 +2502,7 @@ window.TempoMode = (function() {
 
         return `
             <!-- Priority #1: YOUR TASK FOR NOW -->
-            ${nowItem ? `
+            ${(nowItem && nowItem.task) ? `
                 <div class="urgent-card-now bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border-2 border-[#FFD2BA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm relative overflow-hidden" data-tempo-ui="urgent-task-now">
                     <div class="absolute -right-8 -top-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
                     <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-[#FF6B2C]/5 rounded-full blur-2xl pointer-events-none"></div>
@@ -2127,7 +2526,7 @@ window.TempoMode = (function() {
                             ${escapeHTML(greetingInfo ? greetingInfo.greetingText : 'Hi there 👋')}
                         </div>
                         <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                            ${escapeHTML(nowItem.task.name)}
+                            ${escapeHTML(nowItem.task ? nowItem.task.name : 'Priority Task')}
                         </h3>
                         <p class="text-sm sm:text-base font-semibold text-[#6F6B68]">
                             ${escapeHTML(nextActionText)}
@@ -2666,6 +3065,8 @@ window.TempoMode = (function() {
             </div>
         `;
 
+        syncModeSelectorDOM(MODES.RECOVERY);
+
         // Also trigger community posts preview sync
         if (window.TempoCommunity && typeof window.TempoCommunity.renderRecoveryPreview === 'function') {
             window.TempoCommunity.renderRecoveryPreview();
@@ -2677,6 +3078,7 @@ window.TempoMode = (function() {
 
         if (window.TempoUnclearMode && typeof window.TempoUnclearMode.renderHome === 'function') {
             window.TempoUnclearMode.renderHome();
+            syncModeSelectorDOM(MODES.UNCLEAR);
             return;
         }
 
@@ -2717,21 +3119,22 @@ window.TempoMode = (function() {
                 </div>
             </div>
         `;
+        syncModeSelectorDOM(MODES.UNCLEAR);
     }
 
     function renderActiveModeHome() {
         renderShellIndicator();
-        switch (currentMode) {
+        if (activeSharedTool === 'ucheck') {
+            renderUmodeHome();
+            return;
+        }
+        switch (activeContext) {
             case MODES.EMERGENCY:
                 renderEmodeHome();
                 break;
             case MODES.RECOVERY:
                 renderRmodeHome();
                 break;
-            case MODES.UNCLEAR:
-                renderUmodeHome();
-                break;
-            case MODES.DEFAULT:
             default:
                 restoreDefaultHome();
                 break;
@@ -3418,22 +3821,40 @@ window.TempoMode = (function() {
     return {
         MODES,
         init,
+        getActiveContext,
+        hasActiveContext,
+        getSourceContext,
+        setSourceContext,
+        getActiveSharedTool,
+        getPendingIntent,
+        setPendingIntent,
+        clearPendingIntent,
+        transitionContext,
+        requestContext,
+        openUcheck,
+        returnToSourceContext,
         getMode,
         getCurrentMode: getMode,
         getPendingMode,
         hasPendingMode,
+        hasPendingIntent,
         getModeDisplayName,
         requestMode,
         handleAuthSuccess,
+        handleAuthCancel,
+        handleSignOut,
         setMode,
         selectModeOption,
         renderShellIndicator,
         openChangeModeModal,
         closeChangeModeModal,
+        openHelpSelectionModal,
+        closeHelpSelectionModal,
         toggleModeDropdown,
         toggleNavbarModeDropdown,
         closeAllModeDropdowns,
         selectModeFromDropdown,
+        syncModeSelectorDOM,
         renderEmodeHome,
         renderEmodePrimarySection,
         renderRmodeHome,

@@ -218,9 +218,74 @@ window.TempoUnclearMode = (function() {
         return `tempo_unclear_${type}_${uid}`;
     }
 
-    function loadDraft() {
+    function getVersionsKey() {
+        const uid = getUserId();
+        return `tempo_ucheck_versions_${uid}`;
+    }
+
+    function loadAllVersions() {
+        try {
+            const key = getVersionsKey();
+            const raw = localStorage.getItem(key);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (e) {
+            console.warn('[TempoUnclearMode] Error loading versions:', e);
+        }
+
+        // Migrate from history and draft if versions array is not yet present
+        const versions = [];
+        const hist = loadCompletedHistory();
+        if (Array.isArray(hist) && hist.length > 0) {
+            hist.forEach((h, idx) => {
+                if (!h.version) h.version = hist.length - idx;
+                versions.push(h);
+            });
+        }
         try {
             const uid = getUserId();
+            const rawDraft = localStorage.getItem(getStorageKey('draft')) || localStorage.getItem('tempo_unclear_draft');
+            if (rawDraft) {
+                const parsed = JSON.parse(rawDraft);
+                if (parsed && parsed.status === 'in_progress' && !versions.some(v => v.id === parsed.id)) {
+                    parsed.version = (versions[0]?.version || 0) + 1;
+                    versions.unshift(parsed);
+                }
+            }
+        } catch (e) {}
+
+        return versions;
+    }
+
+    function saveAllVersions(versions) {
+        try {
+            const key = getVersionsKey();
+            localStorage.setItem(key, JSON.stringify(versions.slice(0, 50)));
+        } catch (e) {
+            console.warn('[TempoUnclearMode] Error saving versions:', e);
+        }
+    }
+
+    function getIncompleteVersions() {
+        return loadAllVersions().filter(v => v && v.status === 'in_progress');
+    }
+
+    function getCompletedVersions() {
+        return loadAllVersions().filter(v => v && v.status === 'completed');
+    }
+
+    function loadDraft() {
+        if (currentDraft && currentDraft.status === 'in_progress') {
+            return currentDraft;
+        }
+        const incomplete = getIncompleteVersions();
+        if (incomplete.length > 0) {
+            currentDraft = incomplete[0];
+            return currentDraft;
+        }
+        try {
             const key = getStorageKey('draft');
             const raw = localStorage.getItem(key) || localStorage.getItem('tempo_unclear_draft');
             if (raw) {
@@ -230,9 +295,7 @@ window.TempoUnclearMode = (function() {
                     return currentDraft;
                 }
             }
-        } catch (e) {
-            console.warn('[TempoUnclearMode] Error loading draft:', e);
-        }
+        } catch (e) {}
         currentDraft = null;
         return null;
     }
@@ -240,6 +303,14 @@ window.TempoUnclearMode = (function() {
     function saveDraft() {
         if (!currentDraft) return;
         currentDraft.updated_at = new Date().toISOString();
+        const versions = loadAllVersions();
+        const idx = versions.findIndex(v => v.id === currentDraft.id);
+        if (idx >= 0) {
+            versions[idx] = currentDraft;
+        } else {
+            versions.unshift(currentDraft);
+        }
+        saveAllVersions(versions);
         try {
             const key = getStorageKey('draft');
             localStorage.setItem(key, JSON.stringify(currentDraft));
@@ -261,10 +332,27 @@ window.TempoUnclearMode = (function() {
 
     function saveCompletedHistory(checkInRecord) {
         try {
+            checkInRecord.status = 'completed';
+            checkInRecord.completed_at = checkInRecord.completed_at || new Date().toISOString();
+
+            const versions = loadAllVersions();
+            const idx = versions.findIndex(v => v.id === checkInRecord.id);
+            if (idx >= 0) {
+                versions[idx] = checkInRecord;
+            } else {
+                versions.unshift(checkInRecord);
+            }
+            saveAllVersions(versions);
+
             const key = getStorageKey('history');
             const raw = localStorage.getItem(key);
             const history = raw ? JSON.parse(raw) : [];
-            history.unshift(checkInRecord);
+            const hIdx = history.findIndex(h => h.id === checkInRecord.id);
+            if (hIdx >= 0) {
+                history[hIdx] = checkInRecord;
+            } else {
+                history.unshift(checkInRecord);
+            }
             localStorage.setItem(key, JSON.stringify(history.slice(0, 30)));
         } catch (e) {
             console.warn('[TempoUnclearMode] Error saving history:', e);
@@ -281,11 +369,13 @@ window.TempoUnclearMode = (function() {
         }
     }
 
-    function createNewDraft() {
+    function createNewDraft(versionNum = 1) {
         const uid = getUserId();
         return {
             id: 'uc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             user_id: uid,
+            version: versionNum,
+            parent_version_id: null,
             status: 'in_progress',
             current_stage: 1, // 1 to 5 (5 is completion)
             concerns: [],
@@ -300,6 +390,7 @@ window.TempoUnclearMode = (function() {
             need_details: {}, // { [needKey]: ['sub-item', ...] }
             custom_need: '',
             primary_need: '', // 'room' | 'handle' | 'support' | 'self_directed' | 'custom'
+            chosen_direction: '',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             completed_at: null
@@ -311,6 +402,13 @@ window.TempoUnclearMode = (function() {
     // =========================================================================
 
     function renderHome() {
+        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck();
+                return;
+            }
+        }
+
         const container = document.getElementById('umode-home-content');
         if (!container) return;
 
@@ -352,30 +450,42 @@ window.TempoUnclearMode = (function() {
             }
         }
 
-        const draft = loadDraft();
-        const hasUnfinishedDraft = Boolean(draft && draft.status === 'in_progress' && draft.current_stage >= 1);
+        const incompleteDrafts = getIncompleteVersions();
+        const hasUnfinishedDraft = incompleteDrafts.length > 0;
+        const draft = incompleteDrafts[0] || null;
         const history = loadCompletedHistory();
         const lastCheckin = history.length > 0 ? history[0] : null;
 
         container.innerHTML = `
             <div id="unclear-home-view" class="space-y-6">
-                <!-- Top Utility Row: Mode Selector + Current Date -->
+                <!-- Top Utility Row: Return Home + Mode Selector + Current Date -->
                 <div class="relative pb-1">
                     <div class="flex items-center justify-between gap-4">
-                        <!-- Anchored Mode Selector Dropdown -->
-                        <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
-                            <button id="btn-home-mode-selector" 
-                                    type="button" 
-                                    onclick="window.TempoMode.toggleModeDropdown(event)" 
-                                    class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] hover:bg-[#FDEBD0] border border-[#FDE5BE] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-                                    aria-haspopup="true"
-                                    aria-expanded="false"
-                                    title="Switch Tempo Mode">
-                                <span>🧭</span>
-                                <span class="font-extrabold">Unclear Mode</span>
-                                <span class="text-[10px] ml-0.5 opacity-80">▾</span>
+                        <div class="flex items-center space-x-2">
+                            <!-- Return to Source Context Button -->
+                            <button type="button" 
+                                    onclick="window.TempoUnclearMode.returnToHome()"
+                                    class="px-3.5 py-1.5 rounded-full text-xs font-bold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 transition flex items-center space-x-1 cursor-pointer shadow-xs"
+                                    title="Return Home">
+                                <span>←</span>
+                                <span>Return Home</span>
                             </button>
-                            <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
+
+                            <!-- Anchored Mode Selector Dropdown -->
+                            <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
+                                <button id="btn-home-mode-selector" 
+                                        type="button" 
+                                        onclick="window.TempoMode.toggleModeDropdown(event)" 
+                                        class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] hover:bg-[#FDEBD0] border border-[#FDE5BE] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                                        aria-haspopup="true"
+                                        aria-expanded="false"
+                                        title="Switch Tempo Mode">
+                                    <span>🧭</span>
+                                    <span class="font-extrabold">Unclear Mode</span>
+                                    <span class="text-[10px] ml-0.5 opacity-80">▾</span>
+                                </button>
+                                <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
+                            </div>
                         </div>
 
                         <!-- Date Display -->
@@ -404,17 +514,33 @@ window.TempoUnclearMode = (function() {
                                 <span>→</span>
                             </button>
                             ${hasUnfinishedDraft ? `
-                                <button type="button" onclick="window.TempoUnclearMode.resumeDraft()"
+                                <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${draft.id}')"
                                         class="text-xs font-semibold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1.5 transition cursor-pointer pt-1">
                                     <span>Continue where I left off</span>
                                     <span>→</span>
                                     <span class="text-stone-400 font-normal">(${draft.current_stage} of 4 steps)</span>
                                 </button>
+                                ${incompleteDrafts.length > 1 ? `
+                                    <div class="pt-1.5 space-y-1 w-full border-t border-[#F5EBE1]">
+                                        <span class="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">Other incomplete checks:</span>
+                                        ${incompleteDrafts.slice(1).map((inc, i) => `
+                                            <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${inc.id}')"
+                                                    class="text-xs text-stone-600 hover:text-[#FF6B2C] flex items-center space-x-1.5 transition cursor-pointer py-0.5">
+                                                <span>Check-in #${inc.version || (i + 2)} (Step ${inc.current_stage || 1} of 4)</span>
+                                                <span class="text-stone-400 text-[10px]">• ${new Date(inc.updated_at || inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
                             ` : (lastCheckin && lastCheckin.completed_at ? `
-                                <div class="pt-1 flex items-center space-x-2 text-[11px] text-stone-400">
-                                    <span>Last check-in: ${new Date(lastCheckin.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                <div class="pt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-400">
+                                    <span>Last check-in: ${new Date(lastCheckin.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${lastCheckin.version ? ` (V${lastCheckin.version})` : ''}</span>
+                                    <button type="button" onclick="window.TempoUnclearMode.adjustCompletedCheckIn('${lastCheckin.id}')"
+                                            class="text-[#FF6B2C] hover:underline font-bold cursor-pointer">
+                                        Adjust check-in (creates V${(lastCheckin.version || 1) + 1}) →
+                                    </button>
                                     <button type="button" onclick="window.TempoUnclearMode.viewCompletedCheckIn('${lastCheckin.id}')"
-                                            class="text-[#FF6B2C] hover:underline font-semibold cursor-pointer">
+                                            class="text-stone-500 hover:underline font-semibold cursor-pointer">
                                         View reflection →
                                     </button>
                                 </div>
@@ -487,20 +613,111 @@ window.TempoUnclearMode = (function() {
     // =========================================================================
 
     function startNewCheckIn() {
-        currentDraft = createNewDraft();
+        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ startNew: true });
+                return;
+            }
+        }
+
+        const versions = loadAllVersions();
+        const maxV = versions.reduce((m, v) => Math.max(m, (v && typeof v.version === 'number') ? v.version : 0), 0);
+        const newVersionNum = maxV + 1;
+
+        currentDraft = createNewDraft(newVersionNum);
+        versions.unshift(currentDraft);
+        saveAllVersions(versions);
         saveDraft();
+
         const uid = getUserId();
         sessionStorage.setItem(`tempo_unclear_in_flow_${uid}`, 'true');
         viewState = 'checkin';
         renderHome();
     }
 
-    function resumeDraft() {
-        if (!currentDraft) loadDraft();
+    function adjustCompletedCheckIn(checkInId) {
+        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ adjustVersionId: checkInId });
+                return;
+            }
+        }
+
+        const versions = loadAllVersions();
+        let base = null;
+        if (checkInId) {
+            base = versions.find(v => v.id === checkInId);
+        }
+        if (!base) {
+            const completed = versions.filter(v => v.status === 'completed');
+            base = completed[0] || null;
+        }
+        if (!base) {
+            startNewCheckIn();
+            return;
+        }
+
+        const maxV = versions.reduce((m, v) => Math.max(m, (v && typeof v.version === 'number') ? v.version : 0), 0);
+        const newVersionNum = maxV + 1;
+
+        // V1 -> Adjust -> V2 copied from V1, V1 remains unchanged in versions storage
+        const newDraft = {
+            id: 'uc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            user_id: getUserId(),
+            version: newVersionNum,
+            parent_version_id: base.id,
+            status: 'in_progress',
+            current_stage: 1,
+            concerns: Array.isArray(base.concerns) ? [...base.concerns] : [],
+            custom_concerns: Array.isArray(base.custom_concerns) ? JSON.parse(JSON.stringify(base.custom_concerns)) : [],
+            top_concerns: Array.isArray(base.top_concerns) ? [...base.top_concerns] : [],
+            feelings_by_concern: base.feelings_by_concern ? JSON.parse(JSON.stringify(base.feelings_by_concern)) : {},
+            custom_feelings_by_concern: base.custom_feelings_by_concern ? JSON.parse(JSON.stringify(base.custom_feelings_by_concern)) : {},
+            noticed_changes: Array.isArray(base.noticed_changes) ? [...base.noticed_changes] : [],
+            custom_changes: Array.isArray(base.custom_changes) ? JSON.parse(JSON.stringify(base.custom_changes)) : [],
+            impact_level: base.impact_level || '',
+            needs: Array.isArray(base.needs) ? [...base.needs] : [],
+            need_details: base.need_details ? JSON.parse(JSON.stringify(base.need_details)) : {},
+            custom_need: base.custom_need || '',
+            primary_need: base.primary_need || '',
+            chosen_direction: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            completed_at: null
+        };
+
+        versions.unshift(newDraft);
+        saveAllVersions(versions);
+
+        currentDraft = newDraft;
+        saveDraft();
+
+        const uid = getUserId();
+        sessionStorage.setItem(`tempo_unclear_in_flow_${uid}`, 'true');
+        viewState = 'checkin';
+        renderHome();
+    }
+
+    function resumeDraft(checkInId) {
+        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ resumeDraftId: checkInId });
+                return;
+            }
+        }
+
+        const incomplete = getIncompleteVersions();
+        if (checkInId) {
+            currentDraft = incomplete.find(v => v.id === checkInId) || null;
+        }
+        if (!currentDraft && incomplete.length > 0) {
+            currentDraft = incomplete[0];
+        }
         if (!currentDraft) {
             startNewCheckIn();
             return;
         }
+
         const uid = getUserId();
         sessionStorage.setItem(`tempo_unclear_in_flow_${uid}`, 'true');
         viewState = 'checkin';
@@ -510,8 +727,12 @@ window.TempoUnclearMode = (function() {
     function returnToHome() {
         const uid = getUserId();
         sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
-        viewState = 'home';
-        renderHome();
+        if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
+            window.TempoMode.returnToSourceContext();
+        } else {
+            viewState = 'home';
+            renderHome();
+        }
     }
 
     function goToStage(stageNum) {
@@ -553,15 +774,21 @@ window.TempoUnclearMode = (function() {
         clearDraft();
 
         if (directionKey === 'urgent') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.transitionContext === 'function') {
+                window.TempoMode.transitionContext('emergency');
+            } else if (window.TempoMode) {
                 window.TempoMode.setMode('emergency');
             }
         } else if (directionKey === 'recovery') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.transitionContext === 'function') {
+                window.TempoMode.transitionContext('recovery');
+            } else if (window.TempoMode) {
                 window.TempoMode.setMode('recovery');
             }
         } else if (directionKey === 'default') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.transitionContext === 'function') {
+                window.TempoMode.transitionContext(null);
+            } else if (window.TempoMode) {
                 window.TempoMode.setMode('default');
             }
         } else if (directionKey === 'support') {
@@ -572,7 +799,10 @@ window.TempoUnclearMode = (function() {
                 window.TempoApp.showToast('Connecting to student wellbeing support.');
             }
         } else if (directionKey === 'unclear') {
-            returnToHome();
+            const uid = getUserId();
+            sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
+            viewState = 'home';
+            renderHome();
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
                 window.TempoApp.showToast('✓ Clarity check-in complete. You are in Unclear Mode.');
             }
@@ -1709,7 +1939,7 @@ window.TempoUnclearMode = (function() {
                         <button type="button" onclick="window.TempoUnclearMode.returnToHome()"
                                 class="inline-flex items-center space-x-1.5 text-xs font-bold text-stone-500 hover:text-stone-900 transition cursor-pointer">
                             <span>←</span>
-                            <span>Back to Unclear Mode</span>
+                            <span>Return Home</span>
                         </button>
                     ` : `
                         <button type="button" onclick="window.TempoUnclearMode.goBack()"
@@ -1841,19 +2071,25 @@ window.TempoUnclearMode = (function() {
                         </div>
                     ` : ''}
 
-                    <!-- Bottom Navigation: Stay in Unclear Mode -->
+                    <!-- Bottom Navigation: Return Home or Options -->
                     <div class="pt-5 border-t border-stone-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-                        ${isCompleted ? `
-                            <button type="button" onclick="window.TempoUnclearMode.returnToHome()"
+                        <div class="flex items-center space-x-3">
+                            ${isCompleted ? `
+                                <button type="button" onclick="window.TempoUnclearMode.returnToHome()"
+                                        class="text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                                    ← Return Home
+                                </button>
+                            ` : `
+                                <button type="button" onclick="window.TempoUnclearMode.goBack()"
+                                        class="text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                                    ← Back to edit needs
+                                </button>
+                            `}
+                            <button type="button" onclick="window.TempoUnclearMode.startNewCheckIn()"
                                     class="text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                                ← Back to Unclear Mode
+                                Take another check
                             </button>
-                        ` : `
-                            <button type="button" onclick="window.TempoUnclearMode.goBack()"
-                                    class="text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                                ← Back to edit needs
-                            </button>
-                        `}
+                        </div>
                         <button type="button" onclick="window.TempoUnclearMode.chooseDirection('unclear')"
                                 class="text-xs font-semibold text-stone-500 hover:text-[#FF6B2C] transition cursor-pointer">
                             Stay in Unclear Mode for now →
@@ -1927,7 +2163,11 @@ window.TempoUnclearMode = (function() {
         getDraft: () => currentDraft,
         getCurrentDraft: () => currentDraft,
         getHistory: () => loadCompletedHistory(),
-        clearDraft
+        clearDraft,
+        adjustCompletedCheckIn,
+        getVersions: loadAllVersions,
+        getIncompleteVersions,
+        getCompletedVersions
     };
 
 })();

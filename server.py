@@ -11,6 +11,9 @@ import json
 import urllib.parse
 import sys
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 PORT = 8000
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 

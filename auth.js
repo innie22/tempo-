@@ -189,19 +189,17 @@ window.TempoAuth = (function() {
     }
 
     async function syncPlanForUser(userId) {
-        if (!userId) return;
+        if (!userId) return false;
         if (window.TempoPlanStore && typeof window.TempoPlanStore.init === 'function') {
             await window.TempoPlanStore.init(userId);
         }
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.restorePlanState === 'function') {
             await window.TempoEmergencyFlow.restorePlanState();
         }
-        if (window.TempoMode) {
-            const hasActive = window.TempoPlanStore && typeof window.TempoPlanStore.hasActivePlan === 'function' && window.TempoPlanStore.hasActivePlan('emergency');
-            if (hasActive && window.TempoMode.getMode() === 'default') {
-                window.TempoMode.setMode('emergency', { silent: true });
-            }
+        if (window.TempoMode && typeof window.TempoMode.handleAuthSuccess === 'function') {
+            return window.TempoMode.handleAuthSuccess();
         }
+        return false;
     }
 
     function syncPlanForSignOut() {
@@ -212,7 +210,13 @@ window.TempoAuth = (function() {
             window.TempoEmergencyFlow.resetFlowState();
         }
         if (window.TempoMode) {
-            window.TempoMode.setMode('default', { silent: true });
+            if (typeof window.TempoMode.handleSignOut === 'function') {
+                window.TempoMode.handleSignOut();
+            } else if (typeof window.TempoMode.transitionContext === 'function') {
+                window.TempoMode.transitionContext(null, { silent: true });
+            } else {
+                window.TempoMode.setMode('default', { silent: true });
+            }
         }
     }
 
@@ -296,7 +300,24 @@ window.TempoAuth = (function() {
 
         // Modal Close Buttons
         document.querySelectorAll('.btn-close-auth-modal').forEach(btn => {
-            btn.addEventListener('click', closeAllAuthModals);
+            btn.addEventListener('click', cancelAuthModal);
+        });
+
+        document.querySelectorAll('.auth-modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    cancelAuthModal();
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const openOverlay = document.querySelector('.auth-modal-overlay:not(.hidden)');
+                if (openOverlay) {
+                    cancelAuthModal();
+                }
+            }
         });
     }
 
@@ -720,7 +741,7 @@ window.TempoAuth = (function() {
                 window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.", 5000);
                 return;
             }
-            currentUser = { id: 'local_student_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16), email: email };
+            currentUser = { id: 'local_student_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''), email: email };
             try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
             currentProfile = {
                 id: currentUser.id,
@@ -736,11 +757,8 @@ window.TempoAuth = (function() {
             window.TempoApp.triggerConfetti();
             window.TempoApp.showToast(`Welcome, ${fullName}! Your account has been created.`);
 
-            await syncPlanForUser(currentUser.id);
-
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else {
+            const intentHandled = await syncPlanForUser(currentUser.id);
+            if (!intentHandled) {
                 window.TempoApp.navigateTo('today');
             }
             return;
@@ -778,14 +796,12 @@ window.TempoAuth = (function() {
                 currentUser = data.user;
                 authState = 'AUTHENTICATED';
                 await loadUserProfile(data.user.id);
-                await syncPlanForUser(data.user.id);
+                const intentHandled = await syncPlanForUser(data.user.id);
+                if (!intentHandled) {
+                    window.TempoApp.navigateTo('today');
+                }
             } else {
                 window.TempoApp.showToast("Please check your email to confirm your account!");
-            }
-
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else {
                 window.TempoApp.navigateTo('today');
             }
 
@@ -900,7 +916,7 @@ window.TempoAuth = (function() {
             }
             const name = email.split('@')[0];
             currentUser = { 
-                id: 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16), 
+                id: 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''), 
                 email: email,
                 user_metadata: { full_name: name, display_name: name, role: 'student' }
             };
@@ -917,11 +933,8 @@ window.TempoAuth = (function() {
             closeAllAuthModals();
             window.TempoApp.showToast(`Welcome back, ${name}!`);
 
-            await syncPlanForUser(currentUser.id);
-
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else {
+            const intentHandled = await syncPlanForUser(currentUser.id);
+            if (!intentHandled) {
                 window.TempoApp.navigateTo('today');
             }
             return true;
@@ -942,18 +955,18 @@ window.TempoAuth = (function() {
             currentUser = data.user;
             authState = 'AUTHENTICATED';
             await loadUserProfile(data.user.id);
-            await syncPlanForUser(data.user.id);
+            const intentHandled = await syncPlanForUser(data.user.id);
             const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
             window.TempoApp.showToast(`Welcome back, ${welcomeName}!`);
 
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else if (currentProfile?.role === 'volunteer') {
-                window.TempoApp.navigateTo('volunteer-dashboard');
-            } else if (currentProfile?.role === 'admin') {
-                window.TempoApp.navigateTo('admin');
-            } else {
-                window.TempoApp.navigateTo('today');
+            if (!intentHandled) {
+                if (currentProfile?.role === 'volunteer') {
+                    window.TempoApp.navigateTo('volunteer-dashboard');
+                } else if (currentProfile?.role === 'admin') {
+                    window.TempoApp.navigateTo('admin');
+                } else {
+                    window.TempoApp.navigateTo('today');
+                }
             }
             return true;
 
@@ -1108,6 +1121,13 @@ window.TempoAuth = (function() {
         });
     }
 
+    function cancelAuthModal() {
+        closeAllAuthModals();
+        if (window.TempoMode && typeof window.TempoMode.handleAuthCancel === 'function') {
+            window.TempoMode.handleAuthCancel();
+        }
+    }
+
     return {
         init,
         checkSession,
@@ -1122,14 +1142,16 @@ window.TempoAuth = (function() {
         openStudentRegisterModal,
         openVolunteerApplyModal,
         openSignInModal,
-        closeModal: closeAllAuthModals,
+        closeModal: cancelAuthModal,
         closeAllAuthModals,
-        closeRegisterModal: closeAllAuthModals,
-        closeSignInModal: closeAllAuthModals,
+        cancelAuthModal,
+        closeRegisterModal: cancelAuthModal,
+        closeSignInModal: cancelAuthModal,
         register: registerWithCredentials,
         signUp: registerWithCredentials,
         signIn: signInWithCredentials,
         handleSignOut,
+        signOut: handleSignOut,
         handleForgotPassword,
         setAuthLanguage,
         getAuthLanguage: () => currentAuthLang,

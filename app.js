@@ -119,11 +119,42 @@ window.TempoApp = (function() {
     }
 
     function navigateTo(tabId) {
-        // Enforce auth gate for anonymous visitors attempting to access mode routes directly
-        if ((tabId === 'emergency' || tabId === 'recovery-mode' || tabId === 'unclear-mode') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
-            const targetMode = tabId === 'emergency' ? 'emergency' : (tabId === 'recovery-mode' ? 'recovery' : 'unclear');
-            if (window.TempoMode && window.TempoMode.getMode() !== targetMode) {
-                window.TempoMode.requestMode(targetMode);
+        // Enforce Type B Authenticated Shared Tools (Wplan, Strack)
+        if ((tabId === 'plan-workspace' || tabId === 'stress-check') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+            if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
+                window.TempoMode.setPendingIntent({
+                    type: 'tool',
+                    tool: tabId,
+                    destination: tabId,
+                    sourceContext: window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry'
+                });
+            }
+            if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                window.TempoAuth.openSignInModal();
+            }
+            if (typeof showToast === 'function') {
+                const toolName = tabId === 'plan-workspace' ? 'Working Plan' : 'Self-check';
+                showToast(`Please sign in or create an account to access ${toolName}.`);
+            }
+            return;
+        }
+
+        // Shared Assessment Tool: Ucheck
+        if (tabId === 'unclear-mode') {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ sourceContext: window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry' });
+                return;
+            }
+        }
+
+        // Active Contexts: emergency & recovery
+        if ((tabId === 'emergency' || tabId === 'recovery-mode') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+            const targetContext = tabId === 'emergency' ? 'emergency' : 'recovery';
+            if (window.TempoMode && typeof window.TempoMode.requestContext === 'function') {
+                window.TempoMode.requestContext(targetContext, 'navigation');
+                return;
+            } else if (window.TempoMode) {
+                window.TempoMode.requestMode(targetContext);
                 return;
             }
         }
@@ -156,7 +187,9 @@ window.TempoApp = (function() {
 
         // If entering Recovery Mode via route, activate recovery mode and route to today
         if (tabId === 'recovery-mode') {
-            if (window.TempoMode && window.TempoMode.getMode() !== 'recovery') {
+            if (window.TempoMode && window.TempoMode.getActiveContext && window.TempoMode.getActiveContext() !== 'recovery') {
+                window.TempoMode.transitionContext('recovery', { silent: true });
+            } else if (window.TempoMode && window.TempoMode.getMode() !== 'recovery') {
                 window.TempoMode.setMode('recovery', { silent: true });
             }
             navigateTo('today');
@@ -165,7 +198,9 @@ window.TempoApp = (function() {
 
         // If entering Emergency Mode, ensure Emode is active and resume stage
         if (tabId === 'emergency') {
-            if (window.TempoMode && window.TempoMode.getMode() !== 'emergency') {
+            if (window.TempoMode && window.TempoMode.getActiveContext && window.TempoMode.getActiveContext() !== 'emergency') {
+                window.TempoMode.transitionContext('emergency', { silent: true });
+            } else if (window.TempoMode && window.TempoMode.getMode() !== 'emergency') {
                 window.TempoMode.setMode('emergency', { silent: true });
             }
             if (window.TempoEmergencyFlow) {
@@ -466,28 +501,39 @@ window.TempoApp = (function() {
         const closeBtn = document.getElementById('btn-close-routing-modal');
 
         function openModal() {
-            if (!modal) return;
-            modal.classList.remove('hidden');
+            const m = document.getElementById('modal-routing-selection');
+            if (!m) return;
+            m.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             // Accessibility focus on first card or close button
-            const firstCard = modal.querySelector('.state-choice-card');
+            const firstCard = m.querySelector('.state-choice-card');
             if (firstCard) {
                 firstCard.focus();
             }
         }
 
         function closeModal() {
-            if (!modal) return;
-            modal.classList.add('hidden');
+            const m = document.getElementById('modal-routing-selection');
+            if (!m) return;
+            m.classList.add('hidden');
             document.body.classList.remove('overflow-hidden');
-            if (ctaBtn) {
-                ctaBtn.focus();
+            const cta = document.getElementById('btn-hero-figure-start');
+            if (cta) {
+                cta.focus();
             }
         }
 
         if (ctaBtn) {
             ctaBtn.addEventListener('click', openModal);
         }
+
+        document.addEventListener('click', (e) => {
+            const target = e.target && e.target.closest ? e.target.closest('#btn-hero-figure-start') : null;
+            if (target) {
+                e.preventDefault();
+                openModal();
+            }
+        });
 
         if (closeBtn) {
             closeBtn.addEventListener('click', closeModal);
@@ -502,7 +548,8 @@ window.TempoApp = (function() {
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+            const m = document.getElementById('modal-routing-selection');
+            if (e.key === 'Escape' && m && !m.classList.contains('hidden')) {
                 closeModal();
             }
         });
@@ -516,19 +563,25 @@ window.TempoApp = (function() {
         }
 
         if (state === 'urgent') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.requestContext === 'function') {
+                window.TempoMode.requestContext('emergency', 'entry');
+            } else if (window.TempoMode) {
                 window.TempoMode.requestMode('emergency');
             } else {
                 navigateTo('emergency');
             }
         } else if (state === 'recovering') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.requestContext === 'function') {
+                window.TempoMode.requestContext('recovery', 'entry');
+            } else if (window.TempoMode) {
                 window.TempoMode.requestMode('recovery');
             } else {
                 navigateTo('recovery-mode');
             }
         } else if (state === 'unclear') {
-            if (window.TempoMode) {
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ sourceContext: 'entry' });
+            } else if (window.TempoMode) {
                 window.TempoMode.requestMode('unclear');
             } else {
                 navigateTo('unclear-mode');
@@ -577,7 +630,16 @@ window.TempoApp = (function() {
         setRole,
         showToast,
         triggerConfetti,
-        selectRoutingState
+        selectRoutingState,
+        openRoutingModal: () => {
+            const m = document.getElementById('modal-routing-selection');
+            if (!m) return;
+            m.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            const firstCard = m.querySelector('.state-choice-card');
+            if (firstCard) firstCard.focus();
+        },
+        getCurrentTab: () => currentTab
     };
 })();
 
