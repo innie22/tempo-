@@ -1406,10 +1406,12 @@ window.TempoLearnSolve = (function() {
                 window.TempoTriage.openBoxBreathingModal();
             }
         } else if (toolAction === 'self_check') {
-            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('checkin');
+            } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
                 window.TempoRecoverySelfCheck.openDailyCheckin();
             } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
-                window.TempoApp.navigateTo('stress-check');
+                window.TempoApp.navigateTo('strack');
             }
         } else if (toolAction === 'support_page') {
             if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {

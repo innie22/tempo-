@@ -259,6 +259,12 @@
     }
 
     function open(stage = 1) {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('setup', { stage });
+            }
+            return;
+        }
         ensureModalMounted();
         loadDraftFromStorage();
         goToStage(stage);
@@ -287,7 +293,9 @@
     function exploreFirst() {
         markIntroSeen();
         close();
-        if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+        if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
+            window.TempoMode.returnToSourceContext();
+        } else if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
             window.TempoMode.renderRmodeHome();
         }
     }
@@ -1329,7 +1337,9 @@
     function finishAndReturnHome() {
         markSetupCompleted();
         close();
-        if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+        if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
+            window.TempoMode.returnToSourceContext();
+        } else if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
             window.TempoMode.renderRmodeHome();
         }
     }

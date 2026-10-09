@@ -215,6 +215,7 @@ def run_tests():
         # Now authenticate through existing auth mechanism
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('Student Ucheck 1', 'student_ucheck_1@tempo.edu', 'password123');
                 await window.TempoAuth.signIn('student_ucheck_1@tempo.edu', 'password123');
             })()
         """)
@@ -306,6 +307,7 @@ def run_tests():
         # Login
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('Student Ucheck Urmode', 'student_ucheck_urmode@tempo.edu', 'password123');
                 await window.TempoAuth.signIn('student_ucheck_urmode@tempo.edu', 'password123');
             })()
         """)
@@ -385,6 +387,7 @@ def run_tests():
         # Login
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('Student Ucheck Rmode', 'student_ucheck_rmode@tempo.edu', 'password123');
                 await window.TempoAuth.signIn('student_ucheck_rmode@tempo.edu', 'password123');
             })()
         """)
@@ -475,6 +478,7 @@ def run_tests():
         # Login
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('Student Options', 'student_options_test@tempo.edu', 'password123');
                 await window.TempoAuth.signIn('student_options_test@tempo.edu', 'password123');
             })()
         """)

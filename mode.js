@@ -193,21 +193,72 @@ window.TempoMode = (function() {
         return activeSharedTool;
     }
 
+    function isValidPendingIntent(intent) {
+        if (!intent || typeof intent !== 'object') return false;
+        const dest = (intent.destination || intent.tool || '').toLowerCase();
+        const validDests = [
+            MODES.EMERGENCY, MODES.RECOVERY, 'emergency', 'recovery', 'urgent', 'urmode', 'rmode',
+            'ucheck', 'unclear', 'unclear-mode',
+            'strack',
+            'plan-workspace', 'stress-check', 'routine', 'today'
+        ];
+        if (!validDests.includes(dest)) return false;
+
+        const act = (intent.action || 'navigate').toLowerCase();
+        const validActions = ['select', 'open', 'navigate', 'resume', 'setup', 'checkin', 'manage', 'history', 'view', 'edit'];
+        if (!validActions.includes(act)) return false;
+
+        return true;
+    }
+
     function getPendingIntent() {
         return pendingIntent;
     }
 
     function setPendingIntent(intent) {
-        pendingIntent = intent;
-        try {
-            if (intent) {
-                localStorage.setItem('tempo_pending_intent', JSON.stringify(intent));
-                if (intent.type === 'mode') {
-                    localStorage.setItem('tempo_pending_mode', intent.destination);
-                }
+        if (!intent) {
+            clearPendingIntent();
+            return;
+        }
+
+        const dest = intent.destination || intent.tool || (intent.type === 'mode' ? intent.destination : null);
+        let act = intent.action;
+        if (!act) {
+            if (intent.type === 'mode' || dest === MODES.EMERGENCY || dest === MODES.RECOVERY || dest === 'urgent' || dest === 'urmode' || dest === 'rmode') {
+                act = 'select';
+            } else if (intent.type === 'ucheck' || dest === 'ucheck') {
+                act = 'open';
             } else {
-                localStorage.removeItem('tempo_pending_intent');
-                localStorage.removeItem('tempo_pending_mode');
+                act = 'navigate';
+            }
+        }
+        const src = intent.source || intent.sourceContext || 'entry';
+        const params = intent.requiredParams || intent.options || {};
+
+        // Invariant 18A & 18E: Prevent duplicate or stacked intent if identical
+        if (pendingIntent && 
+            (pendingIntent.destination === dest || pendingIntent.tool === dest) && 
+            pendingIntent.action === act) {
+            return;
+        }
+
+        const normalized = {
+            destination: dest,
+            action: act,
+            source: src,
+            requiredParams: params,
+            // Backwards-compatible legacy properties
+            type: intent.type || (dest === MODES.EMERGENCY || dest === MODES.RECOVERY || dest === 'urgent' || dest === 'urmode' || dest === 'rmode' ? 'mode' : (dest === 'ucheck' ? 'ucheck' : 'tool')),
+            sourceContext: src,
+            options: params,
+            tool: dest
+        };
+
+        pendingIntent = normalized;
+        try {
+            localStorage.setItem('tempo_pending_intent', JSON.stringify(normalized));
+            if (normalized.type === 'mode' || normalized.destination === MODES.EMERGENCY || normalized.destination === MODES.RECOVERY) {
+                localStorage.setItem('tempo_pending_mode', normalized.destination);
             }
         } catch (e) {}
     }
@@ -355,8 +406,11 @@ window.TempoMode = (function() {
         } else {
             // Guest user: save pending intent, show auth gate, do NOT activate context yet
             setPendingIntent({
-                type: 'mode',
                 destination: targetContext,
+                action: 'select',
+                source: origin || sourceContext || 'entry',
+                requiredParams: {},
+                type: 'mode',
                 sourceContext: origin || sourceContext || 'entry'
             });
 
@@ -386,8 +440,11 @@ window.TempoMode = (function() {
         if (!isAuthenticated) {
             // Guest user: save pending intent for Ucheck, show auth gate, do NOT open Ucheck yet
             setPendingIntent({
-                type: 'ucheck',
                 destination: 'ucheck',
+                action: 'open',
+                source: src,
+                requiredParams: options,
+                type: 'ucheck',
                 options: options,
                 sourceContext: src
             });
@@ -433,24 +490,209 @@ window.TempoMode = (function() {
     }
 
     /**
+     * Opens Strack (UI display label: "Self-check") shared recovery tracking tool.
+     * Enforces authentication boundary for guest users.
+     * Stable internal destination identifier is strictly 'strack'.
+     * Decoupled from Rmode: Strack is a tool, not an active context.
+     */
+    function openStrack(action = 'open', options = {}) {
+        if (typeof action === 'object' && action !== null && Object.keys(options || {}).length === 0) {
+            options = action;
+            action = options.action || 'open';
+        }
+
+        let src;
+        if (options && options.sourceContext) {
+            src = options.sourceContext;
+        } else if (activeContext === MODES.RECOVERY) {
+            src = 'recovery';
+        } else if (activeContext === MODES.EMERGENCY) {
+            src = 'emergency';
+        } else {
+            src = sourceContext || 'entry';
+        }
+        sourceContext = src;
+
+        const returnLabelEl = document.getElementById('stress-check-return-text');
+        if (returnLabelEl) {
+            if (src === 'recovery') returnLabelEl.textContent = 'Return to Recovery Mode';
+            else if (src === 'emergency') returnLabelEl.textContent = 'Return to Urgent Mode';
+            else returnLabelEl.textContent = 'Return';
+        }
+
+        const isAuthenticated = window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !!window.TempoAuth.getCurrentUser();
+
+        if (!isAuthenticated) {
+            // Guest user: save pending intent for Strack, show auth gate, do NOT open Strack yet
+            setPendingIntent({
+                destination: 'strack',
+                action: action || 'open',
+                source: src,
+                sourceContext: src,
+                requiredParams: options || {},
+                type: 'tool',
+                tool: 'strack'
+            });
+
+            closeChangeModeModal();
+            closeAllModeDropdowns();
+
+            if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                window.TempoAuth.openSignInModal();
+            }
+
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Please sign in or create an account to access Self-check.");
+            }
+            return;
+        }
+
+        // Authenticated user: open Strack directly without Auth Gate
+        activeSharedTool = 'strack';
+        executeStrackAction(action, options);
+    }
+
+    function showStressCheckScreen() {
+        document.querySelectorAll('.screen-container').forEach(screen => {
+            screen.classList.add('hidden');
+        });
+        const target = document.getElementById('screen-stress-check');
+        if (target) {
+            target.classList.remove('hidden');
+        }
+        window.location.hash = '#stress-check';
+        if (window.TempoApp && typeof window.TempoApp.updateNavActiveState === 'function') {
+            window.TempoApp.updateNavActiveState('stress-check');
+        }
+    }
+
+    function executeStrackAction(action = 'open', options = {}) {
+        if (action === 'setup') {
+            if (activeContext === MODES.RECOVERY && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
+                window.TempoRecoverySetup.open(options.stage || 1);
+            } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openSetup === 'function') {
+                window.TempoRecoverySelfCheck.openSetup();
+            } else {
+                showStressCheckScreen();
+            }
+        } else if (action === 'checkin') {
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
+                window.TempoRecoverySelfCheck.openDailyCheckin(Boolean(options.isEdit));
+            } else {
+                showStressCheckScreen();
+            }
+        } else if (action === 'manage') {
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openManage === 'function') {
+                window.TempoRecoverySelfCheck.openManage();
+            } else {
+                showStressCheckScreen();
+            }
+        } else if (action === 'history') {
+            if (window.TempoSelfCheckHistory && typeof window.TempoSelfCheckHistory.open === 'function') {
+                window.TempoSelfCheckHistory.open();
+            } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.handleAction === 'function') {
+                window.TempoRecoverySelfCheck.handleAction('history');
+            } else {
+                showStressCheckScreen();
+            }
+        } else if (action === 'view') {
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openViewToday === 'function') {
+                window.TempoRecoverySelfCheck.openViewToday();
+            } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
+                window.TempoRecoverySelfCheck.openDailyCheckin(true);
+            } else {
+                showStressCheckScreen();
+            }
+        } else if (action === 'edit') {
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.handleAction === 'function') {
+                window.TempoRecoverySelfCheck.handleAction('edit');
+            } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
+                window.TempoRecoverySelfCheck.openDailyCheckin(true);
+            } else {
+                showStressCheckScreen();
+            }
+        } else {
+            // General open action
+            if (activeContext === MODES.RECOVERY) {
+                const scState = getSelfCheckState();
+                if (scState && scState.type === 'STATE_A') {
+                    if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
+                        window.TempoRecoverySetup.open(1);
+                    } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openSetup === 'function') {
+                        window.TempoRecoverySelfCheck.openSetup();
+                    } else {
+                        showStressCheckScreen();
+                    }
+                } else {
+                    if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
+                        window.TempoRecoverySelfCheck.openDailyCheckin(false);
+                    } else {
+                        showStressCheckScreen();
+                    }
+                }
+            } else {
+                // Outside Recovery Mode (Entry Home or Urgent Mode)
+                showStressCheckScreen();
+            }
+        }
+    }
+
+    /**
+     * Stable mapping from internal destination identifiers to UI display labels.
+     */
+    function getDestinationDisplayName(dest) {
+        if (!dest) return '';
+        const d = String(dest).toLowerCase();
+        if (d === 'strack' || d === 'stress-check') return 'Self-check';
+        if (d === 'ucheck' || d === 'unclear' || d === 'unclear-mode') return 'Unclear Mode assessment';
+        if (d === 'plan-workspace') return 'Working Plan';
+        if (d === 'emergency' || d === 'urgent' || d === 'urmode') return 'Urgent Mode';
+        if (d === 'recovery' || d === 'rmode') return 'Recovery Mode';
+        return dest;
+    }
+
+    /**
      * Returns to the source context dashboard from which a tool/assessment was opened.
      */
     function returnToSourceContext() {
         activeSharedTool = null;
 
-        if (sourceContext === 'emergency') {
+        // Close any open Strack modals
+        if (window.TempoRecoverySelfCheck) {
+            if (typeof window.TempoRecoverySelfCheck.closeManage === 'function') window.TempoRecoverySelfCheck.closeManage();
+            if (typeof window.TempoRecoverySelfCheck.closeDailyCheckin === 'function') window.TempoRecoverySelfCheck.closeDailyCheckin();
+            if (typeof window.TempoRecoverySelfCheck.closeTrackerModal === 'function') window.TempoRecoverySelfCheck.closeTrackerModal();
+            if (typeof window.TempoRecoverySelfCheck.closeViewToday === 'function') window.TempoRecoverySelfCheck.closeViewToday();
+        }
+        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.close === 'function') {
+            window.TempoRecoverySetup.close();
+        }
+
+        const isAuthenticated = window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !!window.TempoAuth.getCurrentUser();
+        if (!isAuthenticated) {
+            activeContext = null;
+            sourceContext = 'entry';
+            renderShellIndicator();
+            renderActiveModeHome();
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
+            return;
+        }
+
+        const src = sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
+
+        if (src === 'emergency') {
             activeContext = MODES.EMERGENCY;
-            renderActiveModeHome();
-            if (window.TempoApp) window.TempoApp.navigateTo('today');
-        } else if (sourceContext === 'recovery') {
+            sourceContext = 'emergency';
+        } else if (src === 'recovery') {
             activeContext = MODES.RECOVERY;
-            renderActiveModeHome();
-            if (window.TempoApp) window.TempoApp.navigateTo('today');
+            sourceContext = 'recovery';
         } else {
             activeContext = null;
-            renderActiveModeHome();
-            if (window.TempoApp) window.TempoApp.navigateTo('today');
+            sourceContext = 'entry';
         }
+        renderShellIndicator();
+        renderActiveModeHome();
+        if (window.TempoApp) window.TempoApp.navigateTo('today');
     }
 
     /**
@@ -478,9 +720,20 @@ window.TempoMode = (function() {
      */
     function handleAuthCancel() {
         if (pendingIntent) {
-            const origin = pendingIntent.sourceContext || sourceContext || 'entry';
+            const origin = pendingIntent.sourceContext || pendingIntent.source || sourceContext || 'entry';
             clearPendingIntent();
             activeSharedTool = null;
+
+            const isAuthenticated = window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !!window.TempoAuth.getCurrentUser();
+            if (!isAuthenticated) {
+                activeContext = null;
+                sourceContext = 'entry';
+                renderActiveModeHome();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('today');
+                }
+                return;
+            }
 
             if (origin === 'emergency') {
                 activeContext = MODES.EMERGENCY;
@@ -516,14 +769,78 @@ window.TempoMode = (function() {
         if (!intent) {
             const legacyPending = localStorage.getItem('tempo_pending_mode');
             if (legacyPending && Object.values(MODES).includes(legacyPending)) {
-                intent = { type: 'mode', destination: legacyPending };
+                intent = { type: 'mode', destination: legacyPending, action: 'select', source: 'entry' };
             }
+        }
+
+        // Invariant 18D: Validate pending intent before resume
+        if (intent && !isValidPendingIntent(intent)) {
+            console.warn("[TempoMode] Invalid pending intent rejected:", intent);
+            clearPendingIntent();
+            intent = null;
+        }
+
+        // Parallel restoration: resolve user's established context in background/state
+        // Invariant 18F: Account isolation (only this uid's established context)
+        const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+        let established = null;
+        try {
+            if (uid) {
+                established = localStorage.getItem('tempo_user_established_context_' + uid);
+            }
+        } catch (e) {}
+
+        const currentActive = activeContext;
+        const intentSource = intent ? (intent.source || intent.sourceContext) : null;
+        const dest = intent ? (intent.destination || intent.tool || '').toLowerCase() : '';
+        const isToolOrAssessment = intent && (
+            dest === 'strack' || dest === 'stress-check' ||
+            intent.type === 'ucheck' || dest === 'ucheck' || dest === 'unclear' || dest === 'unclear-mode' ||
+            dest === 'plan-workspace' || intent.type === 'tool'
+        );
+
+        let resolvedContext = null;
+        if (established === MODES.EMERGENCY || established === MODES.RECOVERY) {
+            resolvedContext = established;
+        } else if (intentSource === 'emergency' || currentActive === MODES.EMERGENCY) {
+            resolvedContext = MODES.EMERGENCY;
+        } else if (intentSource === 'recovery' || currentActive === MODES.RECOVERY) {
+            resolvedContext = MODES.RECOVERY;
+        }
+
+        if (resolvedContext === MODES.EMERGENCY) {
+            activeContext = MODES.EMERGENCY;
+            sourceContext = 'emergency';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
+                localStorage.setItem('tempo_established_context', MODES.EMERGENCY);
+                if (uid) localStorage.setItem('tempo_user_established_context_' + uid, MODES.EMERGENCY);
+            } catch (e) {}
+        } else if (resolvedContext === MODES.RECOVERY) {
+            activeContext = MODES.RECOVERY;
+            sourceContext = 'recovery';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.RECOVERY);
+                localStorage.setItem('tempo_established_context', MODES.RECOVERY);
+                if (uid) localStorage.setItem('tempo_user_established_context_' + uid, MODES.RECOVERY);
+            } catch (e) {}
+        } else {
+            activeContext = null;
+            sourceContext = 'entry';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
+                localStorage.removeItem('tempo_established_context');
+            } catch (e) {}
         }
 
         if (intent) {
             clearPendingIntent();
-            if (intent.type === 'mode') {
-                const target = intent.destination;
+            const isMode = intent.type === 'mode' || dest === 'emergency' || dest === 'recovery' || dest === 'urgent' || dest === 'urmode' || dest === 'rmode';
+            const isUcheck = intent.type === 'ucheck' || dest === 'ucheck' || dest === 'unclear' || dest === 'unclear-mode';
+            const isStrack = dest === 'strack' || dest === 'stress-check';
+
+            if (isMode) {
+                const target = (dest === 'urgent' || dest === 'urmode' || dest === 'emergency') ? MODES.EMERGENCY : MODES.RECOVERY;
                 transitionContext(target, { silent: true });
 
                 if (target === MODES.EMERGENCY) {
@@ -543,60 +860,34 @@ window.TempoMode = (function() {
                     }
                 }
                 return true;
-            } else if (intent.type === 'ucheck' || (intent.type === 'tool' && (intent.tool === 'ucheck' || intent.destination === 'ucheck' || intent.destination === 'unclear-mode'))) {
+            } else if (isUcheck) {
                 // Resume Ucheck without changing activeContext
-                const savedSource = intent.sourceContext || sourceContext || 'entry';
+                const savedSource = intent.source || intent.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
                 sourceContext = savedSource;
-                // Preserve activeContext: do not transitionContext!
-                openUcheck(Object.assign({}, intent.options || {}, { sourceContext: savedSource }));
+                openUcheck(Object.assign({}, intent.requiredParams || intent.options || {}, { sourceContext: savedSource }));
                 if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
                     window.TempoApp.showToast("Signed in. Resuming Unclear Mode assessment.");
                 }
                 return true;
-            } else if (intent.type === 'tool') {
+            } else if (isStrack) {
+                // Resume Strack (Self-check) without changing activeContext
+                const savedSource = intent.source || intent.sourceContext || (activeContext === MODES.RECOVERY ? 'recovery' : (activeContext === MODES.EMERGENCY ? 'emergency' : 'entry'));
+                sourceContext = savedSource;
+                openStrack(intent.action || 'open', intent.requiredParams || intent.options || {});
+                if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                    window.TempoApp.showToast("Signed in. Resuming Self-check.");
+                }
+                return true;
+            } else {
                 // Resume tool without forcing emergency mode
-                const dest = intent.destination || intent.tool;
-                if (dest && window.TempoApp) {
-                    window.TempoApp.navigateTo(dest);
-                    window.TempoApp.showToast("Signed in. Resuming your tool.");
+                const targetDest = intent.destination || intent.tool;
+                if (targetDest && window.TempoApp) {
+                    window.TempoApp.navigateTo(targetDest);
+                    const toolName = targetDest === 'plan-workspace' ? 'Working Plan' : (targetDest === 'stress-check' ? 'Self-check' : 'tool');
+                    window.TempoApp.showToast(`Signed in. Resuming ${toolName}.`);
                 }
                 return true;
             }
-        }
-
-        // Case 2: User logged in normally with NO pendingIntent
-        // Restore user's last explicitly established active context or remain at Entry Home (null)
-        const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
-        let established = null;
-        try {
-            if (uid) {
-                established = localStorage.getItem('tempo_user_established_context_' + uid);
-            } else {
-                established = localStorage.getItem('tempo_established_context');
-            }
-        } catch (e) {}
-
-        if (established === MODES.EMERGENCY) {
-            activeContext = MODES.EMERGENCY;
-            sourceContext = 'emergency';
-            try {
-                localStorage.setItem('tempo_current_mode', MODES.EMERGENCY);
-                localStorage.setItem('tempo_established_context', MODES.EMERGENCY);
-            } catch (e) {}
-        } else if (established === MODES.RECOVERY) {
-            activeContext = MODES.RECOVERY;
-            sourceContext = 'recovery';
-            try {
-                localStorage.setItem('tempo_current_mode', MODES.RECOVERY);
-                localStorage.setItem('tempo_established_context', MODES.RECOVERY);
-            } catch (e) {}
-        } else {
-            activeContext = null;
-            sourceContext = 'entry';
-            try {
-                localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
-                localStorage.removeItem('tempo_established_context');
-            } catch (e) {}
         }
 
         renderShellIndicator();
@@ -1378,7 +1669,7 @@ window.TempoMode = (function() {
                     <p class="text-xs sm:text-sm text-[#6F6B68]">Keep an eye on the things that matter to you over time.</p>
                     <div class="pt-1">
                         <button type="button" 
-                                onclick="if (window.TempoRecoverySelfCheck) window.TempoRecoverySelfCheck.openSetup();"
+                                onclick="window.TempoMode.openStrack('setup');"
                                 class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-[#166545] bg-[#EDF7F1] hover:bg-[#DDF0E5] border border-[#CDE9DA] inline-flex items-center space-x-1.5 transition cursor-pointer">
                             <span>Set up my Self-check</span>
                             <span>→</span>
@@ -1410,13 +1701,13 @@ window.TempoMode = (function() {
                     </div>
                     <div class="flex items-center space-x-3 pt-1">
                         <button type="button" 
-                                onclick="if (window.TempoRecoverySelfCheck) window.TempoRecoverySelfCheck.openDailyCheckin(false);"
+                                onclick="window.TempoMode.openStrack('checkin');"
                                 class="btn-primary px-4 py-2 rounded-xl text-xs sm:text-sm font-bold shadow-xs inline-flex items-center space-x-1.5 transition cursor-pointer">
                             <span>Check in</span>
                             <span>→</span>
                         </button>
                         <button type="button" 
-                                onclick="if (window.TempoRecoverySelfCheck) window.TempoRecoverySelfCheck.openManage();"
+                                onclick="window.TempoMode.openStrack('manage');"
                                 class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-stone-50 transition cursor-pointer">
                             Manage
                         </button>
@@ -1448,7 +1739,7 @@ window.TempoMode = (function() {
                     </div>
                     <div class="pt-1">
                         <button type="button" 
-                                onclick="if (window.TempoRecoverySelfCheck) { if (typeof window.TempoRecoverySelfCheck.openViewToday === 'function') window.TempoRecoverySelfCheck.openViewToday(); else window.TempoRecoverySelfCheck.openDailyCheckin(true); }"
+                                onclick="window.TempoMode.openStrack('view');"
                                 class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-[#166545] bg-[#EDF7F1] hover:bg-[#DDF0E5] border border-[#CDE9DA] inline-flex items-center space-x-1.5 transition cursor-pointer">
                             <span>View / Edit</span>
                             <span>→</span>
@@ -1762,7 +2053,7 @@ window.TempoMode = (function() {
                         </div>
 
                         <!-- Tool 4: Self-check -->
-                        <div onclick="if (window.TempoRecoverySetup && window.TempoRecoverySetup.open) { window.TempoRecoverySetup.open(1); } else if (window.TempoRecoverySelfCheck && window.TempoRecoverySelfCheck.openSetup) { window.TempoRecoverySelfCheck.openSetup(); }"
+                        <div onclick="window.TempoMode.openStrack('setup');"
                              class="bg-white border border-[#EAE4DF] hover:border-stone-300 rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
                             <div class="space-y-3">
                                 <div class="w-10 h-10 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center text-lg">
@@ -2926,33 +3217,11 @@ window.TempoMode = (function() {
     }
 
     function handleSelfCheckSetupClick() {
-        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
-            window.TempoRecoverySetup.open(1);
-        } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openSetup === 'function') {
-            window.TempoRecoverySelfCheck.openSetup();
-        } else if (window.TempoApp) {
-            window.TempoApp.showToast("Custom Self-check setup will be available.");
-        }
+        openStrack('setup');
     }
 
     function handleSelfCheckAction(action) {
-        if (action === 'history') {
-            if (window.TempoSelfCheckHistory && typeof window.TempoSelfCheckHistory.open === 'function') {
-                window.TempoSelfCheckHistory.open();
-                return;
-            }
-        }
-        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.handleAction === 'function') {
-            window.TempoRecoverySelfCheck.handleAction(action);
-        } else if (window.TempoApp) {
-            if (action === 'checkin') {
-                window.TempoApp.showToast("Daily check-in form will be available in Phase 2.");
-            } else if (action === 'manage') {
-                window.TempoApp.showToast("Tracker management will be available in Phase 2.");
-            } else if (action === 'view' || action === 'edit') {
-                window.TempoApp.showToast("Check-in details will be available in Phase 2.");
-            }
-        }
+        openStrack(action);
     }
 
     function getRecentlyState() {
@@ -3878,6 +4147,9 @@ window.TempoMode = (function() {
         setSelfCheckState,
         handleSelfCheckSetupClick,
         handleSelfCheckAction,
+        openStrack,
+        getDestinationDisplayName,
+        isValidPendingIntent,
         getRecentlyState,
         setRecentlyState,
         checkIsWeeklyReviewReady,

@@ -119,22 +119,34 @@ window.TempoApp = (function() {
     }
 
     function navigateTo(tabId) {
-        // Enforce Type B Authenticated Shared Tools (Wplan, Strack)
-        if ((tabId === 'plan-workspace' || tabId === 'stress-check') && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+        // Shared Authenticated Tool: Strack (Self-check)
+        if (tabId === 'strack' || tabId === 'stress-check') {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('open');
+                return;
+            }
+        }
+
+        // Shared Authenticated Tool: Wplan (Working Plan)
+        const isWplan = (tabId === 'plan-workspace');
+        if (isWplan && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+            const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
             if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
                 window.TempoMode.setPendingIntent({
+                    destination: 'plan-workspace',
+                    action: 'navigate',
+                    source: src,
+                    requiredParams: {},
                     type: 'tool',
-                    tool: tabId,
-                    destination: tabId,
-                    sourceContext: window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry'
+                    tool: 'plan-workspace',
+                    sourceContext: src
                 });
             }
             if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
                 window.TempoAuth.openSignInModal();
             }
             if (typeof showToast === 'function') {
-                const toolName = tabId === 'plan-workspace' ? 'Working Plan' : 'Self-check';
-                showToast(`Please sign in or create an account to access ${toolName}.`);
+                showToast("Please sign in or create an account to access Working Plan.");
             }
             return;
         }
@@ -187,21 +199,29 @@ window.TempoApp = (function() {
 
         // If entering Recovery Mode via route, activate recovery mode and route to today
         if (tabId === 'recovery-mode') {
-            if (window.TempoMode && window.TempoMode.getActiveContext && window.TempoMode.getActiveContext() !== 'recovery') {
+            const curContext = window.TempoMode && window.TempoMode.getActiveContext ? window.TempoMode.getActiveContext() : null;
+            if (curContext !== 'recovery' && curContext !== null) {
+                // Prevent browser back from flipping away from emergency to recovery
+                navigateTo('today');
+                return;
+            }
+            if (window.TempoMode && window.TempoMode.transitionContext && curContext !== 'recovery') {
                 window.TempoMode.transitionContext('recovery', { silent: true });
-            } else if (window.TempoMode && window.TempoMode.getMode() !== 'recovery') {
-                window.TempoMode.setMode('recovery', { silent: true });
             }
             navigateTo('today');
             return;
         }
 
-        // If entering Emergency Mode, ensure Emode is active and resume stage
+        // If entering Emergency Mode, guard against accidental mode flip from recovery
         if (tabId === 'emergency') {
-            if (window.TempoMode && window.TempoMode.getActiveContext && window.TempoMode.getActiveContext() !== 'emergency') {
+            const curContext = window.TempoMode && window.TempoMode.getActiveContext ? window.TempoMode.getActiveContext() : null;
+            if (curContext === 'recovery') {
+                // Invariant 26: Browser Back must not flip activeContext from recovery to emergency
+                navigateTo('today');
+                return;
+            }
+            if (curContext !== 'emergency' && window.TempoMode && window.TempoMode.transitionContext) {
                 window.TempoMode.transitionContext('emergency', { silent: true });
-            } else if (window.TempoMode && window.TempoMode.getMode() !== 'emergency') {
-                window.TempoMode.setMode('emergency', { silent: true });
             }
             if (window.TempoEmergencyFlow) {
                 const stage = window.TempoEmergencyFlow.getCurrentStage();
@@ -371,7 +391,7 @@ window.TempoApp = (function() {
             { name: 'Focus Zone', category: 'Tool', desc: 'Focus with intentional breaks. Default 45 min focus / 15 min rest.', action: () => { if (window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode(); } },
             { name: 'Breathing (Box Breathing)', category: 'Tool', desc: 'A quick 4-4-4-4 breathing exercise to calm your mind.', action: () => { window.TempoStressRelief.openBreathing({ context: 'home' }); } },
             { name: 'Quick Stress Relief', category: 'Tool', desc: 'Simple micro-actions (1m, 3m, 5m) to ease stress in minutes.', action: () => { window.TempoStressRelief.openLibrary({ context: 'home' }); } },
-            { name: 'Self-check', category: 'Tool', desc: 'Track your stress signals and wellbeing habits across 6 dimensions.', action: () => { navigateTo('stress-check'); } },
+            { name: 'Self-check', category: 'Tool', desc: 'Track your stress signals and wellbeing habits across 6 dimensions.', action: () => { navigateTo('strack'); } },
             { name: 'Urgent Mode (Deadline Triage)', category: 'Tool', desc: 'Academic triage: unfreeze panic and extract the ONE next action.', action: () => { navigateTo('emergency'); } },
             { name: 'Routine & Habit Tracker', category: 'Tool', desc: 'Build gentle, non-punitive habits and daily routine blocks.', action: () => { navigateTo('routine'); } },
             { name: 'SOS Safety Support', category: 'Safety', desc: 'Emergency Medical Support (115), HOPE Suicide Prevention Hotline (0865 044 400), and urgent safety help.', action: () => { window.TempoEmergencySupport.openSOS(); } }

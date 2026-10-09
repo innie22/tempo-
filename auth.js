@@ -46,7 +46,12 @@ window.TempoAuth = (function() {
             forgotPrompt: "Enter your registered email address to receive password reset instructions:",
             forgotSent: "Password reset link has been sent to your email.",
             fillRequired: "Please fill in all required fields.",
-            passTooShort: "Password must be at least 6 characters long."
+            passTooShort: "Password must be at least 6 characters long.",
+            emailAlreadyRegistered: "This email is already registered. Please log in instead.",
+            errorNotice: "Notice",
+            loginWithEmailBtn: "Log in with this email →",
+            genericRegError: "Registration failed. Please verify your information and try again.",
+            invalidCredentials: "Email or password is incorrect."
         },
         vi: {
             regHeading: "TẠO TÀI KHOẢN TEMPO",
@@ -73,7 +78,12 @@ window.TempoAuth = (function() {
             forgotPrompt: "Nhập địa chỉ email đã đăng ký để nhận hướng dẫn đặt lại mật khẩu:",
             forgotSent: "Liên kết đặt lại mật khẩu đã được gửi đến email của bạn.",
             fillRequired: "Vui lòng điền đầy đủ các thông tin bắt buộc.",
-            passTooShort: "Mật khẩu phải có ít nhất 6 ký tự."
+            passTooShort: "Mật khẩu phải có ít nhất 6 ký tự.",
+            emailAlreadyRegistered: "Email này đã được đăng ký. Vui lòng đăng nhập.",
+            errorNotice: "Thông báo",
+            loginWithEmailBtn: "Đăng nhập với email này →",
+            genericRegError: "Đăng ký thất bại. Vui lòng kiểm tra lại thông tin và thử lại.",
+            invalidCredentials: "Email hoặc mật khẩu không chính xác."
         }
     };
 
@@ -135,6 +145,30 @@ window.TempoAuth = (function() {
         if (btnSubmitSignin) btnSubmitSignin.textContent = dict.loginSubmitBtn;
         const loginFooter = document.getElementById('auth-login-footer-text');
         if (loginFooter) loginFooter.innerHTML = dict.loginFooterText;
+
+        // Update registration error box elements if present
+        const regErrTitle = document.getElementById('auth-reg-error-title');
+        if (regErrTitle) regErrTitle.textContent = dict.errorNotice || "Notice";
+        const regErrBtn = document.getElementById('auth-reg-error-btn-text');
+        if (regErrBtn) regErrBtn.textContent = dict.loginWithEmailBtn || "Log in with this email →";
+        const regErrDesc = document.getElementById('auth-reg-error-desc');
+        const regErrBox = document.getElementById('auth-reg-error-box');
+        if (regErrDesc && regErrBox && !regErrBox.classList.contains('hidden')) {
+            if (regErrDesc.textContent === AUTH_I18N.en.emailAlreadyRegistered || regErrDesc.textContent === AUTH_I18N.vi.emailAlreadyRegistered) {
+                regErrDesc.textContent = dict.emailAlreadyRegistered;
+            }
+        }
+
+        // Update sign-in error box elements if present
+        const loginErrTitle = document.getElementById('auth-login-error-title');
+        if (loginErrTitle) loginErrTitle.textContent = dict.errorNotice || "Notice";
+        const loginErrDesc = document.getElementById('auth-login-error-desc');
+        const loginErrBox = document.getElementById('auth-login-error-box');
+        if (loginErrDesc && loginErrBox && !loginErrBox.classList.contains('hidden')) {
+            if (loginErrDesc.textContent === AUTH_I18N.en.invalidCredentials || loginErrDesc.textContent === AUTH_I18N.vi.invalidCredentials) {
+                loginErrDesc.textContent = dict.invalidCredentials;
+            }
+        }
 
         // Update active switch button styles
         document.querySelectorAll('.auth-lang-btn').forEach(btn => {
@@ -298,6 +332,26 @@ window.TempoAuth = (function() {
             formSignIn.addEventListener('submit', handleSignIn);
         }
 
+        // Clear registration error on input
+        ['reg-display-name', 'reg-email', 'reg-password'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => {
+                    clearRegisterError();
+                });
+            }
+        });
+
+        // Clear sign-in error on input
+        ['signin-email', 'signin-password'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', () => {
+                    clearSignInError();
+                });
+            }
+        });
+
         // Modal Close Buttons
         document.querySelectorAll('.btn-close-auth-modal').forEach(btn => {
             btn.addEventListener('click', cancelAuthModal);
@@ -330,20 +384,27 @@ window.TempoAuth = (function() {
                     const storedLocal = localStorage.getItem('tempo_local_dev_user');
                     if (storedLocal) {
                         const parsed = JSON.parse(storedLocal);
-                        if (parsed && parsed.id) {
-                            currentUser = parsed;
-                            const name = parsed.user_metadata?.display_name || parsed.user_metadata?.full_name || (parsed.email || 'user').split('@')[0];
-                            currentProfile = {
-                                id: parsed.id,
-                                email: parsed.email || '',
-                                full_name: name,
-                                display_name: name,
-                                role: parsed.user_metadata?.role || 'student'
-                            };
-                            authState = 'AUTHENTICATED';
-                            renderHeaderUI(currentProfile);
-                            if (resolveAuthReady) resolveAuthReady();
-                            return;
+                        if (parsed && parsed.id && parsed.email) {
+                            const normEmail = parsed.email.trim().toLowerCase();
+                            const registeredMock = localStorage.getItem('tempo_mock_account_' + normEmail) ||
+                                                   localStorage.getItem('tempo_mock_account_' + parsed.email);
+                            if (registeredMock) {
+                                currentUser = parsed;
+                                const name = parsed.user_metadata?.display_name || parsed.user_metadata?.full_name || normEmail.split('@')[0];
+                                currentProfile = {
+                                    id: parsed.id,
+                                    email: normEmail,
+                                    full_name: name,
+                                    display_name: name,
+                                    role: parsed.user_metadata?.role || 'student'
+                                };
+                                authState = 'authenticated';
+                                renderHeaderUI(currentProfile);
+                                if (resolveAuthReady) resolveAuthReady();
+                                return;
+                            } else {
+                                localStorage.removeItem('tempo_local_dev_user');
+                            }
                         }
                     }
                 } catch (e) {}
@@ -351,7 +412,7 @@ window.TempoAuth = (function() {
             currentUser = null;
             currentProfile = null;
             currentVolunteerProfile = null;
-            authState = 'ANONYMOUS';
+            authState = 'anonymous';
             renderHeaderUI(null);
             if (resolveAuthReady) resolveAuthReady();
             return;
@@ -361,22 +422,35 @@ window.TempoAuth = (function() {
             const { data: { session }, error } = await supabase.auth.getSession();
             if (session && session.user) {
                 currentUser = session.user;
-                authState = 'AUTHENTICATED';
+                authState = 'authenticated';
                 await loadUserProfile(session.user.id);
             } else {
                 currentUser = null;
                 currentProfile = null;
                 currentVolunteerProfile = null;
-                authState = 'ANONYMOUS';
+                authState = 'anonymous';
                 renderHeaderUI(null);
             }
         } catch (err) {
             console.warn("[TempoAuth] Session check error:", err);
-            currentUser = null;
-            currentProfile = null;
-            currentVolunteerProfile = null;
-            authState = 'ANONYMOUS';
-            renderHeaderUI(null);
+            const isNetworkError = !navigator.onLine || 
+                (err && (err.name === 'FetchError' || 
+                         err.name === 'TypeError' ||
+                         (typeof err.message === 'string' && (
+                             err.message.toLowerCase().includes('failed to fetch') ||
+                             err.message.toLowerCase().includes('network') ||
+                             err.message.toLowerCase().includes('timeout') ||
+                             err.message.toLowerCase().includes('offline')
+                         ))));
+            if (isNetworkError && currentUser) {
+                console.info("[TempoAuth] Network error detected; retaining active session per contract.");
+            } else {
+                currentUser = null;
+                currentProfile = null;
+                currentVolunteerProfile = null;
+                authState = 'anonymous';
+                renderHeaderUI(null);
+            }
         } finally {
             if (resolveAuthReady) resolveAuthReady();
         }
@@ -389,13 +463,13 @@ window.TempoAuth = (function() {
                     currentUser = null;
                     currentProfile = null;
                     currentVolunteerProfile = null;
-                    authState = 'ANONYMOUS';
+                    authState = 'anonymous';
                     renderHeaderUI(null);
                     syncPlanForSignOut();
                 } else if (newSession && newSession.user) {
                     const isNewUser = !currentUser || currentUser.id !== newSession.user.id;
                     currentUser = newSession.user;
-                    authState = 'AUTHENTICATED';
+                    authState = 'authenticated';
                     await loadUserProfile(newSession.user.id);
                     if (isNewUser && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
                         await syncPlanForUser(newSession.user.id);
@@ -576,106 +650,223 @@ window.TempoAuth = (function() {
     }
 
     // =========================================================================
+    // REGISTRATION ERROR & DUPLICATE ACCOUNT HANDLING
+    // =========================================================================
+    function isDuplicateEmailError(error, data) {
+        if (error) {
+            const msg = (error.message || '').toLowerCase();
+            const code = (error.code || '').toLowerCase();
+            if (
+                msg.includes('already registered') ||
+                msg.includes('already exists') ||
+                msg.includes('already in use') ||
+                msg.includes('duplicate') ||
+                code === 'user_already_exists' ||
+                code === 'email_exists'
+            ) {
+                return true;
+            }
+        }
+        // Supabase GoTrue privacy feature: when email confirmation is enabled,
+        // signUp for an existing email returns status 200 with an empty identities array: data.user.identities = []
+        if (data && data.user) {
+            if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function showRegisterError(msg, isDuplicate = false) {
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+        const box = document.getElementById('auth-reg-error-box');
+        const title = document.getElementById('auth-reg-error-title');
+        const desc = document.getElementById('auth-reg-error-desc');
+        const action = document.getElementById('auth-reg-error-action');
+        const btnText = document.getElementById('auth-reg-error-btn-text');
+
+        if (title) title.textContent = dict.errorNotice || "Notice";
+        if (desc) desc.textContent = msg;
+
+        if (action) {
+            if (isDuplicate) {
+                action.classList.remove('hidden');
+                if (btnText) btnText.textContent = dict.loginWithEmailBtn || "Log in with this email →";
+            } else {
+                action.classList.add('hidden');
+            }
+        }
+
+        if (box) {
+            box.classList.remove('hidden');
+        }
+
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(msg);
+        }
+    }
+
+    function clearRegisterError() {
+        const box = document.getElementById('auth-reg-error-box');
+        if (box) box.classList.add('hidden');
+        const desc = document.getElementById('auth-reg-error-desc');
+        if (desc) desc.textContent = '';
+        const action = document.getElementById('auth-reg-error-action');
+        if (action) action.classList.add('hidden');
+    }
+
+    function showSignInError(msg) {
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+        const box = document.getElementById('auth-login-error-box');
+        const title = document.getElementById('auth-login-error-title');
+        const desc = document.getElementById('auth-login-error-desc');
+
+        if (title) title.textContent = dict.errorNotice || "Notice";
+        if (desc) desc.textContent = msg;
+
+        if (box) {
+            box.classList.remove('hidden');
+        }
+
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(msg);
+        }
+    }
+
+    function clearSignInError() {
+        const box = document.getElementById('auth-login-error-box');
+        if (box) box.classList.add('hidden');
+        const desc = document.getElementById('auth-login-error-desc');
+        if (desc) desc.textContent = '';
+    }
+
+    // =========================================================================
     // STANDARD TEMPO REGISTRATION (PHASE 1)
     // =========================================================================
     async function registerWithCredentials(displayName, email, password) {
+        clearRegisterError();
         const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
 
+        // Support both register(email, password) and register(displayName, email, password)
+        if (displayName && email && !password) {
+            password = email;
+            email = displayName;
+            displayName = (email || '').split('@')[0] || 'Tempo User';
+        }
+
         if (!displayName || !email || !password) {
-            window.TempoApp.showToast(dict.fillRequired);
+            showRegisterError(dict.fillRequired, false);
             return false;
         }
 
         if (password.length < 6) {
-            window.TempoApp.showToast(dict.passTooShort);
+            showRegisterError(dict.passTooShort, false);
             return false;
         }
+
+        const normalizedEmail = (email || '').trim().toLowerCase();
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
         if (!supabase) {
             if (!isLocalEnvironment()) {
-                window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.", 5000);
+                showRegisterError("Authentication backend is not configured. Please ensure environment variables are set.", false);
                 return false;
             }
-            const userId = 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
-            currentUser = { 
-                id: userId, 
-                email: email,
+
+            // Check if mock account already exists for this email
+            const existingMock = localStorage.getItem('tempo_mock_account_' + normalizedEmail) ||
+                                 localStorage.getItem('tempo_mock_account_' + email.trim());
+            let devUserEmail = null;
+            try {
+                const rawDev = localStorage.getItem('tempo_local_dev_user');
+                if (rawDev) {
+                    const parsedDev = JSON.parse(rawDev);
+                    if (parsedDev && parsedDev.email) {
+                        devUserEmail = parsedDev.email.trim().toLowerCase();
+                    }
+                }
+            } catch (e) {}
+
+            if (existingMock || (devUserEmail && devUserEmail === normalizedEmail)) {
+                showRegisterError(dict.emailAlreadyRegistered, true);
+                return false;
+            }
+
+            const userId = 'local_user_' + btoa(normalizedEmail).replace(/[^a-zA-Z0-9]/g, '');
+            const mockAccount = {
+                id: userId,
+                email: normalizedEmail,
+                raw_email: email.trim(),
+                password: password,
                 user_metadata: {
-                    full_name: displayName,
-                    display_name: displayName,
+                    full_name: displayName.trim(),
+                    display_name: displayName.trim(),
                     role: 'student'
                 }
             };
-            try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
-            currentProfile = {
-                id: userId,
-                email: email,
-                full_name: displayName,
-                display_name: displayName,
-                role: 'student'
-            };
-            authState = 'AUTHENTICATED';
-            renderHeaderUI(currentProfile);
+            try {
+                localStorage.setItem('tempo_mock_account_' + normalizedEmail, JSON.stringify(mockAccount));
+                if (normalizedEmail !== email.trim()) {
+                    localStorage.setItem('tempo_mock_account_' + email.trim(), JSON.stringify(mockAccount));
+                }
+            } catch (e) {}
+
+            // TASK 2 CONTRACT (Invariant 14): Register Success does NOT authenticate and does NOT resume intent.
+            // Pending Intent is preserved. Transition to Sign In modal to require explicit login.
             closeAllAuthModals();
+            openSignInModal(normalizedEmail);
+
             if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
                 window.TempoApp.triggerConfetti();
             }
-            window.TempoApp.showToast(`Welcome, ${displayName}! Your account has been created.`);
-
-            await syncPlanForUser(currentUser.id);
-
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
-                window.TempoApp.navigateTo('today');
-            }
+            window.TempoApp.showToast(`Account created for ${displayName.trim()}! Please sign in to continue.`);
             return true;
         }
 
         try {
             const { data, error } = await supabase.auth.signUp({
-                email,
+                email: normalizedEmail,
                 password,
                 options: {
                     data: {
-                        full_name: displayName,
-                        display_name: displayName,
+                        full_name: displayName.trim(),
+                        display_name: displayName.trim(),
                         role: 'student'
                     }
                 }
             });
 
-            if (error) {
-                window.TempoApp.showToast(`Registration failed: ${error.message}`);
+            if (isDuplicateEmailError(error, data)) {
+                showRegisterError(dict.emailAlreadyRegistered, true);
                 return false;
             }
 
+            if (error) {
+                console.error("Supabase registration error:", error);
+                showRegisterError(dict.genericRegError || "Registration failed. Please verify your information and try again.", false);
+                return false;
+            }
+
+            // TASK 2 CONTRACT (Invariant 14): If Supabase automatically creates an active session,
+            // sign it out to ensure the user must log in. Pending Intent is preserved.
+            if (data && data.session) {
+                try {
+                    await supabase.auth.signOut();
+                } catch (e) {}
+            }
+
             closeAllAuthModals();
+            openSignInModal(normalizedEmail);
+
             if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
                 window.TempoApp.triggerConfetti();
             }
-            window.TempoApp.showToast(`Welcome, ${displayName}! Your account has been created.`);
-
-            if (data.session) {
-                currentUser = data.user;
-                authState = 'AUTHENTICATED';
-                await loadUserProfile(data.user.id);
-                await syncPlanForUser(data.user.id);
-            } else {
-                window.TempoApp.showToast("Please check your email to confirm your account!");
-            }
-
-            if (window.TempoMode && window.TempoMode.hasPendingMode()) {
-                window.TempoMode.handleAuthSuccess();
-            } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
-                window.TempoApp.navigateTo('today');
-            }
+            window.TempoApp.showToast(`Account created for ${displayName.trim()}! Please sign in to continue.`);
             return true;
 
         } catch (err) {
-            console.error("Register error:", err);
-            window.TempoApp.showToast("An unexpected error occurred. Please try again.");
+            console.error("Register unexpected error:", err);
+            showRegisterError(dict.genericRegError || "An unexpected error occurred. Please try again.", false);
             return false;
         }
     }
@@ -736,31 +927,38 @@ window.TempoAuth = (function() {
         }
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
+        const normalizedEmail = (email || '').trim().toLowerCase();
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+
         if (!supabase) {
             if (!isLocalEnvironment()) {
                 window.TempoApp.showToast("Authentication backend is not configured. Please ensure environment variables are set.", 5000);
                 return;
             }
-            currentUser = { id: 'local_student_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''), email: email };
-            try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
-            currentProfile = {
-                id: currentUser.id,
-                email: email,
+
+            const existingMock = localStorage.getItem('tempo_mock_account_' + normalizedEmail) || localStorage.getItem('tempo_mock_account_' + email);
+            if (existingMock) {
+                window.TempoApp.showToast(dict.emailAlreadyRegistered);
+                return;
+            }
+
+            const userId = 'local_student_' + btoa(normalizedEmail).replace(/[^a-zA-Z0-9]/g, '');
+            const mockAccount = {
+                id: userId,
+                email: normalizedEmail,
+                password: password,
                 full_name: fullName,
                 role: 'student',
                 university: university || 'Not specified',
                 year_of_study: yearOfStudy || 'Not specified'
             };
-            authState = 'AUTHENTICATED';
-            renderHeaderUI(currentProfile);
-            closeAllAuthModals();
-            window.TempoApp.triggerConfetti();
-            window.TempoApp.showToast(`Welcome, ${fullName}! Your account has been created.`);
+            try { localStorage.setItem('tempo_mock_account_' + normalizedEmail, JSON.stringify(mockAccount)); } catch (e) {}
 
-            const intentHandled = await syncPlanForUser(currentUser.id);
-            if (!intentHandled) {
-                window.TempoApp.navigateTo('today');
-            }
+            closeAllAuthModals();
+            openSignInModal(normalizedEmail);
+
+            window.TempoApp.triggerConfetti();
+            window.TempoApp.showToast(`Account created for ${fullName}! Please sign in to continue.`);
             return;
         }
 
@@ -771,7 +969,7 @@ window.TempoAuth = (function() {
 
         try {
             const { data, error } = await supabase.auth.signUp({
-                email,
+                email: normalizedEmail,
                 password,
                 options: {
                     data: {
@@ -783,27 +981,27 @@ window.TempoAuth = (function() {
                 }
             });
 
-            if (error) {
-                window.TempoApp.showToast(`Registration failed: ${error.message}`);
+            if (isDuplicateEmailError(error, data)) {
+                window.TempoApp.showToast(dict.emailAlreadyRegistered);
                 return;
             }
 
-            closeAllAuthModals();
-            window.TempoApp.triggerConfetti();
-            window.TempoApp.showToast(`Welcome, ${fullName}! Your student account has been created.`);
-
-            if (data.session) {
-                currentUser = data.user;
-                authState = 'AUTHENTICATED';
-                await loadUserProfile(data.user.id);
-                const intentHandled = await syncPlanForUser(data.user.id);
-                if (!intentHandled) {
-                    window.TempoApp.navigateTo('today');
-                }
-            } else {
-                window.TempoApp.showToast("Please check your email to confirm your account!");
-                window.TempoApp.navigateTo('today');
+            if (error) {
+                window.TempoApp.showToast(dict.genericRegError || `Registration failed: ${error.message}`);
+                return;
             }
+
+            if (data && data.session) {
+                try { await supabase.auth.signOut(); } catch (e) {}
+            }
+
+            closeAllAuthModals();
+            openSignInModal();
+            const signinEmailInput = document.getElementById('signin-email');
+            if (signinEmailInput) signinEmailInput.value = email;
+
+            window.TempoApp.triggerConfetti();
+            window.TempoApp.showToast(`Account created for ${fullName}! Please sign in to continue.`);
 
         } catch (err) {
             console.error("Student register error:", err);
@@ -876,8 +1074,14 @@ window.TempoAuth = (function() {
                 }
             });
 
+            if (isDuplicateEmailError(error, data)) {
+                const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+                window.TempoApp.showToast(dict.emailAlreadyRegistered);
+                return;
+            }
+
             if (error) {
-                window.TempoApp.showToast(`Application error: ${error.message}`);
+                window.TempoApp.showToast("Application failed. Please verify your information and try again.");
                 return;
             }
 
@@ -903,32 +1107,64 @@ window.TempoAuth = (function() {
     // SIGN IN
     // =========================================================================
     async function signInWithCredentials(email, password) {
+        clearSignInError();
+        const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
+
         if (!email || !password) {
-            window.TempoApp.showToast("Please enter both email and password.");
+            showSignInError(dict.fillRequired || "Please enter both email and password.");
             return false;
         }
+
+        const normalizedEmail = (email || '').trim().toLowerCase();
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
         if (!supabase) {
             if (!isLocalEnvironment()) {
-                window.TempoApp.showToast("Authentication backend is not configured. Please ensure SUPABASE_URL and publishable key are set in environment variables.", 5000);
+                showSignInError("Authentication backend is not configured. Please ensure SUPABASE_URL and publishable key are set in environment variables.");
                 return false;
             }
-            const name = email.split('@')[0];
+
+            // In local development fallback:
+            // An email that has NEVER been registered MUST NOT be able to log in.
+            const storedMock = localStorage.getItem('tempo_mock_account_' + normalizedEmail) ||
+                                 localStorage.getItem('tempo_mock_account_' + email.trim());
+            
+            if (!storedMock) {
+                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                return false;
+            }
+
+            let parsed = null;
+            try {
+                parsed = JSON.parse(storedMock);
+            } catch (e) {
+                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                return false;
+            }
+
+            if (!parsed || parsed.password !== password) {
+                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                return false;
+            }
+
+            let name = parsed.user_metadata?.full_name || parsed.user_metadata?.display_name || parsed.full_name || normalizedEmail.split('@')[0];
+            let role = parsed.user_metadata?.role || parsed.role || 'student';
+            const userId = parsed.id || ('local_user_' + btoa(normalizedEmail).replace(/[^a-zA-Z0-9]/g, ''));
+
             currentUser = { 
-                id: 'local_user_' + btoa(email).replace(/[^a-zA-Z0-9]/g, ''), 
-                email: email,
-                user_metadata: { full_name: name, display_name: name, role: 'student' }
+                id: userId, 
+                email: normalizedEmail,
+                user_metadata: { full_name: name, display_name: name, role: role }
             };
             try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
             currentProfile = {
                 id: currentUser.id,
-                email: email,
+                email: normalizedEmail,
                 full_name: name,
                 display_name: name,
-                role: 'student'
+                role: role
             };
-            authState = 'AUTHENTICATED';
+            authState = 'authenticated';
             renderHeaderUI(currentProfile);
             closeAllAuthModals();
             window.TempoApp.showToast(`Welcome back, ${name}!`);
@@ -942,18 +1178,19 @@ window.TempoAuth = (function() {
 
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
-                email,
+                email: normalizedEmail,
                 password
             });
 
-            if (error) {
-                window.TempoApp.showToast(`Sign in failed: ${error.message}`);
+            // Guard against login rejection or missing session/user
+            if (error || !data || !data.session || !data.user) {
+                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
                 return false;
             }
 
             closeAllAuthModals();
             currentUser = data.user;
-            authState = 'AUTHENTICATED';
+            authState = 'authenticated';
             await loadUserProfile(data.user.id);
             const intentHandled = await syncPlanForUser(data.user.id);
             const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
@@ -972,7 +1209,7 @@ window.TempoAuth = (function() {
 
         } catch (err) {
             console.error("Sign in error:", err);
-            window.TempoApp.showToast("Error signing in. Please check credentials.");
+            showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
             return false;
         }
     }
@@ -1050,7 +1287,7 @@ window.TempoAuth = (function() {
         currentUser = null;
         currentProfile = null;
         currentVolunteerProfile = null;
-        authState = 'ANONYMOUS';
+        authState = 'anonymous';
         renderHeaderUI(null);
 
         syncPlanForSignOut();
@@ -1064,6 +1301,8 @@ window.TempoAuth = (function() {
     // =========================================================================
     function openRegisterModal() {
         closeAllAuthModals();
+        clearRegisterError();
+        clearSignInError();
         const modal = document.getElementById('modal-register');
         if (modal) {
             modal.classList.remove('hidden');
@@ -1095,13 +1334,29 @@ window.TempoAuth = (function() {
         if (modal) modal.classList.remove('hidden');
     }
 
-    function openSignInModal() {
+    function openSignInModal(prefillEmail) {
         closeAllAuthModals();
+        clearSignInError();
         const modal = document.getElementById('modal-signin');
         if (modal) {
             modal.classList.remove('hidden');
             const emailInput = document.getElementById('signin-email');
-            if (emailInput) setTimeout(() => emailInput.focus(), 50);
+            const passInput = document.getElementById('signin-password');
+            if (emailInput) {
+                if (typeof prefillEmail === 'string' && prefillEmail.trim()) {
+                    emailInput.value = prefillEmail.trim();
+                } else if (!emailInput.value) {
+                    const regEmailInput = document.getElementById('reg-email');
+                    if (regEmailInput && regEmailInput.value) {
+                        emailInput.value = regEmailInput.value.trim();
+                    }
+                }
+                if (emailInput.value && passInput) {
+                    setTimeout(() => passInput.focus(), 50);
+                } else {
+                    setTimeout(() => emailInput.focus(), 50);
+                }
+            }
         }
     }
 
@@ -1132,7 +1387,7 @@ window.TempoAuth = (function() {
         init,
         checkSession,
         waitForAuthResolution: () => authReadyPromise,
-        getAuthState: () => authState,
+        getAuthState: () => (currentUser ? 'authenticated' : (authState === 'AUTH_LOADING' ? 'AUTH_LOADING' : 'anonymous')),
         getCurrentUser: () => currentUser,
         getCurrentUserId: () => currentUser ? currentUser.id : null,
         getCurrentProfile: () => currentProfile,
@@ -1160,6 +1415,11 @@ window.TempoAuth = (function() {
         extractGreetingName,
         updateUserGreeting,
         syncPlanForUser,
-        syncPlanForSignOut
+        syncPlanForSignOut,
+        isDuplicateEmailError,
+        showRegisterError,
+        clearRegisterError,
+        showSignInError,
+        clearSignInError
     };
 })();

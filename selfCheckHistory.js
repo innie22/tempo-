@@ -68,6 +68,12 @@
     }
 
     function open(trackerId = null) {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('history', { trackerId });
+            }
+            return;
+        }
         ensureModalMounted();
         if (trackerId) {
             currentHistoryView = 'tracker_detail';

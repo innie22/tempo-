@@ -510,6 +510,12 @@
     }
 
     function open(weekStart = null, isEditMode = false) {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('history', { weekStart, isEditMode });
+            }
+            return;
+        }
         ensureModalMounted();
 
         // Default to latest eligible completed week if not specified

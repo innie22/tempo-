@@ -147,6 +147,7 @@ def run_tests():
         # Sign in a new user with NO established context
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('new_user_no_context@test.edu', 'secret123');
                 await window.TempoAuth.signIn('new_user_no_context@test.edu', 'secret123');
             })()
         """)
@@ -538,6 +539,7 @@ def run_tests():
         # Sign in guest user to fulfill pendingIntent
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('wplan_guest_user@test.edu', 'secret123');
                 await window.TempoAuth.signIn('wplan_guest_user@test.edu', 'secret123');
             })()
         """)
@@ -611,6 +613,7 @@ def run_tests():
         log("Testing 15a: Urmode -> Logout -> Login -> Urmode...")
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('user_restore_urmode@test.edu', 'pass123');
                 await window.TempoAuth.signIn('user_restore_urmode@test.edu', 'pass123');
                 window.TempoMode.transitionContext('emergency');
             })()
@@ -648,6 +651,7 @@ def run_tests():
         log("Testing 15b: Rmode -> Logout -> Login -> Rmode...")
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('user_restore_rmode@test.edu', 'pass123');
                 await window.TempoAuth.signIn('user_restore_rmode@test.edu', 'pass123');
                 window.TempoMode.transitionContext('recovery');
             })()
@@ -686,6 +690,7 @@ def run_tests():
         time.sleep(0.5)
         eval_js("""
             (async () => {
+                await window.TempoAuth.register('user_restore_entry@test.edu', 'pass123');
                 await window.TempoAuth.signIn('user_restore_entry@test.edu', 'pass123');
             })()
         """)

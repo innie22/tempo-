@@ -789,6 +789,12 @@
     // =========================================================================
 
     function openManage() {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('manage');
+            }
+            return;
+        }
         ensureModalsMounted();
         renderManageView();
         const modal = document.getElementById('modal-selfcheck-manage');
@@ -1136,6 +1142,12 @@
     let activeDailyDraft = null;
 
     function openDailyCheckin(isEditMode = false) {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('checkin', { isEdit: isEditMode });
+            }
+            return;
+        }
         ensureModalsMounted();
         const activeTrackers = getActiveTrackers();
         if (activeTrackers.length === 0) {
@@ -1486,6 +1498,12 @@
     // =========================================================================
 
     function openViewToday() {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('view');
+            }
+            return;
+        }
         ensureModalsMounted();
         const todayCheckin = getTodayCheckin();
         const activeTrackers = getActiveTrackers();
@@ -1579,6 +1597,12 @@
     }
 
     function openSetup() {
+        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('setup');
+            }
+            return;
+        }
         openManage();
     }
 
