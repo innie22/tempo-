@@ -520,7 +520,13 @@ window.TempoMode = (function() {
             else returnLabelEl.textContent = 'Return';
         }
 
-        const isAuthenticated = window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !!window.TempoAuth.getCurrentUser();
+        const isAuthenticated = Boolean(
+            window.TempoAuth && 
+            typeof window.TempoAuth.getCurrentUser === 'function' && 
+            window.TempoAuth.getCurrentUser() &&
+            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
+            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
+        );
 
         if (!isAuthenticated) {
             // Guest user: save pending intent for Strack, show auth gate, do NOT open Strack yet
@@ -553,6 +559,20 @@ window.TempoMode = (function() {
     }
 
     function showStressCheckScreen() {
+        const isAuthenticated = Boolean(
+            window.TempoAuth && 
+            typeof window.TempoAuth.getCurrentUser === 'function' && 
+            window.TempoAuth.getCurrentUser() &&
+            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
+            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
+        );
+
+        if (!isAuthenticated) {
+            console.warn("[TempoMode] Protected route access blocked: Strack requires authentication.");
+            openStrack('open');
+            return;
+        }
+
         document.querySelectorAll('.screen-container').forEach(screen => {
             screen.classList.add('hidden');
         });
@@ -567,6 +587,19 @@ window.TempoMode = (function() {
     }
 
     function executeStrackAction(action = 'open', options = {}) {
+        const isAuthenticated = Boolean(
+            window.TempoAuth && 
+            typeof window.TempoAuth.getCurrentUser === 'function' && 
+            window.TempoAuth.getCurrentUser() &&
+            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
+            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
+        );
+
+        if (!isAuthenticated) {
+            console.warn("[TempoMode] Protected route action blocked: Strack requires authentication.");
+            openStrack(action, options);
+            return;
+        }
         if (action === 'setup') {
             if (activeContext === MODES.RECOVERY && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
                 window.TempoRecoverySetup.open(options.stage || 1);
@@ -759,6 +792,19 @@ window.TempoMode = (function() {
      * Fulfills pendingIntent without incorrectly forcing emergency mode on Wplan tools.
      */
     function handleAuthSuccess() {
+        const isAuth = Boolean(
+            window.TempoAuth && 
+            typeof window.TempoAuth.getCurrentUser === 'function' && 
+            window.TempoAuth.getCurrentUser() &&
+            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
+            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
+        );
+
+        if (!isAuth) {
+            console.warn("[TempoMode] handleAuthSuccess rejected: user is not authenticated.");
+            return false;
+        }
+
         let intent = pendingIntent;
         if (!intent) {
             try {

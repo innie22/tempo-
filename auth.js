@@ -13,6 +13,8 @@ window.TempoAuth = (function() {
     let authState = 'AUTH_LOADING'; // 'AUTH_LOADING' | 'AUTHENTICATED' | 'ANONYMOUS'
     let authListenerAttached = false;
     let resolveAuthReady = null;
+    let isRegistrationInProgress = false;
+    let isExplicitSignInInProgress = false;
     const authReadyPromise = new Promise(resolve => {
         resolveAuthReady = resolve;
     });
@@ -459,6 +461,14 @@ window.TempoAuth = (function() {
         if (!authListenerAttached) {
             authListenerAttached = true;
             supabase.auth.onAuthStateChange(async (event, newSession) => {
+                if (isRegistrationInProgress) {
+                    // Registration cleanup or auto-session from signUp:
+                    // MUST NOT treat as authentication success!
+                    // MUST NOT clear pendingIntent via handleSignOut!
+                    // MUST NOT fulfill pending intents or open protected views!
+                    console.info("[TempoAuth] onAuthStateChange event ignored during registration:", event);
+                    return;
+                }
                 if (event === 'SIGNED_OUT' || (!newSession && event !== 'INITIAL_SESSION')) {
                     currentUser = null;
                     currentProfile = null;
@@ -471,7 +481,8 @@ window.TempoAuth = (function() {
                     currentUser = newSession.user;
                     authState = 'authenticated';
                     await loadUserProfile(newSession.user.id);
-                    if (isNewUser && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+                    // Only resume intent via onAuthStateChange if this is NOT an explicit signInWithCredentials call (which handles it directly)
+                    if (isNewUser && !isExplicitSignInInProgress && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
                         await syncPlanForUser(newSession.user.id);
                     }
                 }
@@ -824,6 +835,7 @@ window.TempoAuth = (function() {
         }
 
         try {
+            isRegistrationInProgress = true;
             const { data, error } = await supabase.auth.signUp({
                 email: normalizedEmail,
                 password,
@@ -847,13 +859,26 @@ window.TempoAuth = (function() {
                 return false;
             }
 
-            // TASK 2 CONTRACT (Invariant 14): If Supabase automatically creates an active session,
-            // sign it out to ensure the user must log in. Pending Intent is preserved.
+            // TASK 2 CONTRACT (Invariant 14): Register Success does NOT authenticate and does NOT resume intent.
+            // If Supabase automatically creates an active session on signUp, immediately sign it out
+            // so the user MUST explicitly log in. Pending Intent is preserved.
             if (data && data.session) {
                 try {
                     await supabase.auth.signOut();
                 } catch (e) {}
             }
+            try {
+                const { data: sData } = await supabase.auth.getSession();
+                if (sData && sData.session) {
+                    await supabase.auth.signOut({ scope: 'local' });
+                }
+            } catch (e) {}
+
+            currentUser = null;
+            currentProfile = null;
+            currentVolunteerProfile = null;
+            authState = 'anonymous';
+            renderHeaderUI(null);
 
             closeAllAuthModals();
             openSignInModal(normalizedEmail);
@@ -868,6 +893,8 @@ window.TempoAuth = (function() {
             console.error("Register unexpected error:", err);
             showRegisterError(dict.genericRegError || "An unexpected error occurred. Please try again.", false);
             return false;
+        } finally {
+            isRegistrationInProgress = false;
         }
     }
 
@@ -968,6 +995,7 @@ window.TempoAuth = (function() {
         submitBtn.textContent = "Creating Student Account...";
 
         try {
+            isRegistrationInProgress = true;
             const { data, error } = await supabase.auth.signUp({
                 email: normalizedEmail,
                 password,
@@ -994,9 +1022,21 @@ window.TempoAuth = (function() {
             if (data && data.session) {
                 try { await supabase.auth.signOut(); } catch (e) {}
             }
+            try {
+                const { data: sData } = await supabase.auth.getSession();
+                if (sData && sData.session) {
+                    await supabase.auth.signOut({ scope: 'local' });
+                }
+            } catch (e) {}
+
+            currentUser = null;
+            currentProfile = null;
+            currentVolunteerProfile = null;
+            authState = 'anonymous';
+            renderHeaderUI(null);
 
             closeAllAuthModals();
-            openSignInModal();
+            openSignInModal(normalizedEmail);
             const signinEmailInput = document.getElementById('signin-email');
             if (signinEmailInput) signinEmailInput.value = email;
 
@@ -1007,6 +1047,7 @@ window.TempoAuth = (function() {
             console.error("Student register error:", err);
             window.TempoApp.showToast("An unexpected error occurred. Please try again.");
         } finally {
+            isRegistrationInProgress = false;
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
         }
@@ -1056,6 +1097,7 @@ window.TempoAuth = (function() {
         submitBtn.textContent = "Submitting Application...";
 
         try {
+            isRegistrationInProgress = true;
             const { data, error } = await supabase.auth.signUp({
                 email,
                 password,
@@ -1085,19 +1127,31 @@ window.TempoAuth = (function() {
                 return;
             }
 
+            if (data && data.session) {
+                try { await supabase.auth.signOut(); } catch (e) {}
+            }
+            try {
+                const { data: sData } = await supabase.auth.getSession();
+                if (sData && sData.session) {
+                    await supabase.auth.signOut({ scope: 'local' });
+                }
+            } catch (e) {}
+
+            currentUser = null;
+            currentProfile = null;
+            currentVolunteerProfile = null;
+            authState = 'anonymous';
+            renderHeaderUI(null);
+
             closeAllAuthModals();
             // Open Application Submitted Notice Screen
             openVolunteerSubmittedModal(fullName);
-
-            if (data.session) {
-                currentUser = data.user;
-                await loadUserProfile(data.user.id);
-            }
 
         } catch (err) {
             console.error("Volunteer apply error:", err);
             window.TempoApp.showToast("Failed to submit application. Please try again.");
         } finally {
+            isRegistrationInProgress = false;
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
         }
@@ -1118,99 +1172,104 @@ window.TempoAuth = (function() {
         const normalizedEmail = (email || '').trim().toLowerCase();
 
         const supabase = window.TempoSupabase ? window.TempoSupabase.getClient() : null;
-        if (!supabase) {
-            if (!isLocalEnvironment()) {
-                showSignInError("Authentication backend is not configured. Please ensure SUPABASE_URL and publishable key are set in environment variables.");
-                return false;
-            }
-
-            // In local development fallback:
-            // An email that has NEVER been registered MUST NOT be able to log in.
-            const storedMock = localStorage.getItem('tempo_mock_account_' + normalizedEmail) ||
-                                 localStorage.getItem('tempo_mock_account_' + email.trim());
-            
-            if (!storedMock) {
-                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
-                return false;
-            }
-
-            let parsed = null;
-            try {
-                parsed = JSON.parse(storedMock);
-            } catch (e) {
-                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
-                return false;
-            }
-
-            if (!parsed || parsed.password !== password) {
-                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
-                return false;
-            }
-
-            let name = parsed.user_metadata?.full_name || parsed.user_metadata?.display_name || parsed.full_name || normalizedEmail.split('@')[0];
-            let role = parsed.user_metadata?.role || parsed.role || 'student';
-            const userId = parsed.id || ('local_user_' + btoa(normalizedEmail).replace(/[^a-zA-Z0-9]/g, ''));
-
-            currentUser = { 
-                id: userId, 
-                email: normalizedEmail,
-                user_metadata: { full_name: name, display_name: name, role: role }
-            };
-            try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
-            currentProfile = {
-                id: currentUser.id,
-                email: normalizedEmail,
-                full_name: name,
-                display_name: name,
-                role: role
-            };
-            authState = 'authenticated';
-            renderHeaderUI(currentProfile);
-            closeAllAuthModals();
-            window.TempoApp.showToast(`Welcome back, ${name}!`);
-
-            const intentHandled = await syncPlanForUser(currentUser.id);
-            if (!intentHandled) {
-                window.TempoApp.navigateTo('today');
-            }
-            return true;
-        }
-
+        isExplicitSignInInProgress = true;
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: normalizedEmail,
-                password
-            });
+            if (!supabase) {
+                if (!isLocalEnvironment()) {
+                    showSignInError("Authentication backend is not configured. Please ensure SUPABASE_URL and publishable key are set in environment variables.");
+                    return false;
+                }
 
-            // Guard against login rejection or missing session/user
-            if (error || !data || !data.session || !data.user) {
-                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
-                return false;
-            }
+                // In local development fallback:
+                // An email that has NEVER been registered MUST NOT be able to log in.
+                const storedMock = localStorage.getItem('tempo_mock_account_' + normalizedEmail) ||
+                                     localStorage.getItem('tempo_mock_account_' + email.trim());
+                
+                if (!storedMock) {
+                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    return false;
+                }
 
-            closeAllAuthModals();
-            currentUser = data.user;
-            authState = 'authenticated';
-            await loadUserProfile(data.user.id);
-            const intentHandled = await syncPlanForUser(data.user.id);
-            const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
-            window.TempoApp.showToast(`Welcome back, ${welcomeName}!`);
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(storedMock);
+                } catch (e) {
+                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    return false;
+                }
 
-            if (!intentHandled) {
-                if (currentProfile?.role === 'volunteer') {
-                    window.TempoApp.navigateTo('volunteer-dashboard');
-                } else if (currentProfile?.role === 'admin') {
-                    window.TempoApp.navigateTo('admin');
-                } else {
+                if (!parsed || parsed.password !== password) {
+                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    return false;
+                }
+
+                let name = parsed.user_metadata?.full_name || parsed.user_metadata?.display_name || parsed.full_name || normalizedEmail.split('@')[0];
+                let role = parsed.user_metadata?.role || parsed.role || 'student';
+                const userId = parsed.id || ('local_user_' + btoa(normalizedEmail).replace(/[^a-zA-Z0-9]/g, ''));
+
+                currentUser = { 
+                    id: userId, 
+                    email: normalizedEmail,
+                    user_metadata: { full_name: name, display_name: name, role: role }
+                };
+                try { localStorage.setItem('tempo_local_dev_user', JSON.stringify(currentUser)); } catch (e) {}
+                currentProfile = {
+                    id: currentUser.id,
+                    email: normalizedEmail,
+                    full_name: name,
+                    display_name: name,
+                    role: role
+                };
+                authState = 'authenticated';
+                renderHeaderUI(currentProfile);
+                closeAllAuthModals();
+                window.TempoApp.showToast(`Welcome back, ${name}!`);
+
+                const intentHandled = await syncPlanForUser(currentUser.id);
+                if (!intentHandled) {
                     window.TempoApp.navigateTo('today');
                 }
+                return true;
             }
-            return true;
 
-        } catch (err) {
-            console.error("Sign in error:", err);
-            showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
-            return false;
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: normalizedEmail,
+                    password
+                });
+
+                // Guard against login rejection or missing session/user
+                if (error || !data || !data.session || !data.user) {
+                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    return false;
+                }
+
+                closeAllAuthModals();
+                currentUser = data.user;
+                authState = 'authenticated';
+                await loadUserProfile(data.user.id);
+                const intentHandled = await syncPlanForUser(data.user.id);
+                const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
+                window.TempoApp.showToast(`Welcome back, ${welcomeName}!`);
+
+                if (!intentHandled) {
+                    if (currentProfile?.role === 'volunteer') {
+                        window.TempoApp.navigateTo('volunteer-dashboard');
+                    } else if (currentProfile?.role === 'admin') {
+                        window.TempoApp.navigateTo('admin');
+                    } else {
+                        window.TempoApp.navigateTo('today');
+                    }
+                }
+                return true;
+
+            } catch (err) {
+                console.error("Sign in error:", err);
+                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                return false;
+            }
+        } finally {
+            isExplicitSignInInProgress = false;
         }
     }
 
@@ -1420,6 +1479,7 @@ window.TempoAuth = (function() {
         showRegisterError,
         clearRegisterError,
         showSignInError,
-        clearSignInError
+        clearSignInError,
+        isRegistrationInProgress: () => isRegistrationInProgress
     };
 })();
