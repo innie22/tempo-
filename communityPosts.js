@@ -5,43 +5,60 @@
  */
 
 window.TempoCommunity = (function() {
-    // Initial supportive peer posts
+    // Initial supportive peer posts matching Entry Home reference design
     const INITIAL_POSTS = [
         {
-            id: 'post-1',
-            authorName: 'Anonymous',
-            isAnonymous: true,
+            id: 'post-ref-1',
+            authorName: 'FPT Bá khí',
+            isAnonymous: false,
             avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80',
-            timeAgo: '2h ago',
+            timeAgo: '2 hours ago',
+            tags: [
+                { label: 'mental health', bg: 'bg-[#E3E8EC]', text: 'text-[#4A5D6B]' },
+                { label: 'Deadline', bg: 'bg-[#D4957D]', text: 'text-white' }
+            ],
             tag: '#Deadline',
             tagColor: 'orange',
-            content: "Just finished submitting my last assignment!!! I've been so anxious all week but I'm actually proud of myself for pushing through. Small wins count 🧡",
-            likes: 128,
-            commentsCount: 26,
+            content: "How to survive 4 projects in just 2 weeks without destroying my mental health? Urgent situation, please give me some tips. Thank you all.",
+            likes: 29,
+            commentsCount: 5,
             isLiked: false,
             isBookmarked: false,
+            hasReplyPreview: false,
+            replyAuthor: 'fess',
+            replyAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&h=80&q=80',
+            replyText: "Omg same here I'm dying with deadline...",
+            subReplyAuthor: 'FPT Bá khí',
+            subReplyAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80',
+            subReplyText: "Where can I find a solution with this? :<",
             comments: [
-                { author: 'Elena (Advisor)', time: '1h ago', text: 'Huge congrats! Take the rest of the evening to truly decompress.' },
-                { author: 'Marcus K.', time: '45m ago', text: 'Needed to see this today. 2 more pages for me!' }
+                { author: 'fess', time: '1h ago', text: "Omg same here I'm dying with deadline..." }
             ]
         },
         {
-            id: 'post-2',
-            authorName: 'N.',
+            id: 'post-ref-2',
+            authorName: 'Temposocute',
             isAnonymous: false,
-            avatar: 'https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?auto=format&fit=crop&w=120&h=120&q=80',
-            timeAgo: '5h ago',
-            tag: '#MentalHealth',
+            avatar: 'assets/tempo-logo.png',
+            timeAgo: '5 hours ago',
+            tags: [
+                { label: 'Focus zone', bg: 'bg-[#7C9985]', text: 'text-white' },
+                { label: 'Background', bg: 'bg-[#FBF0DC]', text: 'text-[#8C6B37]' }
+            ],
+            tag: '#Focus',
             tagColor: 'orange',
-            content: "Lately I've been feeling unmotivated even though I don't have any big deadlines. Anyone else feel like this? How do you get out of it? 🥺",
-            likes: 64,
-            commentsCount: 18,
+            content: "Hello, we have updated more background for Focus Zone, check it out now!",
+            thumbnails: [
+                'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=120&h=80&q=80',
+                'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=120&h=80&q=80',
+                'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=120&h=80&q=80',
+                'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=120&h=80&q=80'
+            ],
+            likes: 58,
+            commentsCount: 20,
             isLiked: false,
             isBookmarked: false,
-            comments: [
-                { author: 'Sarah W.', time: '3h ago', text: 'When that happens to me, I drop expectations to zero and just do a 10-minute walk with music.' },
-                { author: 'David T.', time: '2h ago', text: 'Low-grade emotional exhaustion is real after exam seasons. Give yourself permission to idle a bit.' }
-            ]
+            comments: []
         },
         {
             id: 'post-3',
@@ -76,6 +93,7 @@ window.TempoCommunity = (function() {
     ];
 
     let posts = [...INITIAL_POSTS];
+    let currentSection = 'feed';
 
     function init() {
         loadPosts();
@@ -89,7 +107,22 @@ window.TempoCommunity = (function() {
         try {
             const saved = localStorage.getItem('tempo_community_posts');
             if (saved) {
-                posts = JSON.parse(saved);
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    posts = INITIAL_POSTS.map(initP => {
+                        const existing = parsed.find(p => p.id === initP.id);
+                        return existing ? { ...initP, likes: existing.likes, isLiked: existing.isLiked, isBookmarked: existing.isBookmarked, comments: existing.comments || initP.comments } : initP;
+                    });
+                    parsed.forEach(p => {
+                        if (!INITIAL_POSTS.some(initP => initP.id === p.id)) {
+                            posts.push(p);
+                        }
+                    });
+                    savePosts();
+                } else {
+                    posts = [...INITIAL_POSTS];
+                    savePosts();
+                }
             } else {
                 posts = [...INITIAL_POSTS];
                 savePosts();
@@ -108,20 +141,52 @@ window.TempoCommunity = (function() {
     function bindEvents() {
         const seeAllBtn = document.getElementById('btn-see-all-posts');
         if (seeAllBtn) {
-            seeAllBtn.addEventListener('click', openCommunityModal);
+            seeAllBtn.addEventListener('click', () => openCommunityModal('feed'));
         }
 
         const navPostsBtn = document.getElementById('nav-link-posts');
         if (navPostsBtn) {
             navPostsBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                openCommunityModal();
+                openCommunityModal('feed');
             });
         }
 
         const closeBtn = document.getElementById('btn-close-community-modal');
         if (closeBtn) {
             closeBtn.addEventListener('click', closeCommunityModal);
+        }
+
+        const feedTabBtn = document.getElementById('tab-community-feed');
+        if (feedTabBtn) {
+            feedTabBtn.addEventListener('click', () => selectSection('feed'));
+        }
+
+        const messagesTabBtn = document.getElementById('tab-community-messages');
+        if (messagesTabBtn) {
+            messagesTabBtn.addEventListener('click', () => selectSection('messages'));
+        }
+
+        const newDmBtn = document.getElementById('btn-new-direct-message');
+        if (newDmBtn) {
+            newDmBtn.addEventListener('click', () => {
+                if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                    window.TempoApp.showToast("Direct messaging connection is ready. Select a peer or mentor to begin.");
+                }
+                const searchInput = document.getElementById('input-search-direct-messages');
+                if (searchInput) searchInput.focus();
+            });
+        }
+
+        const startDmBtn = document.getElementById('btn-start-first-dm');
+        if (startDmBtn) {
+            startDmBtn.addEventListener('click', () => {
+                if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                    window.TempoApp.showToast("Direct messaging connection is ready. Select a peer or mentor to begin.");
+                }
+                const searchInput = document.getElementById('input-search-direct-messages');
+                if (searchInput) searchInput.focus();
+            });
         }
 
         const newPostForm = document.getElementById('form-create-post');
@@ -136,10 +201,49 @@ window.TempoCommunity = (function() {
         const authorInitial = (post.authorName || 'S').charAt(0).toUpperCase();
         const subtitleText = post.context || (post.university ? `${post.university} · ${post.timeAgo || 'Recently'}` : (post.timeAgo || 'Recently'));
 
+        const tagsHTML = post.tags && post.tags.length > 0
+            ? post.tags.map(t => `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${t.bg || 'bg-stone-100'} ${t.text || 'text-stone-700'}">${escapeHtml(t.label || t)}</span>`).join(' ')
+            : (post.tag ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">${escapeHtml(post.tag)}</span>` : '');
+
+        const thumbnailsHTML = post.thumbnails && post.thumbnails.length > 0
+            ? `
+                <div class="grid grid-cols-4 gap-2 pt-1">
+                    ${post.thumbnails.map(img => `
+                        <div class="aspect-4/3 rounded-xl overflow-hidden bg-stone-100 border border-stone-200">
+                            <img src="${img}" alt="Preview" class="w-full h-full object-cover">
+                        </div>
+                    `).join('')}
+                </div>
+            `
+            : '';
+
+        const replyPreviewHTML = post.hasReplyPreview
+            ? `
+                <div class="mt-2.5 pt-2 border-t border-[#EAE4DF] text-[11px] space-y-1.5">
+                    <div class="flex items-start space-x-2">
+                        <img src="${escapeHtml(post.replyAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&h=80&q=80')}" alt="Commenter" class="w-4 h-4 rounded-full object-cover shrink-0 mt-0.5" onerror="this.style.display='none'">
+                        <div class="min-w-0">
+                            <span class="font-bold text-[#202124]">${escapeHtml(post.replyAuthor || 'fess')}:</span>
+                            <span class="text-[#6F6B68]">${escapeHtml(post.replyText || '')}</span>
+                        </div>
+                    </div>
+                    ${post.subReplyAuthor ? `
+                        <div class="flex items-start space-x-2 pl-4">
+                            <img src="${escapeHtml(post.subReplyAvatar || post.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&h=80&q=80')}" alt="Author" class="w-4 h-4 rounded-full object-cover shrink-0 mt-0.5" onerror="this.style.display='none'">
+                            <div class="min-w-0">
+                                <span class="font-bold text-[#202124]">${escapeHtml(post.subReplyAuthor)}:</span>
+                                <span class="text-[#6F6B68]">${escapeHtml(post.subReplyText || '')}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `
+            : '';
+
         return `
-            <div class="p-4 sm:p-5 bg-white border border-[#E8E4E1] hover:border-[#D3CDC8] rounded-2xl space-y-3 transition shadow-xs flex flex-col justify-between">
-                <!-- Header: Avatar, Name, Context/Time -->
-                <div class="flex items-start justify-between gap-2">
+            <div class="p-3.5 sm:p-4 bg-[#F6F0EB] border border-[#42413F] rounded-2xl space-y-2.5 transition flex flex-col justify-between" data-post-id="${post.id}">
+                <!-- Header: Avatar, Name, Time, Tags, and Bookmark -->
+                <div class="flex items-center justify-between gap-2">
                     <div class="flex items-center space-x-2.5 min-w-0">
                         ${post.avatar ? `
                             <img src="${escapeHtml(post.avatar)}" alt="${escapeHtml(post.authorName || 'Student')}" 
@@ -154,58 +258,67 @@ window.TempoCommunity = (function() {
                             </div>
                         `}
                         <div class="min-w-0">
-                            <div class="flex items-center space-x-1.5">
-                                <span class="text-xs font-bold text-[#202124] truncate">${escapeHtml(post.authorName || 'Anonymous')}</span>
-                                ${post.isAnonymous ? '<span class="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded font-medium">Anonymous</span>' : ''}
+                            <div class="flex items-center space-x-1.5 flex-wrap">
+                                <span class="text-xs font-bold text-[#202124]">${escapeHtml(post.authorName || 'Anonymous')}</span>
+                                ${tagsHTML}
                             </div>
-                            <div class="text-[10px] text-[#6F6B68] flex items-center space-x-1 truncate">
+                            <div class="text-[10px] text-[#8E8A85]">
                                 <span>${escapeHtml(subtitleText)}</span>
                             </div>
                         </div>
                     </div>
+                    <!-- Bookmark on right -->
+                    <button type="button" 
+                            onclick="window.TempoCommunity.toggleBookmark('${post.id}')" 
+                            class="hover:text-[#D99E87] transition cursor-pointer p-1 text-[#736F68] shrink-0 ${post.isBookmarked ? 'text-[#D99E87]' : ''}" 
+                            title="${post.isBookmarked ? 'Remove bookmark' : 'Bookmark post'}">
+                        <svg class="w-4 h-4" fill="${post.isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                    </button>
                 </div>
 
                 <!-- Post Content -->
                 <div class="space-y-2 flex-1">
-                    <p class="text-xs text-[#202124] leading-relaxed break-words whitespace-pre-line cursor-pointer" onclick="window.TempoCommunity.openPostComments('${post.id}')">
+                    <p class="text-xs text-[#202124] leading-relaxed break-words cursor-pointer" onclick="window.TempoCommunity.openPostComments('${post.id}')">
                         ${escapeHtml(post.content)}
                     </p>
-                    ${post.tag ? `
-                        <div class="pt-0.5">
-                            <span class="text-[11px] font-semibold text-[#FF6B2C] hover:underline cursor-pointer" onclick="window.TempoCommunity.openCommunityModal()">${escapeHtml(post.tag)}</span>
-                        </div>
-                    ` : ''}
+                    ${thumbnailsHTML}
                 </div>
 
-                <!-- Actions: Like, Comment, Bookmark -->
-                <div class="pt-2 border-t border-[#F5F2EF] flex items-center justify-between text-xs text-[#6F6B68]">
+                <!-- Actions: Like, Comment, Share -->
+                <div class="pt-2 border-t border-[#EAE4DF] flex items-center justify-between text-xs text-[#736F68]">
                     <div class="flex items-center space-x-4">
                         <button type="button" 
                                 onclick="window.TempoCommunity.toggleLike('${post.id}')" 
-                                class="flex items-center space-x-1.5 hover:text-[#FF6B2C] transition cursor-pointer ${post.isLiked ? 'text-[#FF6B2C] font-semibold' : ''}"
+                                class="flex items-center space-x-1 hover:text-[#D99E87] transition cursor-pointer ${post.isLiked ? 'text-[#D99E87] font-semibold' : ''}"
                                 title="Like">
-                            <span class="text-sm leading-none">${post.isLiked ? '♥' : '♡'}</span>
+                            <svg class="w-3.5 h-3.5 ${post.isLiked ? 'fill-current text-[#D99E87]' : 'none text-[#736F68]'}" fill="${post.isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
                             <span class="text-[11px] font-medium">${post.likes || 0}</span>
                         </button>
                         <button type="button" 
                                 onclick="window.TempoCommunity.openPostComments('${post.id}')" 
-                                class="flex items-center space-x-1.5 hover:text-[#202124] transition cursor-pointer"
+                                class="flex items-center space-x-1 hover:text-[#202124] text-[#736F68] transition cursor-pointer"
                                 title="Comments">
-                            <span class="text-sm leading-none">💬</span>
+                            <svg class="w-3.5 h-3.5 text-[#736F68]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
                             <span class="text-[11px] font-medium">${post.commentsCount || (post.comments ? post.comments.length : 0)}</span>
                         </button>
-                    </div>
-                    <div class="flex items-center space-x-2">
                         <button type="button" 
-                                onclick="window.TempoCommunity.toggleBookmark('${post.id}')" 
-                                class="hover:text-[#FF6B2C] transition cursor-pointer ${post.isBookmarked ? 'text-[#FF6B2C]' : ''}" 
-                                title="${post.isBookmarked ? 'Remove bookmark' : 'Bookmark post'}">
-                            <svg class="w-3.5 h-3.5" fill="${post.isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                onclick="if(window.TempoApp) window.TempoApp.showToast('Link copied to clipboard');" 
+                                class="flex items-center hover:text-[#202124] text-[#736F68] transition cursor-pointer"
+                                title="Share">
+                            <svg class="w-3.5 h-3.5 text-[#736F68]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                         </button>
                     </div>
                 </div>
+
+                ${replyPreviewHTML}
             </div>
         `;
     }
@@ -232,6 +345,10 @@ window.TempoCommunity = (function() {
     function renderHomepagePreview() {
         const container = document.getElementById('homepage-community-posts-list');
         if (container) {
+            if (!Array.isArray(posts) || posts.length === 0) {
+                posts = [...INITIAL_POSTS];
+                savePosts();
+            }
             const previewPosts = posts.slice(0, 2);
             container.innerHTML = previewPosts.map(post => renderPostCardHTML(post)).join('');
         }
@@ -342,10 +459,74 @@ window.TempoCommunity = (function() {
         }
     }
 
-    function openCommunityModal() {
+    function selectSection(section) {
+        if (section === 'messages' && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+            closeCommunityModal();
+            const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
+            if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
+                window.TempoMode.setPendingIntent({
+                    destination: 'posts',
+                    action: 'navigate',
+                    source: src,
+                    requiredParams: { section: 'messages' },
+                    type: 'tool',
+                    tool: 'posts',
+                    sourceContext: src
+                });
+            }
+            if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                window.TempoAuth.openSignInModal();
+            }
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Please sign in or create an account to view Direct Messages.");
+            }
+            return false;
+        }
+
+        currentSection = section === 'messages' ? 'messages' : 'feed';
+
+        const feedTab = document.getElementById('tab-community-feed');
+        const messagesTab = document.getElementById('tab-community-messages');
+        const feedView = document.getElementById('community-view-feed');
+        const messagesView = document.getElementById('community-view-messages');
+        const modalTitle = document.getElementById('community-modal-title');
+        const modalSubtitle = document.getElementById('community-modal-subtitle');
+
+        const isVi = (window.TempoAuth && window.TempoAuth.getCurrentAuthLanguage && window.TempoAuth.getCurrentAuthLanguage() === 'vi') || 
+                     (window.TempoI18n && window.TempoI18n.getLanguage && window.TempoI18n.getLanguage() === 'vi');
+
+        if (currentSection === 'feed') {
+            if (feedTab) {
+                feedTab.className = "px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-[#FFE9DC] text-[#B83D08] cursor-pointer whitespace-nowrap shrink-0";
+            }
+            if (messagesTab) {
+                messagesTab.className = "px-3.5 py-1.5 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition flex items-center space-x-2 cursor-pointer whitespace-nowrap shrink-0";
+            }
+            if (feedView) feedView.classList.remove('hidden');
+            if (messagesView) messagesView.classList.add('hidden');
+            if (modalTitle) modalTitle.textContent = isVi ? "Cộng đồng Tempo" : "From the Tempo Community";
+            if (modalSubtitle) modalSubtitle.textContent = isVi ? "Những chia sẻ đồng cảm, chân thành từ sinh viên khi đối mặt với áp lực học tập." : "Supportive, honest thoughts from students navigating university life.";
+            renderModalPosts();
+        } else {
+            if (feedTab) {
+                feedTab.className = "px-3.5 py-1.5 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition flex items-center space-x-2 cursor-pointer whitespace-nowrap shrink-0";
+            }
+            if (messagesTab) {
+                messagesTab.className = "px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-[#FFE9DC] text-[#B83D08] cursor-pointer whitespace-nowrap shrink-0";
+            }
+            if (feedView) feedView.classList.add('hidden');
+            if (messagesView) messagesView.classList.remove('hidden');
+            if (modalTitle) modalTitle.textContent = isVi ? "Tin nhắn trực tiếp" : "Direct Messages";
+            if (modalSubtitle) modalSubtitle.textContent = isVi ? "Không gian trò chuyện riêng tư giữa các sinh viên và người đồng hành trong cộng đồng Tempo." : "Direct, private conversations with peer mentors and students in the Tempo community.";
+        }
+        return true;
+    }
+
+    function openCommunityModal(section = 'feed') {
         const modal = document.getElementById('modal-community-posts');
         if (!modal) return;
-        renderModalPosts();
+        const allowed = selectSection(section);
+        if (!allowed) return;
         modal.classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
     }
@@ -403,7 +584,7 @@ window.TempoCommunity = (function() {
     }
 
     function openPostComments(postId) {
-        openCommunityModal();
+        openCommunityModal('feed');
         const input = document.getElementById('input-new-post-content');
         if (input) input.focus();
     }
@@ -418,7 +599,15 @@ window.TempoCommunity = (function() {
     }
 
     function getAllPosts() {
+        if (!Array.isArray(posts) || posts.length === 0) {
+            posts = [...INITIAL_POSTS];
+            savePosts();
+        }
         return posts;
+    }
+
+    function getInitialPosts() {
+        return [...INITIAL_POSTS];
     }
 
     return {
@@ -427,6 +616,8 @@ window.TempoCommunity = (function() {
         toggleBookmark,
         openCommunityModal,
         closeCommunityModal,
+        selectSection,
+        getCurrentSection: () => currentSection,
         openPostComments,
         renderModalPosts,
         renderHomepagePreview,
@@ -434,6 +625,7 @@ window.TempoCommunity = (function() {
         renderRecoveryPreview,
         renderPostCardHTML,
         getAllPosts,
-        getPosts: getAllPosts
+        getPosts: getAllPosts,
+        getInitialPosts
     };
 })();

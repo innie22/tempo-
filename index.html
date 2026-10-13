@@ -33,8 +33,9 @@
                         }
                     },
                     fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
-                        heading: ['Plus Jakarta Sans', 'system-ui', 'sans-serif']
+                        arimo: ['Arimo', 'sans-serif'],
+                        sans: ['Arimo', 'Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+                        heading: ['Arimo', 'Plus Jakarta Sans', 'system-ui', 'sans-serif']
                     }
                 }
             }
@@ -43,192 +44,244 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="assets/tempo-logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Browser Tab Icon / Favicon -->
+    <link rel="icon" type="image/png" href="assets/tempo-favicon.png">
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="assets/tempo-favicon.png">
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-[#FFF8F2] text-[#202124] min-h-screen flex flex-col pb-20 md:pb-8">
+<body class="bg-[#F6F0EB] text-[#202124] min-h-screen flex flex-col pb-20 md:pb-8 overflow-x-hidden">
 
     <!-- Top Role Banner (When in Advisor Mode) -->
     <div id="role-indicator-banner" class="hidden bg-[#202124] text-white text-xs py-2 px-4 shadow-sm"></div>
 
     <!-- Global App Header -->
-    <header class="bg-white border-b border-[#E8E4E1] sticky top-0 z-40">
-        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-2 sm:gap-4">
-            <!-- Brand Logo (Clean White, No rectangular colored box) -->
-            <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center space-x-2.5 cursor-pointer bg-white shrink-0" title="Tempo Home">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-9 w-auto object-contain">
-                <span class="font-heading font-extrabold text-xl text-[#202124] tracking-tight">Tempo</span>
-            </div>
-
-            <!-- Global Mode Indicator Badge & Selector Trigger -->
-            <div id="mode-indicator-shell" class="hidden items-center relative pl-1 sm:pl-2">
-                <button type="button" id="btn-mode-indicator-trigger" onclick="window.TempoMode.toggleNavbarModeDropdown(event)" class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-xs hover:bg-[#FFDCC8] border border-[#FFD5C0]/60 transition cursor-pointer" aria-haspopup="true" aria-expanded="false" title="Switch Tempo Mode">
-                    <span id="mode-badge-icon">⚡</span>
-                    <span id="mode-badge-label">Urgent Mode</span>
-                    <span class="text-[10px] ml-0.5">▾</span>
-                </button>
-                <!-- Anchored Mode Dropdown Menu for Navbar -->
-                <div id="navbar-mode-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 bg-white border border-[#EAE4DF] rounded-2xl shadow-xl z-50 p-2 space-y-1"></div>
-                <!-- Preserved hidden button for backward compatibility -->
-                <button id="btn-change-mode" onclick="window.TempoMode.openChangeModeModal()" class="hidden"></button>
-            </div>
-
-            <!-- Top Desktop Navigation Links -->
-            <nav class="hidden md:flex items-center space-x-1 lg:space-x-2">
-                <a id="nav-link-what-is-tempo" href="#what-is-tempo" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
-                    What is Tempo
-                </a>
-                
-                <!-- Quick Tools with Dropdown Trigger -->
-                <div class="relative">
-                    <button id="nav-btn-quick-tools" type="button" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition flex items-center space-x-1">
-                        <span>Quick Tools</span>
-                        <span class="text-[10px]">▾</span>
-                    </button>
-                    <!-- Quick Tools Dropdown Menu -->
-                    <div id="nav-quick-tools-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 p-2 space-y-1 nav-dropdown-menu">
-                        <!-- Focus Zone -->
-                        <div onclick="if(window.TempoFocusZone) window.TempoFocusZone.openQuickEntry(); else window.TempoTriage.launchFocusMode(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
-                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
-                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Focus Zone</h5>
-                                <p class="text-[11px] text-[#6F6B68]">45m focus / 15m rest cycle with ambient sound.</p>
-                            </div>
-                        </div>
-                        <!-- Breathing -->
-                        <div onclick="window.TempoTriage.openBoxBreathingModal(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
-                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
-                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Breathing</h5>
-                                <p class="text-[11px] text-[#6F6B68]">A quick breathing exercise to calm your mind.</p>
-                            </div>
-                        </div>
-                        <!-- Quick Stress Relief -->
-                        <div onclick="window.TempoStressRelief.openModal(); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
-                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
-                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Quick Stress Relief</h5>
-                                <p class="text-[11px] text-[#6F6B68]">Simple micro-actions to ease stress in a few minutes.</p>
-                            </div>
-                        </div>
-                        <!-- Self-check -->
-                        <div onclick="window.TempoApp.navigateTo('strack'); document.getElementById('nav-quick-tools-dropdown').classList.add('hidden');" 
-                             class="p-2.5 rounded-xl hover:bg-[#FFF4EC] cursor-pointer text-left transition flex items-start space-x-3 group">
-                            <div class="w-8 h-8 rounded-full bg-[#FFF4EC] text-[#FF6B2C] flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#FF6B2C] group-hover:text-white transition">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h5 class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C] transition">Self-check</h5>
-                                <p class="text-[11px] text-[#6F6B68]">Track your stress signals and wellbeing habits.</p>
-                            </div>
-                        </div>
-                    </div>
+    <header class="bg-[#FEFAF4] border-b border-[#E8E4E1] sticky top-0 z-40 entry-header">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
+            <!-- 1. Left Region: Brand Logo (+ Mode Indicator) -->
+            <div class="flex items-center shrink-0">
+                <!-- Tempo Official Logo (Prominent size, preserved aspect ratio) -->
+                <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center cursor-pointer shrink-0 py-1" title="Tempo — A calmer you, one step at a time.">
+                    <img src="assets/tempo-logo.png" alt="Tempo — A calmer you, one step at a time." class="h-14 sm:h-[62px] lg:h-[80px] w-auto object-contain block">
                 </div>
 
-                <a href="#stress-check" data-nav="stress-check" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
-                    Self-check
+                <!-- Global Mode Indicator Badge & Selector Trigger (hidden on neutral Entry Home) -->
+                <div id="mode-indicator-shell" class="hidden items-center relative pl-2 sm:pl-3">
+                    <button type="button" id="btn-mode-indicator-trigger" onclick="window.TempoMode.toggleNavbarModeDropdown(event)" class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-xs hover:bg-[#FFDCC8] border border-[#FFD5C0]/60 transition cursor-pointer" aria-haspopup="true" aria-expanded="false" title="Switch Tempo Mode">
+                        <span id="mode-badge-icon">⚡</span>
+                        <span id="mode-badge-label">Urgent Mode</span>
+                        <span class="text-[10px] ml-0.5">▾</span>
+                    </button>
+                    <!-- Anchored Mode Dropdown Menu for Navbar -->
+                    <div id="navbar-mode-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 bg-white border border-[#EAE4DF] rounded-2xl shadow-xl z-50 p-2 space-y-1"></div>
+                    <button id="btn-change-mode" onclick="window.TempoMode.openChangeModeModal()" class="hidden"></button>
+                </div>
+            </div>
+
+            <!-- 2. Central Region: Navigation Links Distributed Across Available Width -->
+            <nav class="hidden md:flex items-center justify-center flex-1 px-4 lg:px-8 space-x-6 sm:space-x-8 lg:space-x-10 xl:space-x-12 text-sm sm:text-[15px] font-semibold text-[#736F68]">
+                <a id="nav-link-what-is-tempo" href="#about" onclick="window.TempoApp.navigateTo('about'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    About
                 </a>
-                <a id="nav-link-posts" href="#posts" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F8F6F4] transition">
-                    Tempo Posts
+                <a id="nav-link-check" href="#stress-check" onclick="window.TempoMode.openStrack('setup', { sourceContext: 'entry' }); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Check
+                </a>
+                <a id="nav-link-plan" href="#plan-workspace" onclick="window.TempoApp.navigateTo('plan-workspace'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Plan
+                </a>
+                <a id="nav-link-learn" href="#learn" data-nav="learn" onclick="window.TempoApp.navigateTo('learn'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Learn
+                </a>
+                <a id="nav-link-posts" href="#posts" onclick="if (window.TempoCommunity && window.TempoCommunity.openCommunityModal) { window.TempoCommunity.openCommunityModal(); } else if (window.TempoApp) { window.TempoApp.navigateTo('posts'); } return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Post
                 </a>
 
                 <!-- Hidden tabs for Advisor & Volunteer roles preserved -->
-                <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-3 py-1.5 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
-                <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
+                <a id="nav-tab-volunteer" href="#volunteer-dashboard" data-nav="volunteer-dashboard" class="hidden px-2.5 py-1 rounded-lg text-xs font-medium text-sky-800 bg-sky-50 transition">Peer Volunteer</a>
+                <a id="nav-tab-admin" href="#admin" data-nav="admin" class="hidden px-2.5 py-1 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 transition">Advisor Desk</a>
             </nav>
 
-            <!-- Center/Right: Search, Language, SOS, and Auth Controls -->
-            <div class="flex items-center space-x-2 sm:space-x-3">
-                <!-- Compact Global Search -->
-                <div class="relative hidden sm:block w-36 md:w-44 lg:w-56">
-                    <div class="flex items-center px-3 py-1.5 bg-[#F8F6F4] border border-[#E8E4E1] rounded-full text-xs text-[#6F6B68] focus-within:border-[#FF6B2C] focus-within:bg-white transition">
-                        <svg class="w-3.5 h-3.5 text-[#6F6B68] mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- 3. Right Region: Search, Language selector, SOS, Log in, Sign up -->
+            <div class="flex items-center space-x-2 sm:space-x-2.5 lg:space-x-3 shrink-0">
+                <!-- Search Button & Expandable Container -->
+                <div class="relative">
+                    <button type="button" id="btn-header-search-toggle" 
+                            onclick="const c = document.getElementById('global-search-container'); if(c) { c.classList.toggle('hidden'); const i = document.getElementById('global-search-input'); if(!c.classList.contains('hidden') && i) i.focus(); }" 
+                            class="w-9 h-9 rounded-full bg-[#F6E6DE] hover:bg-[#EAE4DF] flex items-center justify-center text-[#202124] transition cursor-pointer" 
+                            title="Search Tempo">
+                        <svg class="w-4 h-4 text-[#202124]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
-                        <input id="global-search-input" type="text" placeholder="Search Tempo..." 
-                               class="bg-transparent border-none outline-none w-full text-xs text-[#202124] placeholder-[#8E8A85]">
+                    </button>
+                    <!-- Global Search Dropdown Overlay -->
+                    <div id="global-search-container" class="hidden absolute right-0 mt-2 w-72 sm:w-80 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 p-2.5 nav-dropdown-menu">
+                        <div class="flex items-center px-3 py-1.5 bg-[#F8F6F4] border border-[#E8E4E1] rounded-full text-xs text-[#6F6B68]">
+                            <svg class="w-3.5 h-3.5 text-[#6F6B68] mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input id="global-search-input" type="text" placeholder="Search Tempo..." 
+                                   class="bg-transparent border-none outline-none w-full text-xs text-[#202124] placeholder-[#8E8A85]">
+                        </div>
+                        <div id="global-search-results-dropdown" class="hidden mt-2 border-t border-[#F0ECE9] pt-2"></div>
                     </div>
-                    <!-- Live Search Results Dropdown -->
-                    <div id="global-search-results-dropdown" class="hidden absolute left-0 right-0 mt-2 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 overflow-hidden w-80 -ml-12 nav-dropdown-menu"></div>
                 </div>
 
                 <!-- Language Selector -->
-                <div class="relative hidden md:block" id="nav-language-wrapper">
-                    <button id="nav-btn-language" type="button" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-50 transition flex items-center space-x-1 border border-transparent hover:border-gray-200 cursor-pointer">
-                        <span>🌐</span>
-                        <span id="nav-current-lang-label">VI</span>
-                        <span class="text-[10px]">▾</span>
+                <div class="relative" id="nav-language-wrapper">
+                    <button id="nav-btn-language" type="button" class="px-3 py-1.5 rounded-full border border-[#D5D0CB] bg-white text-xs font-semibold text-[#202124] flex items-center space-x-1.5 hover:bg-[#F8F6F4] transition cursor-pointer">
+                        <span class="flag-circle" style="border-radius: 50%; aspect-ratio: 1 / 1; overflow: hidden;"><img id="nav-current-lang-flag" src="assets/flag-us.png" alt="Language Flag" style="object-fit: cover;"></span>
+                        <span id="nav-current-lang-label">EN</span>
+                        <span class="text-[10px] text-stone-500">▾</span>
                     </button>
                     <!-- Language Dropdown -->
                     <div id="nav-language-dropdown" class="hidden absolute right-0 mt-1.5 w-36 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 py-1.5 overflow-hidden">
                         <button type="button" onclick="window.TempoI18n.setLanguage('vi')" class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-[#F8F6F4] flex items-center justify-between cursor-pointer">
-                            <span>Tiếng Việt</span>
-                            <span id="lang-check-vi" class="text-[#FF6B2C] font-bold">✓</span>
+                            <div class="flex items-center space-x-2">
+                                <span class="flag-circle" style="border-radius: 50%; aspect-ratio: 1 / 1; overflow: hidden;"><img src="assets/flag-vn.png" alt="Tiếng Việt" style="object-fit: cover;"></span>
+                                <span>Tiếng Việt</span>
+                            </div>
+                            <span id="lang-check-vi" class="text-[#FF6B2C] font-bold hidden">✓</span>
                         </button>
                         <button type="button" onclick="window.TempoI18n.setLanguage('en')" class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-[#F8F6F4] flex items-center justify-between cursor-pointer">
-                            <span>English</span>
-                            <span id="lang-check-en" class="text-[#FF6B2C] font-bold hidden">✓</span>
+                            <div class="flex items-center space-x-2">
+                                <span class="flag-circle" style="border-radius: 50%; aspect-ratio: 1 / 1; overflow: hidden;"><img src="assets/flag-us.png" alt="English" style="object-fit: cover;"></span>
+                                <span>English</span>
+                            </div>
+                            <span id="lang-check-en" class="text-[#FF6B2C] font-bold">✓</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- SOS Emergency Support Button (Always Accessible) -->
-                <button id="btn-nav-sos" onclick="window.TempoEmergencySupport.openSOS()" class="btn-sos px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center shadow-sm" title="Safety Emergency Support (24/7 Lifelines & Grounding)">
-                    <span class="mr-1">⚡</span> SOS
+                <!-- SOS Emergency Support Button (Reference Red Pill) -->
+                <button id="btn-nav-sos" onclick="window.TempoEmergencySupport.openSOS()" class="bg-[#D92D20] text-white px-3.5 py-1.5 rounded-full font-bold text-xs tracking-wider shadow-xs hover:bg-[#B42318] transition flex items-center space-x-1 cursor-pointer" title="Safety Emergency Support (24/7 Lifelines & Grounding)">
+                    <span>(((SOS)))</span>
                 </button>
 
-                <!-- 1. Unauthenticated Header State -->
-                <div id="header-unauthenticated-box" class="flex items-center space-x-1.5">
-                    <button id="btn-header-signin" class="px-3 py-1.5 rounded-xl border border-gray-200 hover:border-gray-300 text-xs font-medium text-gray-700 bg-white hover:bg-stone-50 transition">
-                        Sign In
+                <!-- Unauthenticated State: Log in + Sign up (Reference Pill Buttons) -->
+                <div id="header-unauthenticated-box" class="flex items-center space-x-2">
+                    <button id="btn-header-signin" class="px-4 py-1.5 rounded-full border border-[#D5D0CB] hover:border-gray-400 text-xs font-semibold text-[#202124] bg-white hover:bg-stone-50 transition cursor-pointer">
+                        Log in
                     </button>
-                    <button id="btn-header-register" class="btn-primary px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">
-                        Register
+                    <button id="btn-header-register" class="px-4 py-1.5 rounded-full border border-[#D5D0CB] hover:border-gray-400 text-xs font-semibold text-[#202124] bg-[#F6E6DE] hover:bg-[#EAE4DF] transition cursor-pointer">
+                        Sign up
                     </button>
                 </div>
 
-                <!-- 2. Authenticated Header State -->
-                <div id="header-authenticated-box" class="hidden flex items-center space-x-2">
-                    <div id="header-user-identity" class="flex items-center space-x-2 px-2.5 py-1 bg-stone-100/90 rounded-2xl border border-stone-200 shadow-2xs">
-                        <div id="header-user-avatar" class="w-7 h-7 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center border border-[#FFD2BA] shrink-0" title="User">
+                <!-- Authenticated State: Clickable Avatar with Anchored Dropdown Menu -->
+                <div id="header-authenticated-box" class="hidden relative flex items-center">
+                    <button id="header-user-avatar-btn" 
+                            type="button" 
+                            aria-haspopup="true" 
+                            aria-expanded="false" 
+                            aria-controls="header-avatar-dropdown"
+                            aria-label="User profile and account menu" 
+                            class="w-9 h-9 rounded-full flex items-center justify-center p-0.5 border border-[#D5D0CB] hover:border-[#FF6B2C] hover:ring-2 hover:ring-[#FF6B2C]/20 focus:outline-hidden focus:ring-2 focus:ring-[#FF6B2C] transition cursor-pointer bg-white">
+                        <div id="header-user-avatar" class="w-full h-full rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center select-none" title="User">
                             U
                         </div>
-                        <span id="header-user-name" class="text-xs font-bold text-gray-800 max-w-[140px] truncate">User</span>
-                        <span id="header-user-role-pill" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold"></span>
-                    </div>
-                    <button id="btn-header-signout" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-transparent hover:border-rose-100 cursor-pointer">
-                        Sign Out
                     </button>
+
+                    <!-- Avatar Dropdown Menu -->
+                    <div id="header-avatar-dropdown" 
+                         class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-[#E8E4E1] rounded-2xl shadow-xl z-50 py-1.5 nav-dropdown-menu"
+                         role="menu" 
+                         aria-orientation="vertical" 
+                         aria-labelledby="header-user-avatar-btn">
+                        
+                        <!-- Compact Account Header inside Dropdown -->
+                        <div class="px-3.5 py-2.5 border-b border-[#F0ECE9] mb-1 flex items-center space-x-2.5">
+                            <div id="header-dropdown-avatar" class="w-8 h-8 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center shrink-0 select-none">
+                                U
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p id="header-user-name" class="text-xs font-bold text-[#202124] truncate">User</p>
+                                <p id="header-user-email" class="text-[11px] text-[#6F6B68] truncate font-normal"></p>
+                            </div>
+                        </div>
+
+                        <!-- 1. Direct Messages -->
+                        <button type="button" 
+                                id="menu-item-direct-messages" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-[#F8F6F4] flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-stone-400 group-hover:text-[#FF6B2C] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span id="label-menu-messages">Direct Messages</span>
+                        </button>
+
+                        <!-- 2. Saved -->
+                        <button type="button" 
+                                id="menu-item-saved" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-[#F8F6F4] flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-stone-400 group-hover:text-[#FF6B2C] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                            </svg>
+                            <span id="label-menu-saved">Saved</span>
+                        </button>
+
+                        <!-- 2. My Library -->
+                        <button type="button" 
+                                id="menu-item-library" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-[#F8F6F4] flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-stone-400 group-hover:text-[#FF6B2C] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <span id="label-menu-library">My Library</span>
+                        </button>
+
+                        <!-- 3. Account -->
+                        <button type="button" 
+                                id="menu-item-account" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-[#F8F6F4] flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-stone-400 group-hover:text-[#FF6B2C] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span id="label-menu-account">Account</span>
+                        </button>
+
+                        <!-- 4. Settings -->
+                        <button type="button" 
+                                id="menu-item-settings" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-[#F8F6F4] flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-stone-400 group-hover:text-[#FF6B2C] transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span id="label-menu-settings">Settings</span>
+                        </button>
+
+                        <!-- Divider -->
+                        <div class="my-1 border-t border-[#F0ECE9]"></div>
+
+                        <!-- 5. Sign out -->
+                        <button type="button" 
+                                id="btn-header-signout" 
+                                role="menuitem" 
+                                class="w-full text-left px-3.5 py-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 flex items-center space-x-2.5 transition cursor-pointer group">
+                            <svg class="w-4 h-4 text-rose-500 group-hover:text-rose-600 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            <span id="label-menu-signout">Sign out</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </header>
 
     <!-- Main Content Area -->
-    <main class="max-w-6xl mx-auto px-4 py-8 flex-1 w-full">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[21.6px] pb-8 flex-1 w-full">
 
         <!-- ===================================================================
              SCREEN 1: HOME / TODAY DASHBOARD
              =================================================================== -->
-        <section id="screen-today" class="screen-container space-y-10">
+        <section id="screen-today" class="screen-container">
             <!-- Dynamic Emergency Mode Home Container (Populated by window.TempoMode) -->
             <div id="emode-home-content" class="hidden space-y-4"></div>
 
@@ -622,35 +675,103 @@
 
 
         <!-- ===================================================================
-             SCREEN 5: LEARN & SOLVE KNOWLEDGE HUB
+             SCREEN 5: DEDICATED LEARN & SOLVE STANDALONE PAGE
              =================================================================== -->
-        <section id="screen-hub" class="screen-container hidden space-y-8">
-            <div class="max-w-2xl mx-auto text-center space-y-2">
-                <h2 class="font-heading text-3xl font-extrabold text-gray-900">Learn & Solve Knowledge Hub</h2>
-                <p class="text-sm text-gray-600">Actionable, 3-minute guides to break cognitive paralysis and restore academic momentum.</p>
+        <section id="screen-learn" class="screen-container hidden space-y-8 bg-[#FEFAF4] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-6 sm:py-10 min-h-[calc(100vh-140px)]">
+            <!-- A. Page Introduction -->
+            <div class="max-w-3xl mx-auto text-center space-y-3">
+                <div class="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-[#FFE9DC] border border-[#FFD5C0]/80 text-[#B83D08] text-xs font-bold uppercase tracking-wider">
+                    <span>💡 Actionable Knowledge</span>
+                </div>
+                <h1 class="font-heading text-3xl sm:text-4xl font-extrabold text-[#202124] tracking-tight leading-tight">
+                    Learn & Solve
+                </h1>
+                <p class="text-sm sm:text-base text-[#6F6B68] max-w-2xl mx-auto leading-relaxed">
+                    Actionable, step-by-step guides, communication templates, and evidence-based strategies to break acute overwhelm, regain momentum, and find calm.
+                </p>
             </div>
 
-            <!-- Filters & Search -->
-            <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-                <!-- Category Pills -->
-                <div class="flex flex-wrap gap-2">
-                    <button data-category="all" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#FF6B2C] text-white cursor-pointer transition">All</button>
-                    <button data-category="urgent" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Can't Start</button>
-                    <button data-category="communication" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Asking for Help</button>
-                    <button data-category="sleep" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Sleep & Worry</button>
-                    <button data-category="focus" class="hub-filter-pill px-3.5 py-1.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600 hover:bg-stone-200 cursor-pointer transition">Brain Fog</button>
-                </div>
-
-                <!-- Search Input -->
-                <div class="w-full md:w-64">
-                    <input type="text" id="hub-search-input" placeholder="Search guides or topics..." 
-                        class="w-full px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] bg-white">
+            <!-- B. Search Bar -->
+            <div class="max-w-2xl mx-auto">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#9E9B97]">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input type="text" id="hub-search-input" 
+                        placeholder="Search guides, strategies, or topics (e.g. deadlines, sleep, extension email)..." 
+                        class="w-full pl-10 pr-10 py-3 text-xs sm:text-sm bg-white border border-[#EAE4DF] rounded-2xl text-[#202124] placeholder-[#A09D9A] shadow-xs focus:outline-none focus:border-[#FF6B2C] focus:ring-2 focus:ring-[#FF6B2C]/20 transition"
+                        aria-label="Search guides and topics">
+                    <button type="button" id="btn-clear-hub-search" 
+                        class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#9E9B97] hover:text-[#202124] transition text-sm cursor-pointer"
+                        title="Clear search">✕</button>
                 </div>
             </div>
 
-            <!-- Articles Grid -->
-            <div id="hub-articles-grid" class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Populated dynamically by knowledge.js -->
+            <!-- C. Categories & E. Tags -->
+            <div class="max-w-5xl mx-auto space-y-4">
+                <!-- Broad Categories row -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs text-[#736F68] font-semibold">
+                        <span>Categories</span>
+                        <span id="learn-total-count" class="text-[11px] text-[#A09D9A]"></span>
+                    </div>
+                    <div id="hub-categories-container" class="flex flex-wrap gap-2" role="tablist">
+                        <!-- Populated dynamically by knowledge.js -->
+                    </div>
+                </div>
+
+                <!-- Specific Topic Tags row -->
+                <div class="space-y-2 pt-3 border-t border-[#EAE4DF]/70">
+                    <div class="flex items-center justify-between text-xs font-semibold">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[#202124] font-bold">Topics & Tags</span>
+                            <span class="text-[11px] text-[#8CA5B4] font-medium hidden sm:inline">• Click tag to filter</span>
+                        </div>
+                        <div id="hub-tags-header-control">
+                            <!-- Populated dynamically: Show all / Show less button -->
+                        </div>
+                    </div>
+                    <div id="hub-tags-container" class="flex flex-wrap gap-1.5 sm:gap-2 items-center transition-all duration-200">
+                        <!-- Populated dynamically by knowledge.js -->
+                    </div>
+                </div>
+
+                <!-- Active Filter Indicator Bar -->
+                <div id="hub-active-filters-bar" class="hidden flex items-center justify-between bg-white border border-[#EAE4DF] rounded-xl px-4 py-2.5 text-xs shadow-2xs">
+                    <div class="flex items-center space-x-2 flex-wrap gap-y-1" id="hub-active-filters-chips">
+                        <!-- Active chips -->
+                    </div>
+                    <button type="button" onclick="window.TempoKnowledge.clearAllFilters()" class="text-xs font-bold text-[#FF6B2C] hover:underline cursor-pointer ml-3 shrink-0">
+                        Clear all filters
+                    </button>
+                </div>
+            </div>
+
+            <!-- D. Article Cards Grid -->
+            <div class="max-w-5xl mx-auto space-y-6">
+                <div id="hub-articles-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+                    <!-- Populated dynamically by knowledge.js -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="hub-empty-state" class="hidden text-center py-14 px-4 bg-white border border-[#EAE4DF] rounded-3xl space-y-4 max-w-xl mx-auto my-4 shadow-xs">
+                    <div class="w-14 h-14 rounded-2xl bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center mx-auto text-2xl font-bold">
+                        🔍
+                    </div>
+                    <div class="space-y-1.5">
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">No guides found</h3>
+                        <p id="hub-empty-desc" class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
+                            We couldn't find any guides matching your active filters. Try adjusting your search query or selecting a different category or topic tag.
+                        </p>
+                    </div>
+                    <div>
+                        <button type="button" onclick="window.TempoKnowledge.clearAllFilters()" class="px-5 py-2.5 rounded-full bg-[#FF6B2C] hover:bg-[#E55A1F] text-white font-bold text-xs shadow-xs transition cursor-pointer">
+                            Reset all filters
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -1083,6 +1204,926 @@
                 </div>
             </div>
         </section>
+
+        <!-- ===================================================================
+             SCREEN 12: ABOUT TEMPO PAGE
+             =================================================================== -->
+        <section id="screen-about" class="screen-container hidden space-y-16 sm:space-y-24 py-2 sm:py-6">
+            <!-- ===============================================================
+                 SECTION 01: MEET TEMPO (Hero)
+                 =============================================================== -->
+            <section id="about-section-01" class="pt-4 sm:pt-8 pb-12 sm:pb-16 border-b border-[#EAE4DF]/70">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+                    <!-- Left Column: Copy & CTA -->
+                    <div class="lg:col-span-7 space-y-6">
+                        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#FFE9DC] border border-[#FFD5C0]/60 text-[#B83D08] text-xs font-bold tracking-wider uppercase">
+                            <span>MEET TEMPO</span>
+                        </div>
+                        <h1 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#202124] tracking-tight leading-[1.15]">
+                            Your space to navigate student life.
+                        </h1>
+                        <p class="text-base sm:text-lg text-[#6F6B68] leading-relaxed max-w-2xl font-normal">
+                            Designed with FPT University students in mind, Tempo offers personalized support for mental well-being and stress management — helping you navigate academic pressure today while building awareness and practical skills for the future.
+                        </p>
+                        <div class="pt-2">
+                            <button type="button" 
+                                    id="btn-about-explore-cta" 
+                                    onclick="document.getElementById('about-section-02')?.scrollIntoView({ behavior: 'smooth' });"
+                                    class="inline-flex items-center px-6 py-3.5 rounded-full bg-[#FF6B2C] hover:bg-[#E55A1F] text-white font-bold text-sm sm:text-base shadow-md hover:shadow-lg transition-all cursor-pointer">
+                                <span>Explore Tempo</span>
+                                <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Product-Inspired Visual -->
+                    <div class="lg:col-span-5 relative">
+                        <div class="relative bg-gradient-to-br from-[#FFF9F4] to-[#F8F3ED] rounded-3xl border border-[#EAE4DF] p-6 sm:p-8 shadow-md overflow-hidden">
+                            <!-- Decorative organic background blob -->
+                            <div class="absolute top-0 right-0 w-36 h-36 bg-[#FFE9DC]/60 rounded-full blur-xl pointer-events-none"></div>
+                            <div class="absolute bottom-0 left-0 w-36 h-36 bg-[#E6EDE7]/60 rounded-full blur-xl pointer-events-none"></div>
+
+                            <!-- Header preview with logo -->
+                            <div class="flex items-center justify-between pb-4 border-b border-[#EAE4DF]/80 relative z-10">
+                                <img src="assets/tempo-logo.png" alt="Tempo" class="h-8 w-auto object-contain">
+                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#FFE9DC] text-[#B83D08]">FPT Wellbeing Space</span>
+                            </div>
+
+                            <!-- Layered UI Cards representing core experiences -->
+                            <div class="mt-4 space-y-3 relative z-10">
+                                <!-- Card 1: Urgent Triage -->
+                                <div class="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-[#EAE4DF] shadow-xs flex items-center space-x-3 transition hover:translate-x-1">
+                                    <div class="w-9 h-9 rounded-xl bg-[#FFE9DC] text-[#B83D08] flex items-center justify-center font-bold text-base shrink-0">⚡</div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-xs font-bold text-[#202124]">Urgent Mode</h4>
+                                            <span class="text-[10px] text-[#B83D08] font-bold">Deadline triage</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#6F6B68] truncate">Break paralysis into ONE doable step</p>
+                                    </div>
+                                </div>
+
+                                <!-- Card 2: Self-check -->
+                                <div class="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-[#EAE4DF] shadow-xs flex items-center space-x-3 transition hover:translate-x-1">
+                                    <div class="w-9 h-9 rounded-xl bg-[#E6EDE7] text-[#1A5336] flex items-center justify-center font-bold text-base shrink-0">📊</div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-xs font-bold text-[#202124]">Self-check</h4>
+                                            <span class="text-[10px] text-[#1A5336] font-bold">6 dimensions</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#6F6B68] truncate">Gentle reflections, no toxic pressure</p>
+                                    </div>
+                                </div>
+
+                                <!-- Card 3: Breathing & Grounding -->
+                                <div class="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-[#EAE4DF] shadow-xs flex items-center space-x-3 transition hover:translate-x-1">
+                                    <div class="w-9 h-9 rounded-xl bg-[#FAEDDB] text-[#CA9555] flex items-center justify-center font-bold text-base shrink-0">🫁</div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-xs font-bold text-[#202124]">Practice Breathing</h4>
+                                            <span class="text-[10px] text-[#CA9555] font-bold">2 min reset</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#6F6B68] truncate">Nervous system decompression</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Mascot Footer Accent -->
+                            <div class="mt-4 pt-3 border-t border-[#EAE4DF]/60 flex items-center justify-between text-[11px] text-[#6F6B68] relative z-10">
+                                <span class="flex items-center space-x-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                                    <span>Always confidential &amp; peer-led</span>
+                                </span>
+                                <img src="assets/self-check-mascot.png" alt="Tempo Mascot" class="h-9 w-auto object-contain">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===============================================================
+                 SECTION 02: WHEN THINGS FEEL LIKE TOO MUCH
+                 =============================================================== -->
+            <section id="about-section-02" class="py-8 sm:py-12 border-b border-[#EAE4DF]/70 scroll-mt-20">
+                <!-- Section Introduction -->
+                <div class="max-w-3xl mx-auto text-center space-y-3">
+                    <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold text-[#202124] tracking-tight">
+                        When Things Feel Like Too Much
+                    </h2>
+                    <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed font-normal">
+                        Student life can bring moments when everything feels urgent, stress becomes difficult to manage, or it's hard to understand what you need. Tempo offers personalized support for the moment you're in while helping you build awareness and skills for the future.
+                    </p>
+                </div>
+
+                <!-- Three Visually Balanced Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 mt-10">
+                    <!-- Card 01 -->
+                    <div class="bg-[#F7E5DC] border border-[#FFD5C0] rounded-3xl p-6 sm:p-7 flex flex-col justify-between shadow-xs transition hover:shadow-md">
+                        <div>
+                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#B83D08]">WHEN EVERYTHING PILES UP</span>
+                            <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] mt-2.5 leading-snug">
+                                Too much to do, not sure where to start?
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] mt-2.5 leading-relaxed font-normal">
+                                When deadlines and responsibilities compete for your attention, it can be difficult to know what deserves your focus first.
+                            </p>
+                        </div>
+
+                        <!-- Mascot visual -->
+                        <div class="py-4 my-auto flex justify-center">
+                            <img src="assets/work-plan-mascot.png" alt="When everything piles up" class="h-24 w-auto object-contain">
+                        </div>
+
+                        <div class="pt-4 border-t border-[#FFD5C0]/80 mt-2 space-y-1">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#B83D08]/90">HOW TEMPO HELPS</span>
+                            <p class="text-xs sm:text-sm font-bold text-[#202124]">
+                                Find your priorities and your next step.
+                            </p>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed pt-0.5 font-normal">
+                                Tempo helps you identify what needs attention first and break things down into manageable next steps, so you can move forward with greater clarity.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Card 02 -->
+                    <div class="bg-[#E6EDE7] border border-[#CBE0D1] rounded-3xl p-6 sm:p-7 flex flex-col justify-between shadow-xs transition hover:shadow-md">
+                        <div>
+                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#1A5336]">WHEN STRESS TAKES OVER</span>
+                            <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] mt-2.5 leading-snug">
+                                Feeling overwhelmed and need to slow down?
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] mt-2.5 leading-relaxed font-normal">
+                                Sometimes pressure makes it harder to think clearly, focus or take the next step.
+                            </p>
+                        </div>
+
+                        <!-- Mascot visual -->
+                        <div class="py-4 my-auto flex justify-center">
+                            <img src="assets/practice-breathing-mascot.png" alt="When stress takes over" class="h-24 w-auto object-contain">
+                        </div>
+
+                        <div class="pt-4 border-t border-[#CBE0D1]/80 mt-2 space-y-1">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#1A5336]/90">HOW TEMPO HELPS</span>
+                            <p class="text-xs sm:text-sm font-bold text-[#202124]">
+                                Reset in the moment. Build skills for the future.
+                            </p>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed pt-0.5 font-normal">
+                                Tempo offers ways to pause and ease immediate stress while helping you develop greater awareness of stress and practical ways to manage it over time.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Card 03 -->
+                    <div class="bg-[#FAEDDB] border border-[#EADBCA] rounded-3xl p-6 sm:p-7 flex flex-col justify-between shadow-xs transition hover:shadow-md">
+                        <div>
+                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#CA9555]">WHEN YOU'RE NOT SURE WHAT YOU NEED</span>
+                            <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] mt-2.5 leading-snug">
+                                Not sure how you're feeling or where to begin?
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] mt-2.5 leading-relaxed font-normal">
+                                It isn't always easy to recognize your current state or understand what kind of support would help.
+                            </p>
+                        </div>
+
+                        <!-- Mascot visual -->
+                        <div class="py-4 my-auto flex justify-center">
+                            <img src="assets/notes-mascot.png" alt="When you're not sure what you need" class="h-24 w-auto object-contain">
+                        </div>
+
+                        <div class="pt-4 border-t border-[#EADBCA]/80 mt-2 space-y-1">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#CA9555]">HOW TEMPO HELPS</span>
+                            <p class="text-xs sm:text-sm font-bold text-[#202124]">
+                                Understand yourself, then find the support that fits.
+                            </p>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed pt-0.5 font-normal">
+                                Tempo helps you reflect on your current state and explore a suitable direction when you're unsure what to do next.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===============================================================
+                 SECTION 03: EXPLORE TEMPO (Signature Stacked Cards)
+                 =============================================================== -->
+            <section id="about-section-03" class="py-8 sm:py-12 border-b border-[#EAE4DF]/70">
+                <!-- Section Introduction -->
+                <div class="max-w-3xl mx-auto text-center space-y-3 mb-10 sm:mb-14">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">EXPLORE TEMPO</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold text-[#202124] tracking-tight">
+                        One Space, Different Ways to Find Your Tempo
+                    </h2>
+                    <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed font-normal">
+                        From finding the right kind of support to building helpful habits and connecting with others, explore different ways to navigate student life with Tempo.
+                    </p>
+                </div>
+
+                <!-- Sticky Stacked Cards Region -->
+                <div class="about-stacked-cards-container relative">
+                    <!-- Card 01 — Modes & SOS -->
+                    <div class="about-stacked-card-wrapper" data-card-index="0">
+                        <div class="about-stacked-card bg-white border border-[#E8E4E1] rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                                <div class="lg:col-span-7 space-y-3">
+                                    <span class="text-xs font-extrabold uppercase tracking-wider text-[#B83D08]">MODES &amp; SOS</span>
+                                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                                        Find the Support You Need
+                                    </h3>
+                                    <p class="text-sm sm:text-base font-bold text-[#202124]">
+                                        Different situations call for different kinds of support.
+                                    </p>
+                                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                                        Explore Tempo's available modes to find a direction that fits your current needs, or access SOS when you need its dedicated support flow.
+                                    </p>
+                                </div>
+                                <div class="lg:col-span-5 space-y-2.5">
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div class="px-3 py-2 rounded-xl bg-[#FFE9DC] border border-[#FFD5C0]/60 text-center">
+                                            <div class="text-sm">⚡</div>
+                                            <div class="text-xs font-bold text-[#B83D08]">Urgent</div>
+                                        </div>
+                                        <div class="px-3 py-2 rounded-xl bg-[#E6EDE7] border border-[#CBE0D1] text-center">
+                                            <div class="text-sm">🌱</div>
+                                            <div class="text-xs font-bold text-[#1A5336]">Recovery</div>
+                                        </div>
+                                        <div class="px-3 py-2 rounded-xl bg-[#FAEDDB] border border-[#EADBCA] text-center">
+                                            <div class="text-sm">🧭</div>
+                                            <div class="text-xs font-bold text-[#CA9555]">Unclear</div>
+                                        </div>
+                                    </div>
+                                    <div class="p-3 rounded-xl bg-[#D92D20] text-white flex items-center justify-between shadow-xs">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-extrabold text-sm tracking-wider">(((SOS)))</span>
+                                            <span class="text-xs font-bold">SOS Immediate Support</span>
+                                        </div>
+                                        <span class="text-[10px] text-white/80 font-medium">Dedicated Flow</span>
+                                    </div>
+                                    <p class="text-[11px] text-[#8E8A85] italic pt-1 text-center">
+                                        Important: SOS is a separate support flow, not a mode.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 02 — Personal Tools -->
+                    <div class="about-stacked-card-wrapper" data-card-index="1">
+                        <div class="about-stacked-card bg-white border border-[#E8E4E1] rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                                <div class="lg:col-span-7 space-y-3">
+                                    <span class="text-xs font-extrabold uppercase tracking-wider text-[#1A5336]">PERSONAL TOOLS</span>
+                                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                                        Tools That Fit Your Needs
+                                    </h3>
+                                    <p class="text-sm sm:text-base font-bold text-[#202124]">
+                                        Make space for focus, reflection and everyday progress.
+                                    </p>
+                                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                                        Use Tempo's tools to organize your work, check in with yourself, maintain routines and keep track of your progress at a pace that works for you.
+                                    </p>
+                                </div>
+                                <div class="lg:col-span-5">
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>⏱️</span>
+                                            <span>Focus Zone</span>
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>📝</span>
+                                            <span>Working Plan</span>
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>📊</span>
+                                            <span>Self-check</span>
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>🎯</span>
+                                            <span>Strack</span>
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>🫁</span>
+                                            <span>Breathing</span>
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200 text-xs font-semibold text-gray-800 flex items-center space-x-2">
+                                            <span>✍️</span>
+                                            <span>Notes</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 03 — Quick Relief & Learning -->
+                    <div class="about-stacked-card-wrapper" data-card-index="2">
+                        <div class="about-stacked-card bg-white border border-[#E8E4E1] rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                                <div class="lg:col-span-7 space-y-3">
+                                    <span class="text-xs font-extrabold uppercase tracking-wider text-[#CA9555]">QUICK RELIEF &amp; LEARNING</span>
+                                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                                        Reset, Learn &amp; Grow
+                                    </h3>
+                                    <p class="text-sm sm:text-base font-bold text-[#202124]">
+                                        Pause when you need to. Learn as you go.
+                                    </p>
+                                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                                        Explore activities that help you take a breather in the moment, alongside resources that help you understand stress and discover practical ways to navigate it.
+                                    </p>
+                                </div>
+                                <div class="lg:col-span-5 space-y-2.5">
+                                    <div class="p-3.5 rounded-2xl bg-[#FFF9F4] border border-[#FFD5C0]/60 flex items-center space-x-3">
+                                        <img src="assets/quick-relief-mascot-transparent.png" alt="Quick Relief" class="w-10 h-10 object-contain shrink-0">
+                                        <div>
+                                            <div class="text-xs font-bold text-[#202124]">Quick Relief</div>
+                                            <div class="text-[11px] text-[#6F6B68]">Fast 2-minute physical &amp; mental resets</div>
+                                        </div>
+                                    </div>
+                                    <div class="p-3.5 rounded-2xl bg-[#F4F9F5] border border-[#CBE0D1] flex items-center space-x-3">
+                                        <img src="assets/learn-solve-mascot.png" alt="Learn & Solve" class="w-10 h-10 object-contain shrink-0">
+                                        <div>
+                                            <div class="text-xs font-bold text-[#202124]">Learn &amp; Solve</div>
+                                            <div class="text-[11px] text-[#6F6B68]">Practical strategies for university stress</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 04 — Community -->
+                    <div class="about-stacked-card-wrapper" data-card-index="3">
+                        <div class="about-stacked-card bg-white border border-[#E8E4E1] rounded-3xl p-6 sm:p-10 shadow-lg relative overflow-hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                                <div class="lg:col-span-7 space-y-3">
+                                    <span class="text-xs font-extrabold uppercase tracking-wider text-[#FF6B2C]">COMMUNITY</span>
+                                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
+                                        You're Not Alone
+                                    </h3>
+                                    <p class="text-sm sm:text-base font-bold text-[#202124]">
+                                        Student life feels different when experiences can be shared.
+                                    </p>
+                                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                                        Explore posts from the Tempo community, discover other perspectives and share experiences with fellow students.
+                                    </p>
+                                </div>
+                                <div class="lg:col-span-5 space-y-2.5">
+                                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-base">💬</span>
+                                            <span class="text-xs font-bold text-gray-800">Tempo Community</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#6F6B68]">Real student stories, honest thoughts &amp; peer encouragement.</p>
+                                    </div>
+                                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="text-base">✏️</span>
+                                            <span class="text-xs font-bold text-gray-800">Tempo Post</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#6F6B68]">Express yourself anonymously or with your student profile.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===============================================================
+                 SECTION 04: USE TEMPO YOUR WAY
+                 =============================================================== -->
+            <section id="about-section-04" class="py-8 sm:py-12 border-b border-[#EAE4DF]/70">
+                <!-- Section Introduction -->
+                <div class="max-w-3xl mx-auto text-center space-y-3 mb-10">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">YOUR JOURNEY, YOUR PACE</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold text-[#202124] tracking-tight">
+                        Use Tempo Your Way
+                    </h2>
+                    <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed font-normal">
+                        There's no single right way to use Tempo. Start with what feels relevant to you, explore what helps, and adjust whenever your needs change.
+                    </p>
+                </div>
+
+                <!-- Three Principles (Editorial Layout) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+                    <!-- Principle 01 -->
+                    <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 space-y-4 hover:border-[#FF6B2C]/40 transition shadow-xs">
+                        <span class="w-8 h-8 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center">01</span>
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">
+                            Start Where You Are
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                            Not sure what you need? Take a moment to check in with yourself, or choose the kind of support that feels right for your situation.
+                        </p>
+                    </div>
+
+                    <!-- Principle 02 -->
+                    <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 space-y-4 hover:border-[#FF6B2C]/40 transition shadow-xs">
+                        <span class="w-8 h-8 rounded-full bg-[#E6EDE7] text-[#1A5336] font-bold text-xs flex items-center justify-center">02</span>
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">
+                            Find What Works for You
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                            Explore Tempo's modes, personal tools, quick relief activities and learning resources. You don't have to use everything — focus on what fits your needs.
+                        </p>
+                    </div>
+
+                    <!-- Principle 03 -->
+                    <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 space-y-4 hover:border-[#FF6B2C]/40 transition shadow-xs">
+                        <span class="w-8 h-8 rounded-full bg-[#FAEDDB] text-[#CA9555] font-bold text-xs flex items-center justify-center">03</span>
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">
+                            Move at Your Own Pace
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
+                            Take one small step at a time. Return to Tempo whenever you need to pause, reflect or adjust your plans as life changes.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===============================================================
+                 SECTION 05: READY TO BEGIN?
+                 =============================================================== -->
+            <section id="about-section-05" class="py-12 sm:py-16">
+                <div class="max-w-2xl mx-auto text-center space-y-4 bg-gradient-to-b from-[#FFF9F4] to-[#FEFAF4] border border-[#EAE4DF] rounded-3xl p-8 sm:p-12 shadow-xs relative overflow-hidden">
+                    <!-- Organic illustration accent -->
+                    <div class="w-12 h-12 mx-auto rounded-full bg-[#FFE9DC] text-[#B83D08] flex items-center justify-center shadow-xs">
+                        <img src="assets/tempo-logo.png" alt="Tempo" class="h-6 w-auto object-contain">
+                    </div>
+
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">YOUR NEXT CHAPTER</span>
+                    <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold text-[#202124] tracking-tight">
+                        Ready to find your tempo?
+                    </h2>
+                    <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed max-w-lg mx-auto font-normal">
+                        There's no single right way to navigate student life. Start with what you need today, and take it one step at a time.
+                    </p>
+
+                    <div class="pt-4">
+                        <button type="button" 
+                                id="btn-about-get-started" 
+                                onclick="window.TempoApp.navigateTo('today');"
+                                class="inline-flex items-center px-8 py-3.5 rounded-full bg-[#FF6B2C] hover:bg-[#E55A1F] text-white font-bold text-sm sm:text-base shadow-md hover:shadow-lg transition-all cursor-pointer">
+                            <span>Get Started</span>
+                            <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </section>
+
+        <!-- ===================================================================
+             SCREEN: PERSONAL SPACE (One Shared Page with 4 Sections)
+             1. Saved (Đã lưu)
+             2. My Library (Thư viện của tôi)
+             3. Account (Tài khoản)
+             4. Settings (Cài đặt)
+             =================================================================== -->
+        <section id="screen-personal-space" class="screen-container hidden space-y-6 sm:space-y-8 py-2 sm:py-6">
+            <!-- Breadcrumb / Section Header -->
+            <div class="max-w-6xl mx-auto px-4 sm:px-6">
+                <div class="flex items-center space-x-2 text-xs text-[#6F6B68]">
+                    <span>Tempo</span>
+                    <span>/</span>
+                    <span class="font-bold text-[#202124]" id="ps-breadcrumb-current">Personal Space</span>
+                </div>
+            </div>
+
+            <!-- Mobile Compact Navigation (Horizontal Tab Strip) -->
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:hidden">
+                <div class="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none border-b border-[#E8E4E1]">
+                    <button type="button" data-ps-mobile-tab="saved" class="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap bg-[#FFE9DC] text-[#FF6B2C] border border-[#FF6B2C]/30 shadow-xs cursor-pointer">
+                        Đã lưu
+                    </button>
+                    <button type="button" data-ps-mobile-tab="library" class="px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-[#6F6B68] border border-[#E8E4E1] hover:bg-[#F8F6F4] hover:text-[#202124] cursor-pointer">
+                        Thư viện của tôi
+                    </button>
+                    <button type="button" data-ps-mobile-tab="account" class="px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-[#6F6B68] border border-[#E8E4E1] hover:bg-[#F8F6F4] hover:text-[#202124] cursor-pointer">
+                        Tài khoản
+                    </button>
+                    <button type="button" data-ps-mobile-tab="settings" class="px-4 py-2 rounded-xl text-xs font-medium whitespace-nowrap bg-white text-[#6F6B68] border border-[#E8E4E1] hover:bg-[#F8F6F4] hover:text-[#202124] cursor-pointer">
+                        Cài đặt
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Layout: Desktop Sidebar + Content Area -->
+            <div class="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+                
+                <!-- Desktop Left Sidebar -->
+                <aside class="hidden lg:block lg:col-span-3 bg-white border border-[#E8E4E1] rounded-3xl p-4 shadow-xs sticky top-24 space-y-1.5">
+                    <button type="button" data-ps-tab="saved" id="ps-nav-saved" class="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold bg-[#FFE9DC] text-[#FF6B2C] border-l-4 border-[#FF6B2C] shadow-xs transition-all cursor-pointer">
+                        <svg class="w-4 h-4 ps-nav-icon text-[#FF6B2C] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                        </svg>
+                        <span id="ps-sidebar-saved-label">Đã lưu</span>
+                    </button>
+
+                    <button type="button" data-ps-tab="library" id="ps-nav-library" class="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-xs sm:text-sm font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition-all cursor-pointer">
+                        <svg class="w-4 h-4 ps-nav-icon text-[#6F6B68] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <span id="ps-sidebar-library-label">Thư viện của tôi</span>
+                    </button>
+
+                    <button type="button" data-ps-tab="account" id="ps-nav-account" class="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-xs sm:text-sm font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition-all cursor-pointer">
+                        <svg class="w-4 h-4 ps-nav-icon text-[#6F6B68] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span id="ps-sidebar-account-label">Tài khoản</span>
+                    </button>
+
+                    <button type="button" data-ps-tab="settings" id="ps-nav-settings" class="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-xs sm:text-sm font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition-all cursor-pointer">
+                        <svg class="w-4 h-4 ps-nav-icon text-[#6F6B68] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span id="ps-sidebar-settings-label">Cài đặt</span>
+                    </button>
+                </aside>
+
+                <!-- Main Content Pane -->
+                <div class="lg:col-span-9 bg-white border border-[#E8E4E1] rounded-3xl p-6 sm:p-8 shadow-xs min-h-[540px]">
+                    
+                    <!-- =======================================================
+                         SECTION 1: SAVED (ĐÃ LƯU)
+                         ======================================================= -->
+                    <section id="personal-tab-saved" class="space-y-6">
+                        <div>
+                            <h1 id="saved-heading" class="text-2xl sm:text-3xl font-heading font-bold text-[#202124]">Đã lưu</h1>
+                            <p id="saved-subtitle" class="text-sm text-[#6F6B68] mt-1">Những nội dung bạn muốn quay lại sau.</p>
+                        </div>
+
+                        <!-- 3 Filters: All, Tempo Posts, Learn & Solve -->
+                        <div class="flex items-center space-x-2 pt-1 border-b border-[#F0ECE9] pb-4">
+                            <button type="button" data-saved-filter="all" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#FF6B2C] border border-[#FF6B2C]/40 shadow-xs cursor-pointer">
+                                Tất cả
+                            </button>
+                            <button type="button" data-saved-filter="posts" class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-[#F3F1EF] text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF] cursor-pointer">
+                                Tempo Posts
+                            </button>
+                            <button type="button" data-saved-filter="learn" class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-[#F3F1EF] text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF] cursor-pointer">
+                                Learn &amp; Solve
+                            </button>
+                        </div>
+
+                        <!-- Content List Area & Clean Empty State -->
+                        <div id="saved-content-list" class="pt-4">
+                            <div id="saved-empty-state" class="p-8 sm:p-12 text-center rounded-2xl bg-[#FFF9F4] border border-[#F3ECE6] space-y-3">
+                                <div class="w-12 h-12 mx-auto rounded-full bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                    </svg>
+                                </div>
+                                <h3 class="text-base font-bold text-[#202124]">Chưa có nội dung nào được lưu</h3>
+                                <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
+                                    Khi bạn lưu các bài viết trên Tempo Posts hoặc nội dung trong Learn &amp; Solve, chúng sẽ xuất hiện ở đây để bạn dễ dàng xem lại bất cứ lúc nào.
+                                </p>
+                            </div>
+
+                            <!-- Structural Action Anchor (Clear location reserved for future item actions: open original, remove, undo toast) -->
+                            <div id="saved-structural-anchor" class="hidden">
+                                <!-- Structural Hook: Item card template with Open Original Content, Remove Saved Item, and Undo Toast trigger -->
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- =======================================================
+                         SECTION 2: MY LIBRARY (THƯ VIỆN CỦA TÔI)
+                         ======================================================= -->
+                    <section id="personal-tab-library" class="hidden space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <h1 id="library-heading" class="text-2xl sm:text-3xl font-heading font-bold text-[#202124]">Thư viện của tôi</h1>
+                                <p id="library-subtitle" class="text-sm text-[#6F6B68] mt-1">Những nội dung bạn đã tải lên Tempo để sử dụng lại.</p>
+                            </div>
+                            
+                            <!-- Upload Entry Point -->
+                            <button type="button" id="btn-library-upload" class="inline-flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#FF6B2C] hover:bg-[#E55A1F] shadow-xs cursor-pointer transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                <span>Tải lên tài nguyên</span>
+                            </button>
+                        </div>
+
+                        <!-- 3 Tabs: Avatars, Backgrounds, Sounds -->
+                        <div class="flex items-center space-x-2 border-b border-[#F0ECE9] pb-3">
+                            <button type="button" data-library-subtab="avatars" class="px-4 py-2 rounded-xl text-xs font-bold bg-[#202124] text-white shadow-xs cursor-pointer transition">
+                                Avatars
+                            </button>
+                            <button type="button" data-library-subtab="backgrounds" class="px-4 py-2 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] cursor-pointer transition">
+                                Backgrounds
+                            </button>
+                            <button type="button" data-library-subtab="sounds" class="px-4 py-2 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] cursor-pointer transition">
+                                Sounds
+                            </button>
+                        </div>
+
+                        <!-- Content Area: Avatars Subtab -->
+                        <div id="library-view-avatars" class="space-y-4">
+                            <p class="text-xs text-[#6F6B68]">Ảnh đại diện bạn tải lên có thể được chọn làm ảnh đại diện tài khoản.</p>
+                            <div class="p-8 text-center rounded-2xl bg-[#FFF9F4] border border-[#F3ECE6] space-y-2">
+                                <span class="text-3xl">👤</span>
+                                <h3 class="text-sm font-bold text-[#202124]">Chưa có ảnh đại diện nào được tải lên</h3>
+                                <p class="text-xs text-[#6F6B68] max-w-sm mx-auto">Tải lên hình ảnh tùy chỉnh để sử dụng làm avatar tài khoản cá nhân trên toàn bộ Tempo.</p>
+                            </div>
+                        </div>
+
+                        <!-- Content Area: Backgrounds Subtab -->
+                        <div id="library-view-backgrounds" class="hidden space-y-4">
+                            <p class="text-xs text-[#6F6B68]">Hình nền bạn tải lên có thể được sử dụng làm không gian tập trung trong Focus Zone.</p>
+                            <div class="p-8 text-center rounded-2xl bg-[#FFF9F4] border border-[#F3ECE6] space-y-2">
+                                <span class="text-3xl">🖼️</span>
+                                <h3 class="text-sm font-bold text-[#202124]">Chưa có hình nền nào trong thư viện</h3>
+                                <p class="text-xs text-[#6F6B68] max-w-sm mx-auto">Tải lên hình ảnh không gian làm việc hoặc phong cảnh êm dịu để dùng trong Focus Zone.</p>
+                            </div>
+                        </div>
+
+                        <!-- Content Area: Sounds Subtab -->
+                        <div id="library-view-sounds" class="hidden space-y-4">
+                            <p class="text-xs text-[#6F6B68]">Tệp âm thanh bạn tải lên có thể được phát làm âm thanh nền trong các phiên Focus Zone.</p>
+                            <div class="p-8 text-center rounded-2xl bg-[#FFF9F4] border border-[#F3ECE6] space-y-2">
+                                <span class="text-3xl">🎵</span>
+                                <h3 class="text-sm font-bold text-[#202124]">Chưa có âm thanh nền nào trong thư viện</h3>
+                                <p class="text-xs text-[#6F6B68] max-w-sm mx-auto">Tải lên tệp âm thanh trắng, tiếng mưa hoặc nhạc tập trung để sử dụng lại bất cứ lúc nào.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- =======================================================
+                         SECTION 3: ACCOUNT (TÀI KHOẢN)
+                         ======================================================= -->
+                    <section id="personal-tab-account" class="hidden space-y-8">
+                        <div>
+                            <h1 id="account-heading" class="text-2xl sm:text-3xl font-heading font-bold text-[#202124]">Tài khoản</h1>
+                            <p id="account-subtitle" class="text-sm text-[#6F6B68] mt-1">Quản lý thông tin hồ sơ và bảo mật của bạn.</p>
+                        </div>
+
+                        <!-- Group 1: Profile -->
+                        <div class="space-y-4">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#B83D08]">Hồ sơ cá nhân</h2>
+                            
+                            <!-- Avatar row -->
+                            <div class="p-5 rounded-2xl bg-[#FFF9F4] border border-[#E8E4E1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div class="flex items-center space-x-4">
+                                    <div id="account-avatar-preview" class="w-16 h-16 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xl flex items-center justify-center border-2 border-white shadow-xs select-none">
+                                        U
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-bold text-[#202124]">Ảnh đại diện tài khoản</p>
+                                        <p class="text-[11px] text-[#6F6B68] mt-0.5">Ảnh đại diện phản ánh tài nguyên bạn chọn từ Thư viện của tôi.</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="btn-account-change-avatar" class="px-3.5 py-2 rounded-xl text-xs font-bold text-[#202124] bg-white border border-[#E8E4E1] hover:border-[#FF6B2C] hover:text-[#FF6B2C] shadow-xs cursor-pointer transition">
+                                    Chọn từ Thư viện
+                                </button>
+                            </div>
+
+                            <!-- Display name row with inline edit -->
+                            <div class="p-5 rounded-2xl bg-white border border-[#E8E4E1] space-y-2">
+                                <label class="text-xs font-bold text-[#202124]">Tên hiển thị</label>
+                                
+                                <!-- View State -->
+                                <div id="account-name-view-row" class="flex items-center justify-between pt-1">
+                                    <span id="account-display-name-text" class="text-sm font-semibold text-[#202124]">User</span>
+                                    <button type="button" id="btn-edit-display-name" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#FF6B2C] hover:bg-[#FFE9DC] transition cursor-pointer">
+                                        ✏️ Chỉnh sửa
+                                    </button>
+                                </div>
+
+                                <!-- Inline Edit State (Hidden by default) -->
+                                <div id="account-name-edit-row" class="hidden flex items-center space-x-2 pt-1">
+                                    <input type="text" id="account-display-name-input" class="flex-1 p-2 border border-gray-300 rounded-xl text-xs text-[#202124] focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]" placeholder="Nhập tên hiển thị mới">
+                                    <button type="button" id="btn-save-edit-name" class="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#FF6B2C] hover:bg-[#E55A1F] shadow-xs cursor-pointer">
+                                        Lưu
+                                    </button>
+                                    <button type="button" id="btn-cancel-edit-name" class="px-3.5 py-2 rounded-xl text-xs font-medium text-[#6F6B68] bg-[#F3F1EF] hover:bg-[#EAE4DF] cursor-pointer">
+                                        Hủy
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Email row (Read-only display) -->
+                            <div class="p-5 rounded-2xl bg-white border border-[#E8E4E1] space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-bold text-[#202124]">Địa chỉ email</label>
+                                    <span class="text-[10px] font-semibold text-[#1A5336] bg-[#DFF3E6] px-2 py-0.5 rounded-full">Email đăng nhập chính</span>
+                                </div>
+                                <p id="account-email-text" class="text-sm text-[#6F6B68] font-normal pt-0.5">user@example.com</p>
+                            </div>
+                        </div>
+
+                        <!-- Group 2: Sign-in & Security -->
+                        <div class="space-y-4 pt-2 border-t border-[#F0ECE9]">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#B83D08]">Đăng nhập &amp; Bảo mật</h2>
+                            <div class="p-5 rounded-2xl bg-white border border-[#E8E4E1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Mật khẩu tài khoản</p>
+                                    <p class="text-xs text-[#6F6B68] mt-0.5">•••••••••••• (Đã thiết lập mật khẩu bảo vệ)</p>
+                                </div>
+                                <button type="button" id="btn-account-change-password" class="px-3.5 py-2 rounded-xl text-xs font-bold text-[#202124] bg-white border border-[#E8E4E1] hover:border-[#FF6B2C] hover:text-[#FF6B2C] shadow-xs cursor-pointer transition">
+                                    Đổi mật khẩu
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Group 3: Danger Zone -->
+                        <div class="space-y-4 pt-2 border-t border-[#F0ECE9]">
+                            <div class="p-6 rounded-2xl bg-rose-50 border border-rose-200 space-y-4">
+                                <div>
+                                    <h3 class="text-sm font-bold text-rose-900">Khu vực nguy hiểm (Danger Zone)</h3>
+                                    <p class="text-xs text-rose-700 mt-1 leading-relaxed">
+                                        Xóa tài khoản của bạn và mọi dữ liệu liên kết vĩnh viễn. Hành động này không thể hoàn tác.
+                                    </p>
+                                </div>
+                                <div class="p-4 rounded-xl bg-white border border-rose-200 space-y-3">
+                                    <label class="block text-xs font-semibold text-gray-700">
+                                        Nhập chính xác chữ <span class="font-mono font-bold text-rose-600">DELETE</span> để kích hoạt nút xóa tài khoản:
+                                    </label>
+                                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                        <input type="text" id="account-delete-confirm-input" placeholder="DELETE" class="p-2 border border-rose-300 rounded-xl text-xs font-mono text-[#202124] focus:outline-none focus:ring-2 focus:ring-rose-500 max-w-xs">
+                                        <button type="button" id="btn-account-delete-confirm" disabled class="px-4 py-2 rounded-xl text-xs font-bold text-rose-300 bg-rose-100 cursor-not-allowed opacity-60 transition">
+                                            Xác nhận xóa tài khoản
+                                        </button>
+                                    </div>
+                                    <p class="text-[10px] text-gray-500">Lưu ý: Chức năng xóa tài khoản thực tế sẽ được kết nối khi backend hỗ trợ xóa dữ liệu vĩnh viễn.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- =======================================================
+                         SECTION 4: SETTINGS (CÀI ĐẶT)
+                         ======================================================= -->
+                    <section id="personal-tab-settings" class="hidden space-y-8">
+                        <div>
+                            <h1 id="settings-heading" class="text-2xl sm:text-3xl font-heading font-bold text-[#202124]">Cài đặt</h1>
+                            <p id="settings-subtitle" class="text-sm text-[#6F6B68] mt-1">Tùy chỉnh trải nghiệm, thông báo và quyền riêng tư.</p>
+                        </div>
+
+                        <!-- Group 1: General (Cài đặt chung) -->
+                        <div class="space-y-4">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#B83D08]">Cài đặt chung</h2>
+                            
+                            <!-- Language selector -->
+                            <div class="p-5 rounded-2xl bg-white border border-[#E8E4E1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Ngôn ngữ ứng dụng (Language)</p>
+                                    <p class="text-xs text-[#6F6B68] mt-0.5">Chọn ngôn ngữ bạn muốn sử dụng trên giao diện Tempo.</p>
+                                </div>
+                                <div class="inline-flex items-center p-1 bg-[#F3F1EF] rounded-2xl space-x-1">
+                                    <button type="button" data-lang="vi" class="settings-lang-btn px-4 py-2 rounded-xl text-xs font-bold bg-[#FF6B2C] text-white shadow-xs cursor-pointer">
+                                        Tiếng Việt
+                                    </button>
+                                    <button type="button" data-lang="en" class="settings-lang-btn px-4 py-2 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-white cursor-pointer">
+                                        English
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Appearance / Theme Placeholder (Coming Soon) -->
+                            <div class="p-5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between opacity-80">
+                                <div>
+                                    <p class="text-xs font-bold text-gray-700">Giao diện &amp; Chủ đề</p>
+                                    <p class="text-xs text-[#6F6B68] mt-0.5">Tùy chỉnh chế độ sáng / tối và màu chủ đề cá nhân.</p>
+                                </div>
+                                <span class="text-[10px] font-bold text-stone-500 bg-stone-200 px-2.5 py-1 rounded-full">Sắp ra mắt</span>
+                            </div>
+                        </div>
+
+                        <!-- Group 2: Notifications (Thông báo) -->
+                        <div class="space-y-4 pt-2 border-t border-[#F0ECE9]">
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#B83D08]">Thông báo</h2>
+
+                            <!-- Overall Browser Notifications Control -->
+                            <div class="p-5 rounded-2xl bg-[#FFF9F4] border border-[#FFD2BA] flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Thông báo trình duyệt (Browser Push)</p>
+                                    <p class="text-xs text-[#6F6B68] mt-0.5">Kênh thông báo qua trình duyệt khi bạn không ở trong ứng dụng.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="settings-toggle-browser-push" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#FF6B2C]"></div>
+                                </label>
+                            </div>
+
+                            <!-- Subcategory 1: Self-check reminders -->
+                            <div class="p-4 rounded-xl bg-white border border-[#E8E4E1] flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Nhắc nhở kiểm tra tâm trạng (Self-check reminders)</p>
+                                    <p class="text-[11px] text-[#6F6B68] mt-0.5">Nhận lời nhắc định kỳ để dừng lại, thở sâu và kiểm tra cảm xúc.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="settings-toggle-selfcheck" checked class="sr-only peer">
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF6B2C]"></div>
+                                </label>
+                            </div>
+
+                            <!-- Subcategory 2: Plan & task reminders -->
+                            <div class="p-4 rounded-xl bg-white border border-[#E8E4E1] flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Nhắc nhở kế hoạch &amp; nhiệm vụ (Plan &amp; task reminders)</p>
+                                    <p class="text-[11px] text-[#6F6B68] mt-0.5">Thông báo hạn chót quan trọng và bước tiếp theo trong Working Plan.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="settings-toggle-plan" checked class="sr-only peer">
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF6B2C]"></div>
+                                </label>
+                            </div>
+
+                            <!-- Subcategory 3: Weekly Review ready -->
+                            <div class="p-4 rounded-xl bg-white border border-[#E8E4E1] flex items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-bold text-[#202124]">Báo cáo tuần đã sẵn sàng (Weekly Review ready)</p>
+                                    <p class="text-[11px] text-[#6F6B68] mt-0.5">Nhận thông báo khi bản tổng kết tuần và tiến trình học tập được tạo.</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="settings-toggle-weekly" checked class="sr-only peer">
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FF6B2C]"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Group 3: Data & Privacy (Dữ liệu & Quyền riêng tư) -->
+                        <div class="space-y-4 pt-2 border-t border-[#F0ECE9]">
+                            <div>
+                                <h2 class="text-sm font-bold uppercase tracking-wider text-[#B83D08]">Dữ liệu &amp; Quyền riêng tư</h2>
+                                <p class="text-xs text-[#6F6B68] mt-1">Danh mục dữ liệu Tempo quản lý cho tài khoản của bạn (Thông tin chỉ đọc):</p>
+                            </div>
+
+                            <div class="divide-y divide-[#F0ECE9] border border-[#E8E4E1] rounded-2xl overflow-hidden bg-white">
+                                <!-- 1. Account information -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">🔑</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Account information (Thông tin tài khoản)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Tên hiển thị, địa chỉ email, thông tin đăng nhập và cài đặt bảo mật cá nhân.</p>
+                                </div>
+
+                                <!-- 2. Plans & Tasks -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">📝</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Plans &amp; Tasks (Kế hoạch &amp; Nhiệm vụ)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Danh sách nhiệm vụ ưu tiên, hạn chót deadline và tiến trình từng bước trong Working Plan.</p>
+                                </div>
+
+                                <!-- 3. Self-check & Recovery -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">🌿</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Self-check &amp; Recovery (Tự đánh giá &amp; Hồi phục)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Nhật ký cảm xúc, mức độ căng thẳng đã ghi nhận và các bài tập giải tỏa căng thẳng đã hoàn thành.</p>
+                                </div>
+
+                                <!-- 4. Focus activity -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">⏱️</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Focus activity (Hoạt động tập trung)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Lịch sử các phiên bấm giờ, thời lượng tập trung và chu kỳ Pomodoro trong Focus Zone.</p>
+                                </div>
+
+                                <!-- 5. Saved content -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">🔖</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Saved content (Nội dung đã lưu)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Các bài viết từ cộng đồng và tài liệu trong Learn &amp; Solve mà bạn đã đánh dấu để đọc lại.</p>
+                                </div>
+
+                                <!-- 6. My Library resources -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">📁</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">My Library resources (Tài nguyên thư viện)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Tệp ảnh đại diện, ảnh nền và âm thanh bạn đã tải lên để tái sử dụng trong ứng dụng.</p>
+                                </div>
+
+                                <!-- 7. Tempo Posts and other user-generated content -->
+                                <div class="p-4 space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-sm">💬</span>
+                                        <h4 class="text-xs font-bold text-[#202124]">Tempo Posts &amp; user content (Bài viết &amp; Nội dung đóng góp)</h4>
+                                    </div>
+                                    <p class="text-[11px] text-[#6F6B68]">Các bài chia sẻ tâm sự, phản hồi và đóng góp thảo luận trong cộng đồng Tempo.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </section>
     </main>
 
 
@@ -1224,48 +2265,75 @@
     </div>
 
 
-    <!-- 4. KNOWLEDGE ARTICLE DETAIL MODAL -->
-    <div id="article-detail-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden">
-        <div class="tempo-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 space-y-6">
-            <div class="flex items-center justify-between pb-3 border-b border-gray-100">
-                <div class="flex items-center space-x-2">
-                    <span id="article-modal-category" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FFE9DC] text-[#B83D08]">Category</span>
-                    <span id="article-modal-time" class="text-xs text-gray-400">3 min read</span>
+    <!-- 4. KNOWLEDGE ARTICLE DETAIL MODAL (REDESIGNED) -->
+    <div id="article-detail-modal" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 hidden">
+        <div class="tempo-card max-w-2xl w-full max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative border border-[#EAE4DF]">
+            <!-- Header: Category + Read Time + Tag Pills + Close Button -->
+            <div class="flex items-center justify-between pb-3.5 border-b border-[#F0ECE9] gap-3">
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <span id="article-modal-category" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] border border-[#FFD2BA]">Category</span>
+                    <span id="article-modal-time" class="text-xs text-[#8A8682] font-medium">3 min read</span>
+                    <div id="article-modal-tags" class="flex flex-wrap gap-1"></div>
                 </div>
-                <button id="btn-close-article-modal" class="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                <button type="button" id="btn-close-article-modal" class="text-[#8A8682] hover:text-[#202124] p-1.5 rounded-xl hover:bg-[#F3F1EF] transition text-base font-bold cursor-pointer" aria-label="Close guide">✕</button>
             </div>
 
+            <!-- Title & Context/Summary -->
             <div class="space-y-3">
-                <h3 id="article-modal-title" class="font-heading text-2xl font-bold text-gray-900 leading-snug">Article Title</h3>
-                <p id="article-modal-summary" class="text-xs text-gray-600 leading-relaxed italic"></p>
+                <h3 id="article-modal-title" class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124] leading-snug">Article Title</h3>
+                <div id="article-modal-summary" class="text-xs sm:text-sm text-[#474543] leading-relaxed p-4 bg-[#FFF9F4] rounded-2xl border border-[#FFD2BA]"></div>
             </div>
+
+            <!-- Content Paragraphs (for learn topics) -->
+            <div id="article-modal-paragraphs" class="space-y-2.5 text-xs sm:text-sm text-[#474543] leading-relaxed hidden"></div>
+
+            <!-- Case Distinctions (for situations with Case A / Case B) -->
+            <div id="article-modal-cases-section" class="space-y-3 hidden"></div>
 
             <!-- Key Takeaways -->
-            <div class="p-4 bg-[#FFF9F4] border border-[#FFD2BA] rounded-xl space-y-2">
-                <h4 class="text-xs font-bold text-[#B83D08] uppercase tracking-wider">Key Takeaways</h4>
-                <ul id="article-modal-takeaways" class="text-xs text-gray-700 space-y-1.5"></ul>
+            <div id="article-modal-takeaways-container" class="p-4 bg-[#F8F6F4] border border-[#EAE4DF] rounded-2xl space-y-2">
+                <h4 class="text-xs font-bold text-[#B83D08] uppercase tracking-wider flex items-center space-x-1.5">
+                    <span>📌</span>
+                    <span>Key Takeaways</span>
+                </h4>
+                <ul id="article-modal-takeaways" class="text-xs sm:text-sm text-[#474543] space-y-2"></ul>
             </div>
 
             <!-- Action Steps -->
-            <div class="space-y-2">
-                <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">What to do in the next 10 minutes:</h4>
-                <div id="article-modal-steps" class="space-y-2"></div>
+            <div id="article-modal-steps-container" class="space-y-2.5">
+                <h4 class="text-xs font-bold text-[#202124] uppercase tracking-wider flex items-center space-x-1.5">
+                    <span>⚡</span>
+                    <span>What to do right now:</span>
+                </h4>
+                <div id="article-modal-steps" class="space-y-2.5"></div>
             </div>
 
             <!-- Optional Template (Extension Email) -->
-            <div id="article-modal-template-section" class="space-y-2 hidden">
+            <div id="article-modal-template-section" class="space-y-2.5 hidden">
                 <div class="flex items-center justify-between">
-                    <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Copyable Email Template:</h4>
-                    <button id="btn-copy-template" class="text-xs text-[#FF6B2C] font-semibold hover:underline">Copy to Clipboard</button>
+                    <h4 class="text-xs font-bold text-[#202124] uppercase tracking-wider flex items-center space-x-1.5">
+                        <span>✉️</span>
+                        <span>Copyable Email Template:</span>
+                    </h4>
+                    <button type="button" id="btn-copy-template" class="text-xs text-[#FF6B2C] hover:text-[#E05316] font-bold cursor-pointer hover:underline">Copy to Clipboard</button>
                 </div>
-                <pre id="article-modal-template-code" class="p-4 bg-stone-900 text-stone-200 rounded-xl text-xs overflow-x-auto font-mono whitespace-pre-wrap leading-relaxed"></pre>
+                <pre id="article-modal-template-code" class="p-4 bg-[#202124] text-stone-200 rounded-2xl text-xs overflow-x-auto font-mono whitespace-pre-wrap leading-relaxed border border-stone-800"></pre>
             </div>
 
-            <div class="pt-4 border-t border-gray-100 text-center">
-                <p id="article-modal-quote" class="text-xs font-medium text-[#B83D08] italic"></p>
+            <!-- Quote or Tip Callout -->
+            <div id="article-modal-quote-container" class="p-4 rounded-2xl bg-[#FFF8F3] border border-[#FFD2BA] text-center space-y-1 hidden">
+                <p id="article-modal-quote" class="text-xs font-semibold text-[#B83D08] italic leading-relaxed"></p>
             </div>
-        </div>
-    </div>
+
+            <!-- Bottom Action Buttons: Related Tool & Back to Guides -->
+            <div class="pt-4 border-t border-[#F0ECE9] flex items-center justify-between flex-wrap gap-2">
+                <div id="article-modal-tool-actions" class="flex items-center space-x-2">
+                    <!-- Related tool buttons injected dynamically -->
+                </div>
+                <button type="button" onclick="document.getElementById('article-detail-modal').classList.add('hidden')" class="px-4 py-2 rounded-full bg-[#F3F1EF] hover:bg-[#EAE4DF] text-[#474543] font-semibold text-xs transition cursor-pointer">
+                    ← Back to Guides
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1871,9 +2939,9 @@
             <span class="text-base">📅</span>
             <span>Routine</span>
         </a>
-        <a href="#hub" data-nav="hub" class="flex flex-col items-center text-[10px] text-gray-500">
+        <a href="#learn" data-nav="learn" onclick="window.TempoApp.navigateTo('learn'); return false;" class="flex flex-col items-center text-[10px] text-gray-500">
             <span class="text-base">📚</span>
-            <span>Hub</span>
+            <span>Learn</span>
         </a>
         <a href="#support" data-nav="support" class="flex flex-col items-center text-[10px] text-gray-500">
             <span class="text-base">💬</span>
@@ -1887,16 +2955,16 @@
 
     <!-- 1. MAIN ROUTING STATE SELECTION MODAL (Find Your Next Step) -->
     <div id="modal-routing-selection" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="routing-modal-title">
-        <div class="tempo-card max-w-3xl w-full my-auto bg-white rounded-2xl sm:rounded-[24px] p-5 sm:p-8 space-y-6 relative shadow-xl border border-[#EAE4DF]">
+        <div class="tempo-card routing-modal-card max-w-3xl w-full my-auto bg-[#FEFAF4] rounded-3xl sm:rounded-[28px] p-4 sm:p-7 md:p-9 space-y-5 sm:space-y-6 relative shadow-2xl border border-[#EAE4DF]">
             <!-- Header -->
-            <div class="flex items-start justify-between pb-3 border-b border-gray-100 gap-4">
+            <div class="flex items-start justify-between pb-3 sm:pb-4 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">FIND YOUR NEXT STEP</span>
-                    <h2 id="routing-modal-title" class="font-heading text-xl sm:text-2xl md:text-[26px] font-bold text-[#202124] leading-snug">
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">FIND YOUR NEXT STEP</span>
+                    <h2 id="routing-modal-title" class="font-heading text-xl sm:text-2xl md:text-[26px] font-bold text-[#202124] leading-snug tracking-tight">
                         What best describes where you are right now?
                     </h2>
                 </div>
-                <button id="btn-close-routing-modal" type="button" aria-label="Close dialog" class="text-gray-400 hover:text-gray-700 hover:bg-stone-100 p-2 rounded-xl text-lg transition shrink-0">
+                <button id="btn-close-routing-modal" type="button" aria-label="Close dialog" class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 sm:p-2.5 rounded-full transition-colors shrink-0 cursor-pointer" title="Close dialog">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1915,24 +2983,24 @@
                      tabindex="0"
                      role="button"
                      aria-label="Deadline is Urgent, Go to Urgent Mode"
-                     class="state-choice-card state-choice-card--urgent p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                     class="state-choice-card state-choice-card--urgent p-4 sm:p-5.5 md:p-6 flex flex-col justify-between group min-h-[190px] sm:min-h-[210px]">
                     <div class="space-y-3">
                         <div>
-                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FFF0E6] text-[#C2410C] border border-[#FFD9C4]">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#FFE9DC] text-[#B83D08] border border-[#FFD5C0]/80">
                                 <span>⚡</span>
                                 <span>ACUTE ACTION</span>
                             </span>
                         </div>
-                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#FF6B2C] transition-colors leading-snug">
                             Deadline is Urgent
                         </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
                             Urgent work needs attention, but stress is making it hard to focus, start, or prioritize.
                         </p>
                     </div>
-                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
-                        <span class="text-xs sm:text-sm font-bold text-[#FF6B2C]">Go to Urgent Mode</span>
-                        <span class="text-base font-bold text-[#FF6B2C] group-hover:translate-x-1 transition-transform">→</span>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-[#ECD5C7]/70">
+                        <span class="text-xs sm:text-sm font-bold text-[#B83D08] group-hover:text-[#FF6B2C] transition-colors">Go to Urgent Mode</span>
+                        <span class="text-sm font-bold text-[#B83D08] group-hover:text-[#FF6B2C] group-hover:translate-x-1 transition-all">→</span>
                     </div>
                 </div>
 
@@ -1942,24 +3010,24 @@
                      tabindex="0"
                      role="button"
                      aria-label="Recovering from Heavy Stress, Go to Recovery Mode"
-                     class="state-choice-card state-choice-card--recovery p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                     class="state-choice-card state-choice-card--recovery p-4 sm:p-5.5 md:p-6 flex flex-col justify-between group min-h-[190px] sm:min-h-[210px]">
                     <div class="space-y-3">
                         <div>
-                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#E1EDE4] text-[#166545] border border-[#C6DDD0]">
                                 <span>🌱</span>
                                 <span>RECOVER & RECHARGE</span>
                             </span>
                         </div>
-                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#1B7F53] transition-colors">
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#166545] transition-colors leading-snug">
                             Recovering from Heavy Stress
                         </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
                             The urgent pressure has passed, but you still feel tired, anxious, or mentally drained.
                         </p>
                     </div>
-                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
-                        <span class="text-xs sm:text-sm font-bold text-[#1B7F53]">Go to Recovery Mode</span>
-                        <span class="text-base font-bold text-[#1B7F53] group-hover:translate-x-1 transition-transform">→</span>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-[#CFE2D5]/70">
+                        <span class="text-xs sm:text-sm font-bold text-[#166545]">Go to Recovery Mode</span>
+                        <span class="text-sm font-bold text-[#166545] group-hover:translate-x-1 transition-all">→</span>
                     </div>
                 </div>
 
@@ -1969,24 +3037,24 @@
                      tabindex="0"
                      role="button"
                      aria-label="Not Sure What's Wrong, Go to Unclear Mode"
-                     class="state-choice-card state-choice-card--unclear p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                     class="state-choice-card state-choice-card--unclear p-4 sm:p-5.5 md:p-6 flex flex-col justify-between group min-h-[190px] sm:min-h-[210px]">
                     <div class="space-y-3">
                         <div>
-                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FEF7EC] text-[#9A5B13] border border-[#FDE5BE]">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#F3EBD8] text-[#9A5B13] border border-[#E7DABE]">
                                 <span>🧭</span>
                                 <span>UNCLEAR</span>
                             </span>
                         </div>
-                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#B45309] transition-colors">
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#9A5B13] transition-colors leading-snug">
                             Not Sure What's Wrong
                         </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
                             You feel off, but you're not sure why or what you need right now.
                         </p>
                     </div>
-                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-stone-100">
-                        <span class="text-xs sm:text-sm font-bold text-[#B45309]">Go to Unclear Mode</span>
-                        <span class="text-base font-bold text-[#B45309] group-hover:translate-x-1 transition-transform">→</span>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-[#E8DEC8]/70">
+                        <span class="text-xs sm:text-sm font-bold text-[#9A5B13]">Go to Unclear Mode</span>
+                        <span class="text-sm font-bold text-[#9A5B13] group-hover:translate-x-1 transition-all">→</span>
                     </div>
                 </div>
 
@@ -1996,24 +3064,24 @@
                      tabindex="0"
                      role="button"
                      aria-label="I Don't Feel Safe, Get Immediate Support"
-                     class="state-choice-card state-choice-card--support p-5 sm:p-6 flex flex-col justify-between group min-h-[200px] sm:min-h-[215px]">
+                     class="state-choice-card state-choice-card--support p-4 sm:p-5.5 md:p-6 flex flex-col justify-between group min-h-[190px] sm:min-h-[210px]">
                     <div class="space-y-3">
                         <div>
-                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#FEF2F2] text-[#B42318] border border-[#FECDCA]">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-[#FDE8E8] text-[#B42318] border border-[#F8C8C6]">
                                 <span>🛡️</span>
                                 <span>IMMEDIATE SUPPORT</span>
                             </span>
                         </div>
-                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#B42318] group-hover:text-[#991B1B] transition-colors">
+                        <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124] group-hover:text-[#B42318] transition-colors leading-snug">
                             I Don't Feel Safe
                         </h3>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed font-normal">
                             You feel panicked or out of control, have thoughts of self-harm, or don't feel safe being alone right now.
                         </p>
                     </div>
-                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-rose-100">
-                        <span class="text-xs sm:text-sm font-bold text-[#B42318]">Get Immediate Support</span>
-                        <span class="text-base font-bold text-[#B42318] group-hover:translate-x-1 transition-transform">→</span>
+                    <div class="pt-4 mt-auto flex items-center justify-between border-t border-[#F6D3CF]/70">
+                        <span class="text-xs sm:text-sm font-bold text-[#D92D20]">Get Immediate Support</span>
+                        <span class="text-sm font-bold text-[#D92D20] group-hover:translate-x-1 transition-all">→</span>
                     </div>
                 </div>
             </div>
@@ -2076,44 +3144,113 @@
 
     <!-- 4. TEMPO COMMUNITY POSTS MODAL -->
     <div id="modal-community-posts" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden">
-        <div class="tempo-card max-w-2xl w-full max-h-[92vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-6 relative shadow-2xl">
+        <div class="tempo-card max-w-2xl w-full max-h-[92vh] overflow-y-auto bg-white rounded-3xl p-6 sm:p-8 space-y-5 relative shadow-2xl">
             <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                 <div class="flex items-center space-x-2.5">
                     <span class="text-xl">💬</span>
                     <div>
-                        <h3 class="font-heading text-lg font-bold text-[#202124]">From the Tempo Community</h3>
-                        <p class="text-xs text-[#6F6B68]">Supportive, honest thoughts from students navigating university life.</p>
+                        <h3 id="community-modal-title" class="font-heading text-lg font-bold text-[#202124]">From the Tempo Community</h3>
+                        <p id="community-modal-subtitle" class="text-xs text-[#6F6B68]">Supportive, honest thoughts from students navigating university life.</p>
                     </div>
                 </div>
                 <button id="btn-close-community-modal" class="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg text-lg transition">✕</button>
             </div>
 
-            <!-- Share a Thought Box -->
-            <form id="form-create-post" class="p-4 bg-[#FFF8F2] border border-[#FFD2BA]/70 rounded-2xl space-y-3">
-                <textarea id="input-new-post-content" rows="2" placeholder="Share an encouraging thought, deadline win, or ask fellow students for advice..." 
-                          class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]"></textarea>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex items-center space-x-3 text-xs">
-                        <select id="select-new-post-tag" class="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 text-[#202124]">
-                            <option value="#Deadline">#Deadline</option>
-                            <option value="#MentalHealth">#MentalHealth</option>
-                            <option value="#Focus">#Focus</option>
-                            <option value="#Recovery">#Recovery</option>
-                            <option value="#General">#General</option>
-                        </select>
-                        <label class="flex items-center space-x-1.5 text-[#6F6B68] cursor-pointer">
-                            <input id="checkbox-new-post-anon" type="checkbox" checked class="text-[#FF6B2C] focus:ring-[#FF6B2C] rounded">
-                            <span>Post Anonymously</span>
-                        </label>
+            <!-- Section Tabs: Community Feed vs. Direct Messages -->
+            <div class="flex items-center space-x-2 border-b border-[#EAE4DF] pb-2 overflow-x-auto">
+                <button type="button" 
+                        id="tab-community-feed" 
+                        data-community-tab="feed"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-[#FFE9DC] text-[#B83D08] cursor-pointer whitespace-nowrap shrink-0">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                    </svg>
+                    <span id="label-tab-community-feed">Community Feed</span>
+                </button>
+                <button type="button" 
+                        id="tab-community-messages" 
+                        data-community-tab="messages"
+                        class="px-3.5 py-1.5 rounded-xl text-xs font-medium text-[#6F6B68] hover:text-[#202124] hover:bg-[#F3F1EF] transition flex items-center space-x-2 cursor-pointer whitespace-nowrap shrink-0">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <span id="label-tab-community-messages">Direct Messages</span>
+                </button>
+            </div>
+
+            <!-- View 1: Community Feed -->
+            <div id="community-view-feed" class="space-y-6">
+                <!-- Share a Thought Box -->
+                <form id="form-create-post" class="p-4 bg-[#FFF8F2] border border-[#FFD2BA]/70 rounded-2xl space-y-3">
+                    <textarea id="input-new-post-content" rows="2" placeholder="Share an encouraging thought, deadline win, or ask fellow students for advice..." 
+                              class="w-full p-2.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C]"></textarea>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center space-x-3 text-xs">
+                            <select id="select-new-post-tag" class="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 text-[#202124]">
+                                <option value="#Deadline">#Deadline</option>
+                                <option value="#MentalHealth">#MentalHealth</option>
+                                <option value="#Focus">#Focus</option>
+                                <option value="#Recovery">#Recovery</option>
+                                <option value="#General">#General</option>
+                            </select>
+                            <label class="flex items-center space-x-1.5 text-[#6F6B68] cursor-pointer">
+                                <input id="checkbox-new-post-anon" type="checkbox" checked class="text-[#FF6B2C] focus:ring-[#FF6B2C] rounded">
+                                <span>Post Anonymously</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn-primary px-4 py-1.5 rounded-xl font-bold text-xs">
+                            Post to Community
+                        </button>
                     </div>
-                    <button type="submit" class="btn-primary px-4 py-1.5 rounded-xl font-bold text-xs">
-                        Post to Community
+                </form>
+
+                <!-- Posts List Container -->
+                <div id="modal-community-posts-list" class="space-y-3"></div>
+            </div>
+
+            <!-- View 2: Direct Messages (Structural UI Skeleton) -->
+            <div id="community-view-messages" class="space-y-4 hidden">
+                <!-- Direct Messages Header Actions -->
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+                    <div class="relative flex-1">
+                        <svg class="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input type="text" 
+                               id="input-search-direct-messages" 
+                               placeholder="Search conversations..." 
+                               class="w-full pl-9 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#EAE4DF] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] focus:border-[#FF6B2C] transition">
+                    </div>
+                    <button type="button" 
+                            id="btn-new-direct-message" 
+                            class="btn-primary px-3.5 py-2 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shrink-0 transition cursor-pointer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span id="label-new-message-btn">New Message</span>
                     </button>
                 </div>
-            </form>
 
-            <!-- Posts List Container -->
-            <div id="modal-community-posts-list" class="space-y-3"></div>
+                <!-- Structural Skeleton Empty State (No fabricated conversations, honest UI skeleton) -->
+                <div id="direct-messages-empty-state" class="py-12 px-6 flex flex-col items-center justify-center text-center bg-[#FFFDFB] border border-dashed border-[#EAE4DF] rounded-2xl space-y-3.5">
+                    <div class="w-12 h-12 rounded-2xl bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center shadow-xs">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                    </div>
+                    <div class="max-w-sm space-y-1">
+                        <h4 id="label-dm-empty-title" class="font-heading text-sm font-bold text-[#202124]">No messages yet</h4>
+                        <p id="label-dm-empty-desc" class="text-xs text-[#6F6B68] leading-relaxed">
+                            Direct, private conversations with peer mentors and students in the Tempo community will appear here. Start a quiet conversation whenever you need advice or support.
+                        </p>
+                    </div>
+                    <button type="button" 
+                            id="btn-start-first-dm" 
+                            class="px-4 py-2 text-xs font-bold text-[#B83D08] bg-[#FFE9DC] hover:bg-[#FFD9C2] rounded-xl transition cursor-pointer">
+                        <span id="label-start-conversation-btn">Start a conversation</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2188,6 +3325,17 @@
                     <label id="auth-reg-password-label" for="reg-password" class="block text-xs font-semibold text-gray-700 mb-1">Password <span class="text-rose-500">*</span></label>
                     <input type="password" id="reg-password" required minlength="6" placeholder="Min. 6 characters" autocomplete="new-password"
                         class="w-full p-2.5 border border-gray-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B2C]">
+                </div>
+
+                <!-- Registration Consent Checkbox (Single required, unchecked by default) -->
+                <div class="flex items-start space-x-2.5 pt-1 text-left">
+                    <input type="checkbox" id="reg-terms-consent" required class="mt-0.5 w-4 h-4 text-[#FF6B2C] border-gray-300 rounded focus:ring-[#FF6B2C] cursor-pointer accent-[#FF6B2C]">
+                    <label for="reg-terms-consent" class="text-[11px] text-[#6F6B68] leading-tight select-none cursor-pointer">
+                        <span id="auth-reg-terms-lead">I agree to Tempo's</span>
+                        <a href="#terms" id="reg-terms-link" class="text-[#FF6B2C] hover:underline font-medium">Terms of Service</a>
+                        <span id="auth-reg-and-lead">and</span>
+                        <a href="#privacy" id="reg-privacy-link" class="text-[#FF6B2C] hover:underline font-medium">Privacy Policy</a>.
+                    </label>
                 </div>
 
                 <div class="pt-2">
@@ -2502,21 +3650,83 @@
         </div>
     </div>
 
-    <!-- Global App Footer -->
-    <footer class="mt-auto border-t border-[#E8E4E1] bg-white py-8 px-4 text-center">
-        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center space-x-3">
-                <img src="assets/tempo-logo.png" alt="Tempo" class="h-8 w-auto object-contain">
-                <span class="font-heading font-extrabold text-base text-[#202124] tracking-tight">Tempo</span>
-                <span class="text-xs text-[#6F6B68]">| Academic Stress &amp; Deadline Triage</span>
+    <!-- ===================================================================
+         TERMS OF SERVICE MODAL (Structural UI Entry Point)
+         =================================================================== -->
+    <div id="modal-terms-policy" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden policy-modal-overlay">
+        <div class="tempo-card max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 sm:p-8 space-y-4 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-policy-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer">✕</button>
+            <div class="flex items-center space-x-2 pb-2 border-b border-[#F0ECE9]">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-6 w-auto object-contain">
+                <h3 class="font-heading text-lg font-bold text-[#202124]">Điều khoản dịch vụ (Terms of Service)</h3>
             </div>
-            <p class="text-xs text-[#6F6B68]">
-                Confidential peer wellbeing support. Not a replacement for emergency or psychiatric services.
-            </p>
-            <div class="flex items-center space-x-3 text-xs">
-                <button onclick="window.TempoEmergencySupport.openSOS()" class="text-[#D92D20] font-bold hover:underline">SOS · Immediate Support</button>
-                <span class="text-gray-300">•</span>
-                <span class="text-[#6F6B68]">© 2026 Tempo</span>
+            <div class="text-xs text-[#6F6B68] space-y-3 leading-relaxed">
+                <p>Chào mừng bạn đến với Tempo. Khi truy cập và sử dụng dịch vụ của Tempo, bạn đồng ý tuân thủ các quy định và điều khoản sử dụng chung.</p>
+                <div class="p-3.5 rounded-2xl bg-[#FFF9F4] border border-[#FFD2BA] space-y-1">
+                    <p class="font-bold text-[#B83D08]">Cam kết hỗ trợ sức khỏe tinh thần đồng cấp</p>
+                    <p>Tempo là nền tảng hỗ trợ tự quản lý căng thẳng và đồng cấp sinh viên, không thay thế cho dịch vụ y tế, cấp cứu hoặc điều trị tâm thần chuyên nghiệp.</p>
+                </div>
+                <p>Tài liệu điều khoản đầy đủ đang được hoàn thiện về mặt pháp lý và sẽ được công bố chính thức cùng phiên bản hoàn chỉnh của ứng dụng.</p>
+            </div>
+            <div class="pt-2 text-right">
+                <button type="button" class="btn-close-policy-modal px-5 py-2.5 rounded-xl text-xs font-bold bg-[#F3F1EF] text-[#202124] hover:bg-[#EAE4DF] cursor-pointer">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================
+         PRIVACY POLICY MODAL (Structural UI Entry Point)
+         =================================================================== -->
+    <div id="modal-privacy-policy" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden policy-modal-overlay">
+        <div class="tempo-card max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 sm:p-8 space-y-4 bg-white rounded-3xl shadow-2xl relative">
+            <button class="btn-close-policy-modal absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer">✕</button>
+            <div class="flex items-center space-x-2 pb-2 border-b border-[#F0ECE9]">
+                <img src="assets/tempo-logo.png" alt="Tempo" class="h-6 w-auto object-contain">
+                <h3 class="font-heading text-lg font-bold text-[#202124]">Chính sách quyền riêng tư (Privacy Policy)</h3>
+            </div>
+            <div class="text-xs text-[#6F6B68] space-y-3 leading-relaxed">
+                <p>Tempo coi trọng quyền riêng tư và sự an toàn dữ liệu của bạn. Chúng tôi cam kết bảo vệ thông tin cá nhân và dữ liệu tự đánh giá của sinh viên.</p>
+                <div class="p-3.5 rounded-2xl bg-[#FFF9F4] border border-[#FFD2BA] space-y-1">
+                    <p class="font-bold text-[#B83D08]">Nguyên tắc bảo mật dữ liệu</p>
+                    <p>Dữ liệu tự đánh giá, cảm xúc và kế hoạch học tập của bạn được lưu trữ bảo mật và không bao giờ được chia sẻ với bên thứ ba vì mục đích thương mại.</p>
+                </div>
+                <p>Tài liệu chính sách bảo mật chi tiết đang được cập nhật và sẽ hiển thị đầy đủ trong bản phát hành tới.</p>
+            </div>
+            <div class="pt-2 text-right">
+                <button type="button" class="btn-close-policy-modal px-5 py-2.5 rounded-xl text-xs font-bold bg-[#F3F1EF] text-[#202124] hover:bg-[#EAE4DF] cursor-pointer">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global App Footer -->
+    <footer id="app-footer" class="mt-auto border-t border-[#E8E4E1] bg-[#fefaf4] pt-7 pb-20 md:pb-7 px-4 sm:px-6 lg:px-8 text-left" style="background-color: #fefaf4;">
+        <div class="max-w-7xl mx-auto tempo-footer-container min-[1120px]:flex-row min-[1120px]:items-center justify-between gap-3.5 min-[1120px]:gap-6 text-left">
+            <!-- 1. Brand & Descriptor -->
+            <div class="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
+                <img src="assets/tempo-footer-logo.png" alt="Tempo" class="h-10 sm:h-11 w-auto object-contain shrink-0">
+                <span class="text-xs text-[#6F6B68] whitespace-nowrap">| Academic Stress &amp; Deadline Triage</span>
+            </div>
+
+            <!-- 2. Disclaimer (Flexible middle item taking remaining space) -->
+            <div class="tempo-footer-disclaimer min-[1120px]:flex-1 min-[1120px]:max-w-2xl text-left">
+                <p class="text-xs text-[#6F6B68] leading-relaxed text-left">
+                    Confidential peer wellbeing support. Not a replacement for emergency or psychiatric services.
+                </p>
+            </div>
+
+            <!-- 3. Legal Links, SOS, Copyright -->
+            <div class="flex items-center flex-wrap gap-x-3 gap-y-1.5 text-xs text-[#6F6B68] shrink-0 text-left">
+                <a href="#terms" id="footer-terms-link" class="text-[#6F6B68] hover:text-[#202124] hover:underline whitespace-nowrap">Terms of Service</a>
+                <span class="text-gray-300 select-none">•</span>
+                <a href="#privacy" id="footer-privacy-link" class="text-[#6F6B68] hover:text-[#202124] hover:underline whitespace-nowrap">Privacy Policy</a>
+                <span class="text-gray-300 select-none">•</span>
+                <button type="button" onclick="window.TempoEmergencySupport.openSOS()" class="text-[#D92D20] font-bold hover:underline whitespace-nowrap cursor-pointer">SOS · Immediate Support</button>
+                <span class="text-gray-300 select-none">•</span>
+                <span class="whitespace-nowrap">© 2026 Tempo</span>
             </div>
         </div>
     </footer>
@@ -2554,6 +3764,7 @@
     <script src="tempoTools.js"></script>
     <script src="learnSolve.js"></script>
     <script src="mode.js"></script>
+    <script src="personalSpace.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

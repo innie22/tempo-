@@ -43,6 +43,7 @@ window.TempoApp = (function() {
         }
 
         if (window.TempoFocusZone) window.TempoFocusZone.init();
+        if (window.TempoPersonalSpace) window.TempoPersonalSpace.init();
 
         // 5. Initialize Mode system with hydrated plan and auth state
         if (window.TempoMode) {
@@ -118,7 +119,14 @@ window.TempoApp = (function() {
         updateRoleUI();
     }
 
-    function navigateTo(tabId) {
+    function navigateTo(tabId, subTab) {
+        if (tabId === 'what-is-tempo') {
+            tabId = 'about';
+        }
+        if (tabId === 'hub' || tabId === 'learn-solve') {
+            tabId = 'learn';
+        }
+
         // Shared Authenticated Tool: Strack (Self-check)
         if (tabId === 'strack' || tabId === 'stress-check') {
             if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
@@ -151,6 +159,69 @@ window.TempoApp = (function() {
             return;
         }
 
+        // Shared Authenticated Area: Personal Space (Saved, Library, Account, Settings)
+        if (tabId === 'personal-space') {
+            if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
+                const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
+                if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
+                    window.TempoMode.setPendingIntent({
+                        destination: 'personal-space',
+                        action: 'navigate',
+                        source: src,
+                        requiredParams: { tab: subTab || 'saved' },
+                        type: 'tool',
+                        tool: 'personal-space',
+                        sourceContext: src
+                    });
+                }
+                if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                    window.TempoAuth.openSignInModal();
+                }
+                if (typeof showToast === 'function') {
+                    showToast("Please sign in or create an account to access Personal Space.");
+                }
+                return;
+            }
+        }
+
+        // Direct Messages route alias
+        if (tabId === 'direct-messages') {
+            navigateTo('posts', 'messages');
+            return;
+        }
+
+        // Tempo Posts / Direct Messages (Community modal experience)
+        if (tabId === 'posts') {
+            const section = subTab === 'messages' ? 'messages' : 'feed';
+            if (section === 'messages' && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
+                const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
+                if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
+                    window.TempoMode.setPendingIntent({
+                        destination: 'posts',
+                        action: 'navigate',
+                        source: src,
+                        requiredParams: { section: 'messages' },
+                        type: 'tool',
+                        tool: 'posts',
+                        sourceContext: src
+                    });
+                }
+                if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
+                    window.TempoAuth.openSignInModal();
+                }
+                if (typeof showToast === 'function') {
+                    showToast("Please sign in or create an account to view Direct Messages.");
+                }
+                return;
+            }
+
+            if (window.TempoCommunity && typeof window.TempoCommunity.openCommunityModal === 'function') {
+                window.TempoCommunity.openCommunityModal(section);
+            }
+            window.location.hash = section === 'messages' ? '#posts?section=messages' : '#posts';
+            return;
+        }
+
         // Shared Assessment Tool: Ucheck
         if (tabId === 'unclear-mode') {
             if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
@@ -172,7 +243,12 @@ window.TempoApp = (function() {
         }
 
         currentTab = tabId;
-        window.location.hash = `#${tabId}`;
+        if (tabId === 'personal-space') {
+            const activeSub = subTab || (window.TempoPersonalSpace && window.TempoPersonalSpace.getActiveTab()) || 'saved';
+            window.location.hash = `#personal-space?tab=${activeSub}`;
+        } else {
+            window.location.hash = `#${tabId}`;
+        }
 
         // Hide all screens
         document.querySelectorAll('.screen-container').forEach(screen => {
@@ -180,7 +256,7 @@ window.TempoApp = (function() {
         });
 
         // Show active screen
-        const targetScreen = document.getElementById(`screen-${tabId}`);
+        const targetScreen = document.getElementById(`screen-${tabId}`) || (tabId === 'learn' ? document.getElementById('screen-hub') : null);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
         }
@@ -267,15 +343,42 @@ window.TempoApp = (function() {
         if (tabId === 'volunteer-dashboard' && window.TempoVolunteer) {
             window.TempoVolunteer.render();
         }
+        if (tabId === 'about') {
+            initAboutStackedCards();
+        }
+        if (tabId === 'learn') {
+            if (window.TempoKnowledge && typeof window.TempoKnowledge.init === 'function') {
+                window.TempoKnowledge.init();
+            }
+        }
+        if (tabId === 'personal-space' && window.TempoPersonalSpace) {
+            window.TempoPersonalSpace.selectTab(subTab || 'saved', false);
+        }
 
         // Scroll top gently
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function handleHashChange() {
-        const hash = window.location.hash.replace('#', '');
-        if (hash) {
-            navigateTo(hash);
+        const rawHash = window.location.hash.replace('#', '');
+        if (!rawHash) return;
+
+        if (rawHash.startsWith('personal-space')) {
+            const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
+            const params = new URLSearchParams(queryPart);
+            const subTab = params.get('tab') || 'saved';
+            navigateTo('personal-space', subTab);
+        } else if (rawHash.startsWith('posts')) {
+            const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
+            const params = new URLSearchParams(queryPart);
+            const section = params.get('section') || 'feed';
+            navigateTo('posts', section);
+        } else if (rawHash.startsWith('direct-messages')) {
+            navigateTo('posts', 'messages');
+        } else if (rawHash === 'hub' || rawHash === 'learn-solve' || rawHash === 'learn') {
+            navigateTo('learn');
+        } else {
+            navigateTo(rawHash);
         }
     }
 
@@ -427,7 +530,7 @@ window.TempoApp = (function() {
                         category: 'Guide',
                         desc: art.summary.slice(0, 80) + '...',
                         action: () => { 
-                            navigateTo('hub');
+                            navigateTo('learn');
                             if (window.TempoKnowledge) window.TempoKnowledge.openArticle(art.id);
                         }
                     });
@@ -614,25 +717,95 @@ window.TempoApp = (function() {
     }
 
     // =========================================================================
-    // WHAT IS TEMPO MODAL
+    // ABOUT TEMPO PAGE INTERACTIONS
     // =========================================================================
     function initWhatIsTempoModal() {
         const navBtn = document.getElementById('nav-link-what-is-tempo');
-        const modal = document.getElementById('modal-what-is-tempo');
-        const closeBtn = document.getElementById('btn-close-what-is-tempo');
-        if (navBtn && modal) {
+        if (navBtn) {
             navBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                modal.classList.remove('hidden');
-                document.body.classList.add('overflow-hidden');
+                navigateTo('about');
             });
         }
+        const closeBtn = document.getElementById('btn-close-what-is-tempo');
+        const modal = document.getElementById('modal-what-is-tempo');
         if (closeBtn && modal) {
             closeBtn.addEventListener('click', () => {
                 modal.classList.add('hidden');
                 document.body.classList.remove('overflow-hidden');
             });
         }
+    }
+
+    let stackedCardsObserverInitialized = false;
+    function initAboutStackedCards() {
+        const container = document.querySelector('.about-stacked-cards-container');
+        if (!container) return;
+
+        // Skip scroll transforms if reduced motion is preferred
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            return;
+        }
+
+        const wrappers = Array.from(container.querySelectorAll('.about-stacked-card-wrapper'));
+        if (wrappers.length === 0) return;
+
+        function updateStackedCards() {
+            if (window.innerWidth < 640) {
+                wrappers.forEach(w => {
+                    const card = w.querySelector('.about-stacked-card');
+                    if (card) {
+                        card.style.transform = '';
+                        card.style.filter = '';
+                    }
+                });
+                return;
+            }
+
+            wrappers.forEach((wrapper, index) => {
+                const card = wrapper.querySelector('.about-stacked-card');
+                if (!card) return;
+
+                if (index < wrappers.length - 1) {
+                    const nextWrapper = wrappers[index + 1];
+                    const nextRect = nextWrapper.getBoundingClientRect();
+                    const currentRect = wrapper.getBoundingClientRect();
+
+                    const overlapDistance = currentRect.top - nextRect.top;
+                    if (overlapDistance <= 0) {
+                        card.style.transform = 'scale(1)';
+                        card.style.filter = 'brightness(1)';
+                    } else {
+                        const progress = Math.min(1, Math.max(0, overlapDistance / (currentRect.height || 260)));
+                        const scale = 1 - progress * 0.04;
+                        const brightness = 1 - progress * 0.03;
+                        card.style.transform = `scale(${scale.toFixed(4)})`;
+                        card.style.filter = `brightness(${brightness.toFixed(4)})`;
+                    }
+                } else {
+                    card.style.transform = 'scale(1)';
+                    card.style.filter = 'brightness(1)';
+                }
+            });
+        }
+
+        if (!stackedCardsObserverInitialized) {
+            stackedCardsObserverInitialized = true;
+            let ticking = false;
+            window.addEventListener('scroll', () => {
+                if (!ticking) {
+                    window.requestAnimationFrame(() => {
+                        updateStackedCards();
+                        ticking = false;
+                    });
+                    ticking = true;
+                }
+            }, { passive: true });
+
+            window.addEventListener('resize', updateStackedCards, { passive: true });
+        }
+
+        updateStackedCards();
     }
 
     function escapeHtml(str) {
@@ -651,6 +824,7 @@ window.TempoApp = (function() {
         showToast,
         triggerConfetti,
         selectRoutingState,
+        initAboutStackedCards,
         openRoutingModal: () => {
             const m = document.getElementById('modal-routing-selection');
             if (!m) return;

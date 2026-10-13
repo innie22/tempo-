@@ -48,17 +48,24 @@
 }
 
 body {
-    background-color: var(--tempo-cream);
+    background-color: #F6F0EB;
     color: var(--tempo-ink);
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Arimo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: 'Arimo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     color: var(--tempo-ink);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
+}
+
+/* Explicit Arimo override for Entry Home */
+.font-arimo,
+[data-tempo-ui="entry-home"],
+[data-tempo-ui="entry-home"] * {
+    font-family: 'Arimo', system-ui, sans-serif !important;
 }
 
 /* Custom Soft Scrollbar */
@@ -252,9 +259,27 @@ input:focus, textarea:focus, select:focus {
 
 /* Header & Brand Navbar Styling */
 header,
-header nav,
-#brand-logo-container {
-    background-color: #FFFFFF !important;
+header nav {
+    background-color: #FEFAF4 !important;
+}
+
+/* Circular Flag Container for Language Selector */
+.flag-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.flag-circle img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 /* SOS Navigation Button */
@@ -337,66 +362,86 @@ header nav,
 }
 
 /* State Choice Cards (Routing Modal: Find Your Next Step) */
+.routing-modal-card {
+    background-color: #FEFAF4 !important;
+    border: 1px solid #EAE4DF !important;
+    border-radius: 28px !important;
+    box-shadow: 0 20px 48px -12px rgba(75, 55, 40, 0.12), 0 4px 16px -2px rgba(75, 55, 40, 0.04) !important;
+    max-width: min(48rem, calc(100vw - 1.5rem)) !important;
+    box-sizing: border-box !important;
+}
+
 .state-choice-card {
-    background-color: #FFFFFF;
-    border: 1.5px solid #EAE4DF;
-    border-radius: 22px;
-    transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    border-radius: 24px;
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
     cursor: pointer;
     outline: none;
+    position: relative;
 }
 
 .state-choice-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px -4px rgba(32, 33, 36, 0.06);
+    box-shadow: 0 8px 24px -6px rgba(75, 55, 40, 0.08);
 }
 
-/* Card A: Emergency / Acute Action */
+/* Card A: Emergency / Acute Action (Urgent Mode - Soft Warm Peach / Terracotta) */
+.state-choice-card--urgent {
+    background-color: #FAF2EB;
+    border: 1.5px solid #ECD5C7;
+}
 .state-choice-card--urgent:hover {
     border-color: #FF6B2C;
-    background-color: #FFFDFB;
+    background-color: #F7EAE1;
 }
 .state-choice-card--urgent:focus-visible {
     border-color: #FF6B2C;
-    outline: 2px solid #FF6B2C;
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.28);
 }
 
-/* Card B: Recovery / Recharge */
+/* Card B: Recovery / Recharge (Recovery Mode - Calm Muted Sage) */
+.state-choice-card--recovery {
+    background-color: #EDF4EF;
+    border: 1.5px solid #CFE2D5;
+}
 .state-choice-card--recovery:hover {
     border-color: #2E7D5B;
-    background-color: #FBFDFB;
+    background-color: #E5EFE8;
 }
 .state-choice-card--recovery:focus-visible {
     border-color: #2E7D5B;
-    outline: 2px solid #2E7D5B;
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(46, 125, 91, 0.28);
 }
 
-/* Card C: Unclear */
+/* Card C: Unclear (Unclear Mode - Warm Sand / Neutral Cream) */
+.state-choice-card--unclear {
+    background-color: #F8F3EA;
+    border: 1.5px solid #E8DEC8;
+}
 .state-choice-card--unclear:hover {
-    border-color: #D97706;
-    background-color: #FFFCF8;
+    border-color: #CA9555;
+    background-color: #F3EBDB;
 }
 .state-choice-card--unclear:focus-visible {
-    border-color: #D97706;
-    outline: 2px solid #D97706;
-    outline-offset: 2px;
+    border-color: #CA9555;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(202, 149, 85, 0.28);
 }
 
-/* Card D: Immediate Support */
+/* Card D: Immediate Support (Safety Critical - Restrained Soft Blush) */
 .state-choice-card--support {
-    background-color: #FFFDFD;
-    border-color: rgba(254, 205, 202, 0.85);
+    background-color: #FAF1F0;
+    border: 1.5px solid #F6D3CF;
 }
 .state-choice-card--support:hover {
     border-color: #D92D20;
-    background-color: #FFF9F9;
+    background-color: #F7E8E6;
 }
 .state-choice-card--support:focus-visible {
     border-color: #D92D20;
-    outline: 2px solid #D92D20;
-    outline-offset: 2px;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.28);
 }
 
 /* Emergency Mode Interactive Pills & Timeline Cards */
@@ -737,5 +782,114 @@ header nav,
     background-color: rgba(255, 255, 255, 0.18);
 }
 
+/* ==========================================================================
+   ABOUT TEMPO PAGE STYLES
+   ========================================================================== */
 
+.about-stacked-cards-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
 
+@media (min-width: 640px) {
+    .about-stacked-cards-container {
+        gap: 0;
+    }
+    .about-stacked-card-wrapper {
+        position: sticky;
+        top: 5.5rem;
+        margin-bottom: 6rem;
+        will-change: transform;
+    }
+    .about-stacked-card-wrapper:nth-child(1) {
+        top: 5.5rem;
+        z-index: 10;
+    }
+    .about-stacked-card-wrapper:nth-child(2) {
+        top: 6.75rem;
+        z-index: 20;
+    }
+    .about-stacked-card-wrapper:nth-child(3) {
+        top: 8rem;
+        z-index: 30;
+    }
+    .about-stacked-card-wrapper:nth-child(4) {
+        top: 9.25rem;
+        z-index: 40;
+        margin-bottom: 2.5rem;
+    }
+    .about-stacked-card {
+        transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, filter 0.22s ease;
+        transform-origin: top center;
+    }
+}
+
+/* Accessible reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .about-stacked-card-wrapper {
+        position: static !important;
+        margin-bottom: 2rem !important;
+        transform: none !important;
+        transition: none !important;
+    }
+    .about-stacked-card {
+        transform: none !important;
+        transition: none !important;
+        filter: none !important;
+    }
+}
+
+/* ==========================================================================
+   PERSONAL SPACE & ACCOUNT ECOSYSTEM STYLING
+   ========================================================================== */
+
+/* Hide scrollbar utility for mobile tab strips */
+.scrollbar-none::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Smooth transition for Personal Space sidebar buttons */
+[data-ps-tab] {
+    transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+/* Subtab transitions */
+[data-library-subtab],
+[data-saved-filter] {
+    transition: all 0.18s ease;
+}
+
+/* Policy Modals Backdrop Blur */
+.policy-modal-overlay {
+    backdrop-filter: blur(4px);
+    background-color: rgba(32, 33, 36, 0.45);
+}
+
+/* ==========================================================================
+   GLOBAL APP FOOTER REFINED RESPONSIVE LAYOUT
+   ========================================================================== */
+.tempo-footer-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: left;
+    gap: 0.875rem;
+}
+
+@media (min-width: 1120px) {
+    .tempo-footer-container {
+        flex-direction: row;
+        align-items: center;
+        gap: 1.5rem;
+    }
+    .tempo-footer-disclaimer {
+        flex: 1 1 0%;
+        max-width: 42rem;
+    }
+}

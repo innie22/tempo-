@@ -200,7 +200,7 @@ window.TempoMode = (function() {
             MODES.EMERGENCY, MODES.RECOVERY, 'emergency', 'recovery', 'urgent', 'urmode', 'rmode',
             'ucheck', 'unclear', 'unclear-mode',
             'strack',
-            'plan-workspace', 'stress-check', 'routine', 'today'
+            'plan-workspace', 'stress-check', 'routine', 'today', 'personal-space', 'posts', 'direct-messages'
         ];
         if (!validDests.includes(dest)) return false;
 
@@ -928,8 +928,9 @@ window.TempoMode = (function() {
                 // Resume tool without forcing emergency mode
                 const targetDest = intent.destination || intent.tool;
                 if (targetDest && window.TempoApp) {
-                    window.TempoApp.navigateTo(targetDest);
-                    const toolName = targetDest === 'plan-workspace' ? 'Working Plan' : (targetDest === 'stress-check' ? 'Self-check' : 'tool');
+                    const sub = intent.requiredParams && (intent.requiredParams.tab || intent.requiredParams.section);
+                    window.TempoApp.navigateTo(targetDest, sub);
+                    const toolName = targetDest === 'plan-workspace' ? 'Working Plan' : (targetDest === 'personal-space' ? 'Personal Space' : (targetDest === 'posts' ? (sub === 'messages' ? 'Direct Messages' : 'Community Posts') : (targetDest === 'stress-check' ? 'Self-check' : 'tool')));
                     window.TempoApp.showToast(`Signed in. Resuming ${toolName}.`);
                 }
                 return true;
@@ -1914,216 +1915,262 @@ window.TempoMode = (function() {
         `;
     }
 
-    function renderEntryHomeHTML() {
-        const posts = (window.TempoCommunity && typeof window.TempoCommunity.getAllPosts === 'function')
-            ? window.TempoCommunity.getAllPosts().slice(0, 2)
-            : [];
-        const postsCardsHTML = (posts.length > 0 && window.TempoCommunity && typeof window.TempoCommunity.renderPostCardHTML === 'function')
-            ? posts.map(p => window.TempoCommunity.renderPostCardHTML(p)).join('')
-            : '';
+    function renderAssetPlaceholder(title, subtitle = '', sizeClass = 'w-24 h-24 sm:w-28 sm:h-24', isWhiteTheme = false) {
+        const borderClass = isWhiteTheme ? 'border-white/50 bg-white/20 text-white' : 'border-[#202124]/20 bg-white/50 text-[#202124]';
+        const badgeBg = isWhiteTheme ? 'bg-white/30 text-white' : 'bg-white/80 text-[#202124]/70';
+        const textClass = isWhiteTheme ? 'text-white' : 'text-[#202124]/80';
+        const subtextClass = isWhiteTheme ? 'text-white/85' : 'text-[#202124]/55';
 
         return `
-            <div class="space-y-8 sm:space-y-10" data-tempo-ui="entry-home">
-                <!-- ROW 1: DESKTOP 2-COLUMN (PRIMARY ENTRY CARD + COMMUNITY PANEL) -->
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
-                    <!-- LEFT: Large Primary Entry Card (Substantially wider than right panel) -->
-                    <div class="lg:col-span-8 flex flex-col">
-                        <div class="relative bg-gradient-to-br from-[#FFF9F5] via-[#FFF3EB] to-[#FFEFE6] border border-[#FFD2BA] rounded-3xl p-7 sm:p-10 lg:p-12 shadow-xs overflow-hidden flex flex-col justify-between flex-1" data-tempo-ui="entry-card-primary">
-                            <!-- Subtle warm glowing decorative shape in background (matching screenshot) -->
-                            <div class="absolute -right-16 -top-16 w-72 h-72 bg-[#FF6B2C]/10 rounded-full blur-3xl pointer-events-none"></div>
-                            <div class="absolute right-4 bottom-0 w-80 h-80 bg-gradient-to-tl from-[#FF6B2C]/15 via-[#FF8A50]/10 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+            <div class="${sizeClass} rounded-2xl border-2 border-dashed ${borderClass} flex flex-col items-center justify-center p-2 text-center shrink-0 select-none shadow-2xs" 
+                 title="Illustration Placeholder: ${title}">
+                <div class="w-6 h-6 rounded-full ${badgeBg} flex items-center justify-center text-xs mb-1 shadow-2xs">
+                    🌱
+                </div>
+                <span class="text-[10px] font-bold ${textClass} leading-tight">${title}</span>
+                ${subtitle ? `<span class="text-[8px] ${subtextClass} leading-tight mt-0.5">${subtitle}</span>` : ''}
+            </div>
+        `;
+    }
 
-                            <div class="relative z-10 space-y-4 sm:space-y-5">
-                                <!-- Small Orange Welcome Eyebrow -->
-                                <span class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#FF6B2C] block">
-                                    ${window.t ? window.t('modes.default.welcomeEyebrow', {}, 'WELCOME TO TEMPO') : 'WELCOME TO TEMPO'}
+    function renderEntryHomeHTML() {
+        let posts = (window.TempoCommunity && typeof window.TempoCommunity.getAllPosts === 'function')
+            ? window.TempoCommunity.getAllPosts()
+            : [];
+        if (!Array.isArray(posts) || posts.length === 0) {
+            if (window.TempoCommunity && typeof window.TempoCommunity.getInitialPosts === 'function') {
+                posts = window.TempoCommunity.getInitialPosts();
+            }
+        }
+        const previewPosts = (Array.isArray(posts) && posts.length > 0) ? posts.slice(0, 2) : [];
+        let postsCardsHTML = '';
+        if (previewPosts.length > 0 && window.TempoCommunity && typeof window.TempoCommunity.renderPostCardHTML === 'function') {
+            postsCardsHTML = previewPosts.map(p => window.TempoCommunity.renderPostCardHTML(p)).join('');
+        }
+
+        return `
+            <div class="space-y-6 sm:space-y-8 font-arimo" data-tempo-ui="entry-home">
+                <!-- ==============================================================
+                     UPPER SECTION: DESKTOP 2-COLUMN (LEFT: HERO + 2x2 GRID; RIGHT: COMMUNITY + BREATHING)
+                     ============================================================== -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <!-- LEFT COLUMN (Larger): Hero Card + 2x2 Tool Cards Grid -->
+                    <div class="lg:col-span-7 xl:col-span-8 flex flex-col space-y-5">
+                        <!-- Hero / Welcome Card -->
+                        <div class="relative bg-[#FEFAF4] border border-[#EAE4DF] rounded-3xl sm:rounded-[28px] px-7 sm:px-9 py-5 sm:py-5.5 shadow-xs flex flex-col justify-between w-full max-w-[750px] xl:w-[750px] xl:h-[250px] xl:translate-x-[25px]" data-tempo-ui="entry-hero-card">
+                            <div class="space-y-1.5">
+                                <span class="text-[18.67px] sm:text-[21.33px] font-bold text-[#D99E87] block tracking-wide translate-y-[7px]">
+                                    Welcome to Tempo
                                 </span>
-
-                                <!-- Large Dominant Question -->
-                                <h1 class="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#202124] tracking-tight leading-tight max-w-xl">
-                                    ${window.t ? window.t('modes.default.whatDoYouNeed', {}, 'What do you need right now?') : 'What do you need right now?'}
+                                <h1 class="text-[32px] sm:text-[38px] lg:text-[43px] font-extrabold text-[#726D69] tracking-tight leading-[1.08] max-w-full xl:translate-y-[26px]">
+                                    What do you need right now?
                                 </h1>
+                            </div>
 
-                                <!-- Supporting Explanatory Copy -->
-                                <p class="text-sm sm:text-base text-[#6F6B68] leading-relaxed max-w-lg">
-                                    ${window.t ? window.t('modes.default.explainCopy', {}, 'You don’t need to figure it out alone.<br class="hidden sm:inline"> Tell Tempo your current situation, and we’ll help you find the next step.') : 'You don’t need to figure it out alone.<br class="hidden sm:inline"> Tell Tempo your current situation, and we’ll help you find the next step.'}
-                                </p>
+                            <div class="pt-1">
+                                <button type="button"
+                                        id="btn-hero-figure-start"
+                                        onclick="if (window.TempoApp && typeof window.TempoApp.openRoutingModal === 'function') { window.TempoApp.openRoutingModal(); } else if (window.TempoMode && typeof window.TempoMode.openHelpSelectionModal === 'function') { window.TempoMode.openHelpSelectionModal(); } else { const m = document.getElementById('modal-routing-selection'); if (m) { m.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); } }"
+                                        class="px-6 py-2.5 rounded-2xl bg-[#D99E87] hover:bg-[#C88D76] text-[#FEFAF4] font-bold text-sm sm:text-base shadow-sm transition inline-flex items-center space-x-2.5 cursor-pointer">
+                                    <span>Help me figure out where to start</span>
+                                    <span class="text-base sm:text-lg text-[#FEFAF4]">⟶</span>
+                                </button>
+                            </div>
+                        </div>
 
-                                <!-- Large Orange CTA Button -->
-                                <div class="pt-2 sm:pt-3">
-                                    <button type="button"
-                                            id="btn-hero-figure-start"
-                                            onclick="if (window.TempoApp && typeof window.TempoApp.openRoutingModal === 'function') { window.TempoApp.openRoutingModal(); } else if (window.TempoMode && typeof window.TempoMode.openHelpSelectionModal === 'function') { window.TempoMode.openHelpSelectionModal(); } else { const m = document.getElementById('modal-routing-selection'); if (m) { m.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); } }"
-                                            class="btn-primary px-7 sm:px-8 py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base shadow-sm hover:shadow-md transition cursor-pointer inline-flex items-center space-x-2.5">
-                                        <span>${window.t ? window.t('modes.default.helpMeStart', {}, 'Help me figure out where to start') : 'Help me figure out where to start'}</span>
-                                        <span class="text-base sm:text-lg">→</span>
-                                    </button>
+                        <!-- 2x2 Grid of Tool Cards Below Hero -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 w-full max-w-[720px] mx-auto xl:ml-[40px]" data-tempo-ui="entry-tool-grid">
+                            <!-- Tool 1: Quick Relief -->
+                            <div onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
+                                 class="bg-[#E6EDE7] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] xl:w-[350px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group"
+                                 title="Quick Relief">
+                                <div class="flex-1 min-w-0 pr-1.5">
+                                    <h3 class="text-[22px] sm:text-[25px] font-bold text-[#92A491] mb-1 group-hover:text-[#7D8F7C] transition leading-tight whitespace-nowrap">
+                                        Quick Relief
+                                    </h3>
+                                    <p class="text-[14px] sm:text-[16px] text-[#92A491] leading-[1.35]">
+                                        Quick ways to ease stress and feel better.
+                                    </p>
+                                </div>
+                                <img src="assets/quick-relief-mascot-transparent.png"
+                                     alt="Quick Relief Mascot"
+                                     class="w-[150px] h-[150px] object-contain shrink-0 select-none pointer-events-none" />
+                            </div>
+
+                            <!-- Tool 2: Focus Now (Illustration on left, text on right) -->
+                            <div onclick="if (window.TempoFocusZone && window.TempoFocusZone.openQuickEntry) { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoTriage && window.TempoTriage.launchFocusMode) { window.TempoTriage.launchFocusMode(); }"
+                                 class="bg-[#D7A690] border border-[#000000] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] xl:w-[350px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group"
+                                 title="Focus Now">
+                                <img src="assets/focus-now-mascot.png"
+                                     alt="Focus Now Mascot"
+                                     class="w-[170px] h-[170px] -translate-x-[33px] -mr-[10px] object-contain shrink-0 select-none pointer-events-none" />
+                                <div class="flex-1 min-w-0 text-left -translate-x-[28px] sm:w-[168px] sm:min-w-[168px]">
+                                    <h3 class="text-[25px] sm:text-[29px] font-bold text-white mb-1 group-hover:text-stone-100 transition leading-tight whitespace-nowrap">
+                                        Focus Now
+                                    </h3>
+                                    <p class="text-[14px] sm:text-[16px] text-white/90 leading-[1.35]">
+                                        Your own personalized workspace.
+                                    </p>
                                 </div>
                             </div>
 
-                            <!-- Small Supporting Reassurance Row -->
-                            <div class="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-semibold text-[#6F6B68] pt-6 sm:pt-8">
-                                <div class="flex items-center space-x-2">
-                                    <svg class="w-4 h-4 text-[#FF6B2C] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <circle cx="12" cy="12" r="10" stroke-width="2"/>
-                                        <polyline points="12 6 12 12 16 14" stroke-width="2"/>
-                                    </svg>
-                                    <span>${window.t ? window.t('modes.default.takesLessOneMin', {}, 'Takes less than 1 minute') : 'Takes less than 1 minute'}</span>
+                            <!-- Tool 3: Learn & Solve -->
+                            <div onclick="if (window.TempoApp) { window.TempoApp.navigateTo('learn'); } else { window.location.hash = '#learn'; }"
+                                 class="bg-[#FBEDD9] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] xl:w-[350px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative"
+                                 title="Learn & Solve">
+                                <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                    <h3 class="text-[22px] sm:text-[25px] font-bold text-[#736F68] mb-1 group-hover:text-[#5B5751] transition leading-tight whitespace-nowrap">
+                                        Learn & Solve
+                                    </h3>
+                                    <p class="text-[14px] sm:text-[16px] text-[#736F68] leading-[1.35] max-w-[155px]">
+                                        Tips and tools to help you cope.
+                                    </p>
                                 </div>
-                                <div class="flex items-center space-x-2">
-                                    <svg class="w-4 h-4 text-[#FF6B2C] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                    </svg>
-                                    <span>${window.t ? window.t('modes.default.personalizedGuidance', {}, 'Personalized guidance') : 'Personalized guidance'}</span>
+                                <img src="assets/learn-solve-mascot.png"
+                                     alt="Learn & Solve Mascot"
+                                     class="h-[100px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1 sm:-mr-2 translate-y-1" />
+                            </div>
+
+                            <!-- Tool 4: Tempo break -->
+                            <div onclick="if (window.TempoTools && window.TempoTools.openBreak) { window.TempoTools.openBreak(); } else if (window.TempoFocusZone) { window.TempoFocusZone.openQuickEntry(); }"
+                                 class="bg-[#D3DFE4] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] xl:w-[350px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative"
+                                 title="Tempo break">
+                                <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                    <h3 class="text-[22px] sm:text-[25px] font-bold text-[#736D69] mb-1 group-hover:text-[#5B5551] transition leading-tight whitespace-nowrap">
+                                        Tempo break
+                                    </h3>
+                                    <p class="text-[14px] sm:text-[16px] text-[#736D69] leading-[1.35] max-w-[155px]">
+                                        Take a break with fun activities to unwind.
+                                    </p>
                                 </div>
+                                <img src="assets/tempo-break-mascot.png"
+                                     alt="Tempo break Mascot"
+                                     class="h-[125px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1 sm:-mr-2 translate-y-1" />
                             </div>
                         </div>
                     </div>
 
-                    <!-- RIGHT: Tempo Community Panel (Social Peer Posts) -->
-                    <div class="lg:col-span-4 flex flex-col">
-                        <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 flex-1" data-tempo-ui="entry-community-panel">
+                    <!-- RIGHT COLUMN: From the Tempo Community + Practice Breathing -->
+                    <div class="lg:col-span-5 xl:col-span-4 flex flex-col space-y-[7px]">
+                        <!-- Community Panel -->
+                        <div class="bg-[#FEFAF4] border border-[#EAE4DF] rounded-3xl sm:rounded-[28px] p-4 sm:p-5 shadow-xs flex flex-col justify-between space-y-3.5" data-tempo-ui="entry-community-panel">
                             <!-- Header -->
-                            <div class="flex items-center justify-between pb-1 border-b border-[#F0ECE9]">
-                                <div class="flex items-center space-x-2">
-                                    <div class="w-6 h-6 rounded-lg bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center text-xs shrink-0 font-bold">
-                                        💬
+                            <div class="flex items-center justify-between pb-0.5">
+                                <div class="flex items-center space-x-2.5">
+                                    <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#F6E6DE] flex items-center justify-center shrink-0">
+                                        <img src="assets/comment-symbol.png"
+                                             alt="Community"
+                                             class="w-3.5 h-auto sm:w-4 object-contain select-none pointer-events-none" />
                                     </div>
-                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124]">
-                                        ${window.t ? window.t('modes.default.fromCommunity', {}, 'From the Tempo community') : 'From the Tempo community'}
+                                    <h3 class="font-bold text-sm sm:text-base text-[#726D69] tracking-tight">
+                                        From the Tempo Community
                                     </h3>
                                 </div>
                                 <button type="button"
-                                        onclick="if (window.TempoCommunity && window.TempoCommunity.openCommunityModal) { window.TempoCommunity.openCommunityModal(); }"
-                                        class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                                    <span>${window.t ? window.t('modes.default.seeAll', {}, 'See all') : 'See all'}</span>
-                                    <span>→</span>
+                                        id="btn-see-all-posts"
+                                        onclick="if (window.TempoCommunity && window.TempoCommunity.openCommunityModal) { window.TempoCommunity.openCommunityModal(); } else if (window.TempoApp) { window.TempoApp.navigateTo('posts'); }"
+                                        class="px-3 py-1 rounded-full bg-[#F6E6DE] hover:bg-[#EED8CE] text-[#D99E87] text-xs font-bold transition flex items-center space-x-1 cursor-pointer">
+                                    <span>See all</span>
+                                    <span class="text-xs">→</span>
                                 </button>
                             </div>
 
+                            <!-- Horizontal divider below heading row -->
+                            <div class="border-b border-[#EAE4DF] w-full -mt-1 mb-0.5"></div>
+
                             <!-- Social Peer Posts Container -->
-                            <div id="homepage-community-posts-list" class="space-y-3.5 flex-1">
+                            <div id="homepage-community-posts-list" class="space-y-3 flex-1">
                                 ${postsCardsHTML}
                             </div>
+                        </div>
+
+                        <!-- Practice Breathing Card (Underneath Community Panel) -->
+                        <div onclick="if (window.TempoBreathing && window.TempoBreathing.openModal) { window.TempoBreathing.openModal(); } else if (window.TempoTriage && window.TempoTriage.openBoxBreathingModal) { window.TempoTriage.openBoxBreathingModal(); }"
+                             class="bg-[#e7ece6] border border-[#000000] rounded-3xl p-4 sm:p-5 flex items-center justify-between transition cursor-pointer group relative overflow-hidden"
+                             title="Practice Breathing">
+                            <div class="pr-1 relative z-10 flex-1 min-w-0">
+                                <h3 class="text-[20px] sm:text-[22px] xl:text-[23px] font-bold text-[#746f6a] mb-1 leading-tight whitespace-nowrap">
+                                    Practice Breathing
+                                </h3>
+                                <p class="text-xs sm:text-sm text-[#746f6a] leading-relaxed max-w-[190px]">
+                                    Take a deep breath and find your calm.
+                                </p>
+                            </div>
+                            <img src="assets/practice-breathing-mascot.png"
+                                 alt="Practice Breathing Mascot"
+                                 class="w-[110px] h-[110px] sm:w-[120px] sm:h-[120px] object-contain shrink-0 select-none pointer-events-none -mr-0.5" />
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 2: QUICK TOOLS (Spanning Main Content Width) -->
-                <div class="space-y-4 pt-2" data-tempo-ui="entry-quick-tools">
-                    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-                        <div>
-                            <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                                ${window.t ? window.t('modes.default.quickTools', {}, 'Quick Tools') : 'Quick Tools'}
+                <!-- ==============================================================
+                     LOWER SECTION: HORIZONTAL 3-COLUMN ROW (SELF-CHECK • WORK PLAN • NOTES)
+                     ============================================================== -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2" data-tempo-ui="entry-lower-section">
+                    <!-- Lower Card 1: Self-check -->
+                    <div onclick="window.TempoMode.openStrack('setup', { sourceContext: 'entry' });"
+                         class="bg-[#e6ede7] border border-[#D2E7DF] rounded-3xl sm:rounded-[28px] p-6 flex flex-col justify-start items-center text-center shadow-xs relative min-h-[220px] md:h-[230px] overflow-hidden cursor-pointer group"
+                         title="Self-check">
+                        <div class="w-full text-center">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#527668]/80 block mb-1 leading-tight text-center">
+                                Self-check
+                            </span>
+                            <h2 class="text-xl sm:text-[22px] font-extrabold text-[#527668] leading-tight mb-1.5 tracking-tight text-center mx-auto max-w-[320px]">
+                                How are you feeling today?
                             </h2>
-                            <p class="text-xs sm:text-sm text-[#6F6B68] mt-0.5">
-                                ${window.t ? window.t('modes.default.quickToolsSubtitle', {}, 'Simple tools to help you feel better and get through your day.') : 'Simple tools to help you feel better and get through your day.'}
+                            <p class="text-xs sm:text-sm text-[#628A7A] leading-normal tracking-tight text-center mx-auto max-w-[320px]">
+                                Take a moment to check in with yourself.
                             </p>
                         </div>
-                        <button type="button"
-                                onclick="if (window.TempoApp && window.TempoApp.navigateTo) { window.TempoApp.navigateTo('tools'); }"
-                                class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer shrink-0 self-start sm:self-auto">
-                            <span>${window.t ? window.t('modes.default.viewAllTools', {}, 'View all tools') : 'View all tools'}</span>
-                            <span>→</span>
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <!-- Tool 1: Focus Zone -->
-                        <div onclick="if (window.TempoFocusZone && window.TempoFocusZone.openQuickEntry) { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoTriage && window.TempoTriage.launchFocusMode) { window.TempoTriage.launchFocusMode(); }"
-                             class="bg-white border border-[#EAE4DF] hover:border-[#FFD2BA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
-                            <div class="space-y-3">
-                                <div class="w-10 h-10 rounded-2xl bg-[#FFF3EB] text-[#FF6B2C] flex items-center justify-center text-lg">
-                                    ⏰
-                                </div>
-                                <div>
-                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
-                                        ${window.t ? window.t('modes.default.focusZone', {}, 'Focus Zone') : 'Focus Zone'}
-                                    </h3>
-                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
-                                        ${window.t ? window.t('modes.default.focusZoneDesc', {}, 'Focus with intentional breaks. Default 45 min focus / 15 min rest.') : 'Focus with intentional breaks. Default 45 min focus / 15 min rest.'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end pt-1">
-                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#FFE9DC] text-stone-600 group-hover:text-[#B83D08] flex items-center justify-center text-xs transition">
-                                    →
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Tool 2: Breathing -->
-                        <div onclick="if (window.TempoBreathing && window.TempoBreathing.openModal) { window.TempoBreathing.openModal(); } else if (window.TempoTriage && window.TempoTriage.openBoxBreathingModal) { window.TempoTriage.openBoxBreathingModal(); }"
-                             class="bg-white border border-[#EAE4DF] hover:border-[#CDE9DA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
-                            <div class="space-y-3">
-                                <div class="w-10 h-10 rounded-2xl bg-[#EDF7F1] text-[#166545] flex items-center justify-center text-lg">
-                                    💨
-                                </div>
-                                <div>
-                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#166545] transition-colors">
-                                        ${window.t ? window.t('modes.default.breathing', {}, 'Breathing') : 'Breathing'}
-                                    </h3>
-                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
-                                        ${window.t ? window.t('modes.default.breathingDesc', {}, 'A quick breathing exercise to calm your mind.') : 'A quick breathing exercise to calm your mind.'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end pt-1">
-                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#DDF0E5] text-stone-600 group-hover:text-[#166545] flex items-center justify-center text-xs transition">
-                                    →
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Tool 3: Quick Stress Relief -->
-                        <div onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
-                             class="bg-white border border-[#EAE4DF] hover:border-[#FFD2BA] rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
-                            <div class="space-y-3">
-                                <div class="w-10 h-10 rounded-2xl bg-[#FFF9F5] text-[#FF6B2C] flex items-center justify-center text-lg">
-                                    ⚡
-                                </div>
-                                <div>
-                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-[#FF6B2C] transition-colors">
-                                        ${window.t ? window.t('modes.default.quickStressRelief', {}, 'Quick Stress Relief') : 'Quick Stress Relief'}
-                                    </h3>
-                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
-                                        ${window.t ? window.t('modes.default.quickStressReliefDesc', {}, 'Feel overwhelmed? Try a simple action to ease stress in a few minutes.') : 'Feel overwhelmed? Try a simple action to ease stress in a few minutes.'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end pt-1">
-                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-[#FFE9DC] text-stone-600 group-hover:text-[#B83D08] flex items-center justify-center text-xs transition">
-                                    →
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Tool 4: Self-check -->
-                        <div onclick="window.TempoMode.openStrack('setup');"
-                             class="bg-white border border-[#EAE4DF] hover:border-stone-300 rounded-2xl p-5 shadow-xs transition hover:shadow-sm cursor-pointer flex flex-col justify-between group space-y-4">
-                            <div class="space-y-3">
-                                <div class="w-10 h-10 rounded-2xl bg-stone-100 text-stone-700 flex items-center justify-center text-lg">
-                                    📊
-                                </div>
-                                <div>
-                                    <h3 class="font-heading font-bold text-sm sm:text-base text-[#202124] group-hover:text-stone-900 transition-colors">
-                                        ${window.t ? window.t('modes.default.selfCheck', {}, 'Self-check') : 'Self-check'}
-                                    </h3>
-                                    <p class="text-xs text-[#6F6B68] leading-relaxed mt-1">
-                                        ${window.t ? window.t('modes.default.selfCheckDesc', {}, 'Track your stress signals and wellbeing habits.') : 'Track your stress signals and wellbeing habits.'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex justify-end pt-1">
-                                <div class="w-7 h-7 rounded-full bg-stone-100 group-hover:bg-stone-200 text-stone-600 group-hover:text-stone-900 flex items-center justify-center text-xs transition">
-                                    →
-                                </div>
-                            </div>
+                        <div class="mt-auto flex justify-center items-center pt-2">
+                            <img src="assets/self-check-mascot.png"
+                                 alt="Self-check mascot"
+                                 class="h-[88px] sm:h-[94px] w-auto object-contain select-none pointer-events-none" />
                         </div>
                     </div>
 
-                    <div class="pt-2">
-                        ${renderDmodeModeSwitchEntry()}
+                    <!-- Lower Card 2: Work Plan -->
+                    <div onclick="window.TempoApp.navigateTo('plan-workspace');"
+                         class="bg-[#f7e5dc] border border-[#F0D5CC] rounded-3xl sm:rounded-[28px] p-6 flex flex-col justify-start items-center text-center shadow-xs relative min-h-[220px] md:h-[230px] overflow-hidden cursor-pointer group"
+                         title="Work Plan">
+                        <div class="w-full text-center">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#e79370] block mb-1 text-center">
+                                Work Plan
+                            </span>
+                            <h2 class="text-xl sm:text-[22px] font-extrabold text-[#e79370] leading-tight mb-1.5 text-center mx-auto max-w-[300px]">
+                                What needs to get done?
+                            </h2>
+                            <p class="text-xs sm:text-sm text-[#e79370] leading-normal text-center mx-auto max-w-[300px]">
+                                Organize your tasks and take things one step at a time.
+                            </p>
+                        </div>
+                        <div class="mt-auto flex justify-center items-center pt-2">
+                            <img src="assets/work-plan-mascot.png"
+                                 alt="Work Plan mascot"
+                                 class="h-[78px] sm:h-[84px] w-auto object-contain select-none pointer-events-none" />
+                        </div>
+                    </div>
+
+                    <!-- Lower Card 3: Notes -->
+                    <div onclick="if (window.TempoRecoveryNote && window.TempoRecoveryNote.openViewModal) { window.TempoRecoveryNote.openViewModal(); } else if (window.TempoRecoveryNote && window.TempoRecoveryNote.openEditModal) { window.TempoRecoveryNote.openEditModal(); } else { window.TempoApp.navigateTo('recovery-mode'); }"
+                         class="bg-[#faeddb] border border-[#F1DFC0] rounded-3xl sm:rounded-[28px] p-6 flex flex-col justify-start items-center text-center shadow-xs relative min-h-[220px] md:w-[350px] md:h-[230px] overflow-hidden cursor-pointer group"
+                         title="Notes">
+                        <div class="w-full text-center">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#ca9555] block mb-1 text-center">
+                                Notes
+                            </span>
+                            <h2 class="text-xl sm:text-[22px] font-extrabold text-[#ca9555] leading-tight mb-1.5 text-center mx-auto max-w-[280px]">
+                                What is your notes for today?
+                            </h2>
+                            <p class="text-xs sm:text-sm text-[#ca9555] leading-normal text-center mx-auto max-w-[280px]">
+                                Write down anything you want to remember.
+                            </p>
+                        </div>
+                        <div class="mt-auto flex justify-center items-center pt-2">
+                            <img src="assets/notes-mascot.png"
+                                 alt="Notes mascot"
+                                 class="h-[74px] sm:h-[80px] w-auto object-contain select-none pointer-events-none" />
+                        </div>
                     </div>
                 </div>
             </div>

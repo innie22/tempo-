@@ -57,6 +57,12 @@
                 signIn: "Đăng nhập",
                 register: "Đăng ký",
                 signOut: "Đăng xuất",
+                directMessages: "Tin nhắn trực tiếp",
+                saved: "Đã lưu",
+                myLibrary: "Thư viện của tôi",
+                account: "Tài khoản",
+                myData: "Dữ liệu của tôi",
+                settings: "Cài đặt",
                 loading: "Đang tải...",
                 user: "Người dùng",
                 notEstimated: "Chưa ước tính",
@@ -420,9 +426,15 @@
                 all: "All",
                 or: "or",
                 searchPlaceholder: "Search Tempo...",
-                signIn: "Sign In",
-                register: "Register",
-                signOut: "Sign Out",
+                signIn: "Log in",
+                register: "Sign up",
+                signOut: "Sign out",
+                directMessages: "Direct Messages",
+                saved: "Saved",
+                myLibrary: "My Library",
+                account: "Account",
+                myData: "My Data",
+                settings: "Settings",
                 loading: "Loading...",
                 user: "User",
                 notEstimated: "Not estimated",
@@ -792,6 +804,7 @@
 
         updateNavbarSwitcher();
         updateStaticHtml();
+        closeNavbarDropdown();
 
         // Notify subscribers
         listeners.forEach(fn => {
@@ -916,6 +929,17 @@
             btnLabel.textContent = currentLang.toUpperCase();
         }
 
+        const flagImg = document.getElementById('nav-current-lang-flag');
+        if (flagImg) {
+            if (currentLang === 'vi') {
+                flagImg.src = 'assets/flag-vn.png';
+                flagImg.alt = 'Tiếng Việt';
+            } else {
+                flagImg.src = 'assets/flag-us.png';
+                flagImg.alt = 'English';
+            }
+        }
+
         const checkVi = document.getElementById('lang-check-vi');
         const checkEn = document.getElementById('lang-check-en');
         if (checkVi && checkEn) {
@@ -944,13 +968,30 @@
         const searchInput = document.getElementById('global-search-input');
         if (searchInput) searchInput.placeholder = t('common.searchPlaceholder');
 
-        // Auth buttons in header
+        // Auth buttons in header & avatar dropdown items
         const btnSignIn = document.getElementById('btn-header-signin');
         if (btnSignIn) btnSignIn.textContent = t('common.signIn');
         const btnRegister = document.getElementById('btn-header-register');
         if (btnRegister) btnRegister.textContent = t('common.register');
-        const btnSignOut = document.getElementById('btn-header-signout');
-        if (btnSignOut) btnSignOut.textContent = t('common.signOut');
+        const labelMessages = document.getElementById('label-menu-messages');
+        if (labelMessages) labelMessages.textContent = t('common.directMessages');
+        const labelSaved = document.getElementById('label-menu-saved');
+        if (labelSaved) labelSaved.textContent = t('common.saved');
+        const labelLibrary = document.getElementById('label-menu-library');
+        if (labelLibrary) labelLibrary.textContent = t('common.myLibrary');
+        const labelAccount = document.getElementById('label-menu-account');
+        if (labelAccount) labelAccount.textContent = t('common.account');
+        const labelMyData = document.getElementById('label-menu-my-data');
+        if (labelMyData) labelMyData.textContent = t('common.myData');
+        const labelSettings = document.getElementById('label-menu-settings');
+        if (labelSettings) labelSettings.textContent = t('common.settings');
+        const labelSignOut = document.getElementById('label-menu-signout');
+        if (labelSignOut) {
+            labelSignOut.textContent = t('common.signOut');
+        } else {
+            const btnSignOut = document.getElementById('btn-header-signout');
+            if (btnSignOut) btnSignOut.textContent = t('common.signOut');
+        }
 
         // Footer
         const footerSos = document.querySelector('footer button[onclick*="openSOS"]');

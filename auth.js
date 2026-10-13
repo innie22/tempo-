@@ -182,13 +182,54 @@ window.TempoAuth = (function() {
             }
         });
 
-        // Update navbar auth buttons
+        // Update navbar auth buttons & avatar dropdown items
         const btnHeaderSignin = document.getElementById('btn-header-signin');
-        if (btnHeaderSignin) btnHeaderSignin.textContent = lang === 'vi' ? 'Đăng nhập' : 'Sign In';
+        if (btnHeaderSignin) btnHeaderSignin.textContent = lang === 'vi' ? 'Đăng nhập' : 'Log in';
         const btnHeaderRegister = document.getElementById('btn-header-register');
-        if (btnHeaderRegister) btnHeaderRegister.textContent = lang === 'vi' ? 'Đăng ký' : 'Register';
-        const btnHeaderSignout = document.getElementById('btn-header-signout');
-        if (btnHeaderSignout) btnHeaderSignout.textContent = lang === 'vi' ? 'Đăng xuất' : 'Sign Out';
+        if (btnHeaderRegister) btnHeaderRegister.textContent = lang === 'vi' ? 'Đăng ký' : 'Sign up';
+        const labelMessages = document.getElementById('label-menu-messages');
+        if (labelMessages) labelMessages.textContent = lang === 'vi' ? 'Tin nhắn trực tiếp' : 'Direct Messages';
+        const labelSaved = document.getElementById('label-menu-saved');
+        if (labelSaved) labelSaved.textContent = lang === 'vi' ? 'Đã lưu' : 'Saved';
+        const labelLibrary = document.getElementById('label-menu-library');
+        if (labelLibrary) labelLibrary.textContent = lang === 'vi' ? 'Thư viện của tôi' : 'My Library';
+        const labelAccount = document.getElementById('label-menu-account');
+        if (labelAccount) labelAccount.textContent = lang === 'vi' ? 'Tài khoản' : 'Account';
+        const labelMyData = document.getElementById('label-menu-my-data');
+        if (labelMyData) labelMyData.textContent = lang === 'vi' ? 'Thư viện của tôi' : 'My Library';
+        const labelSettings = document.getElementById('label-menu-settings');
+        if (labelSettings) labelSettings.textContent = lang === 'vi' ? 'Cài đặt' : 'Settings';
+        const labelSignout = document.getElementById('label-menu-signout');
+        if (labelSignout) {
+            labelSignout.textContent = lang === 'vi' ? 'Đăng xuất' : 'Sign out';
+        } else {
+            const btnHeaderSignout = document.getElementById('btn-header-signout');
+            if (btnHeaderSignout) btnHeaderSignout.textContent = lang === 'vi' ? 'Đăng xuất' : 'Sign out';
+        }
+
+        // Update community tabs & skeleton labels if present
+        const labelTabFeed = document.getElementById('label-tab-community-feed');
+        if (labelTabFeed) labelTabFeed.textContent = lang === 'vi' ? 'Bảng tin cộng đồng' : 'Community Feed';
+        const labelTabMessages = document.getElementById('label-tab-community-messages');
+        if (labelTabMessages) labelTabMessages.textContent = lang === 'vi' ? 'Tin nhắn trực tiếp' : 'Direct Messages';
+        const dmEmptyTitle = document.getElementById('label-dm-empty-title');
+        if (dmEmptyTitle) dmEmptyTitle.textContent = lang === 'vi' ? 'Chưa có tin nhắn nào' : 'No messages yet';
+        const dmEmptyDesc = document.getElementById('label-dm-empty-desc');
+        if (dmEmptyDesc) dmEmptyDesc.textContent = lang === 'vi' ? 'Các cuộc trò chuyện riêng tư với bạn bè và người đồng hành trong cộng đồng Tempo sẽ hiển thị tại đây. Bắt đầu cuộc trò chuyện bất cứ khi nào bạn cần lời khuyên hay sự hỗ trợ.' : 'Direct, private conversations with peer mentors and students in the Tempo community will appear here. Start a quiet conversation whenever you need advice or support.';
+        const dmStartBtn = document.getElementById('label-start-conversation-btn');
+        if (dmStartBtn) dmStartBtn.textContent = lang === 'vi' ? 'Bắt đầu cuộc trò chuyện' : 'Start a conversation';
+        const dmNewBtn = document.getElementById('label-new-message-btn');
+        if (dmNewBtn) dmNewBtn.textContent = lang === 'vi' ? 'Tin nhắn mới' : 'New Message';
+
+        // Update registration consent labels
+        const termsLead = document.getElementById('auth-reg-terms-lead');
+        if (termsLead) termsLead.textContent = lang === 'vi' ? 'Tôi đồng ý với' : "I agree to Tempo's";
+        const termsLink = document.getElementById('reg-terms-link');
+        if (termsLink) termsLink.textContent = lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service';
+        const andLead = document.getElementById('auth-reg-and-lead');
+        if (andLead) andLead.textContent = lang === 'vi' ? 'và' : 'and';
+        const privacyLink = document.getElementById('reg-privacy-link');
+        if (privacyLink) privacyLink.textContent = lang === 'vi' ? 'Chính sách quyền riêng tư' : 'Privacy Policy';
     }
 
     /**
@@ -278,8 +319,35 @@ window.TempoAuth = (function() {
         await checkSession();
     }
 
+    // =========================================================================
+    // AVATAR DROPDOWN CONTROLLER
+    // =========================================================================
+    function toggleAvatarDropdown(forceState) {
+        const dropdown = document.getElementById('header-avatar-dropdown');
+        const btn = document.getElementById('header-user-avatar-btn');
+        if (!dropdown) return;
+        const isCurrentlyOpen = !dropdown.classList.contains('hidden');
+        const shouldOpen = (typeof forceState === 'boolean') ? forceState : !isCurrentlyOpen;
+
+        if (shouldOpen) {
+            dropdown.classList.remove('hidden');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+        } else {
+            dropdown.classList.add('hidden');
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    function openAvatarDropdown() {
+        toggleAvatarDropdown(true);
+    }
+
+    function closeAvatarDropdown() {
+        toggleAvatarDropdown(false);
+    }
+
     function bindEvents() {
-        // Top Bar Auth Buttons
+        // Top Bar Auth Buttons (Unauthenticated)
         const btnOpenSignIn = document.getElementById('btn-header-signin');
         if (btnOpenSignIn) {
             btnOpenSignIn.addEventListener('click', openSignInModal);
@@ -291,9 +359,105 @@ window.TempoAuth = (function() {
             btnOpenRegister.addEventListener('click', openRegisterModal);
         }
 
+        // Clickable Avatar Trigger & Keyboard Navigation
+        const avatarBtn = document.getElementById('header-user-avatar-btn');
+        if (avatarBtn) {
+            avatarBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleAvatarDropdown();
+            });
+            avatarBtn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleAvatarDropdown();
+                }
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#header-authenticated-box')) {
+                closeAvatarDropdown();
+            }
+        });
+
+        // Close dropdown when pressing Escape
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAvatarDropdown();
+            }
+        });
+
+        // Dropdown Menu Item Handlers (Personal Space Navigation & Direct Messages)
+        const itemDirectMessages = document.getElementById('menu-item-direct-messages');
+        if (itemDirectMessages) {
+            itemDirectMessages.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('posts', 'messages');
+                } else if (window.TempoCommunity && typeof window.TempoCommunity.openCommunityModal === 'function') {
+                    window.TempoCommunity.openCommunityModal('messages');
+                }
+            });
+        }
+
+        const itemSaved = document.getElementById('menu-item-saved');
+        if (itemSaved) {
+            itemSaved.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('personal-space', 'saved');
+                }
+            });
+        }
+
+        const itemLibrary = document.getElementById('menu-item-library');
+        if (itemLibrary) {
+            itemLibrary.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('personal-space', 'library');
+                }
+            });
+        }
+
+        const itemAccount = document.getElementById('menu-item-account');
+        if (itemAccount) {
+            itemAccount.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('personal-space', 'account');
+                }
+            });
+        }
+
+        const itemMyData = document.getElementById('menu-item-my-data');
+        if (itemMyData) {
+            itemMyData.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('personal-space', 'library');
+                }
+            });
+        }
+
+        const itemSettings = document.getElementById('menu-item-settings');
+        if (itemSettings) {
+            itemSettings.addEventListener('click', () => {
+                closeAvatarDropdown();
+                if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                    window.TempoApp.navigateTo('personal-space', 'settings');
+                }
+            });
+        }
+
+        // Sign Out in dropdown
         const btnSignOut = document.getElementById('btn-header-signout');
         if (btnSignOut) {
-            btnSignOut.addEventListener('click', handleSignOut);
+            btnSignOut.addEventListener('click', () => {
+                closeAvatarDropdown();
+                handleSignOut();
+            });
         }
 
         // Role Selection Modal Choices (Preserved dormant)
@@ -599,10 +763,12 @@ window.TempoAuth = (function() {
         const unauthBox = document.getElementById('header-unauthenticated-box');
         const authBox = document.getElementById('header-authenticated-box');
         const nameLabel = document.getElementById('header-user-name');
+        const emailLabel = document.getElementById('header-user-email');
         const rolePill = document.getElementById('header-user-role-pill');
         const avatarEl = document.getElementById('header-user-avatar');
 
         if (!profile) {
+            closeAvatarDropdown();
             if (unauthBox) unauthBox.classList.remove('hidden');
             if (authBox) authBox.classList.add('hidden');
             applyRolePermissions('guest');
@@ -612,6 +778,7 @@ window.TempoAuth = (function() {
 
             const displayName = profile.display_name || profile.full_name || profile.email || 'User';
             if (nameLabel) nameLabel.textContent = displayName;
+            if (emailLabel) emailLabel.textContent = profile.email || '';
 
             if (avatarEl) {
                 avatarEl.setAttribute('title', displayName);
@@ -620,6 +787,19 @@ window.TempoAuth = (function() {
                 } else {
                     avatarEl.textContent = getInitials(displayName);
                 }
+            }
+
+            const dropAvatarEl = document.getElementById('header-dropdown-avatar');
+            if (dropAvatarEl) {
+                if (profile.avatar_url) {
+                    dropAvatarEl.innerHTML = `<img src="${escapeHTML(profile.avatar_url)}" alt="${escapeHTML(displayName)}" class="w-full h-full rounded-full object-cover">`;
+                } else {
+                    dropAvatarEl.textContent = getInitials(displayName);
+                }
+            }
+
+            if (window.TempoPersonalSpace && typeof window.TempoPersonalSpace.syncProfile === 'function') {
+                window.TempoPersonalSpace.syncProfile(profile);
             }
 
             if (rolePill) {
@@ -907,6 +1087,15 @@ window.TempoAuth = (function() {
         const displayName = nameInput ? nameInput.value.trim() : '';
         const email = emailInput ? emailInput.value.trim() : '';
         const password = passInput ? passInput.value : '';
+
+        const termsConsent = document.getElementById('reg-terms-consent');
+        if (termsConsent && !termsConsent.checked) {
+            const msg = currentAuthLang === 'vi'
+                ? "Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách quyền riêng tư để tạo tài khoản."
+                : "Please agree to the Terms of Service and Privacy Policy to create an account.";
+            showRegisterError(msg, false);
+            return;
+        }
 
         const submitBtn = e && e.target ? e.target.querySelector('button[type="submit"]') : document.getElementById('btn-submit-register');
         const originalText = submitBtn ? submitBtn.textContent : '';
@@ -1480,6 +1669,10 @@ window.TempoAuth = (function() {
         clearRegisterError,
         showSignInError,
         clearSignInError,
-        isRegistrationInProgress: () => isRegistrationInProgress
+        isRegistrationInProgress: () => isRegistrationInProgress,
+        toggleAvatarDropdown,
+        openAvatarDropdown,
+        closeAvatarDropdown,
+        renderHeaderUI
     };
 })();

@@ -1021,8 +1021,13 @@ window.TempoLearnSolve = (function() {
     }
 
     function openModal(itemId) {
+        if (!itemId) {
+            if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                window.TempoApp.navigateTo('learn');
+            }
+            return;
+        }
         ensureModalMounted();
-        if (!itemId) return;
 
         // If newly opened from outside, reset stack
         if (modalNavStack.length === 0 || modalNavStack[modalNavStack.length - 1] !== itemId) {
