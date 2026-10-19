@@ -68,10 +68,10 @@
 
                 <!-- Global Mode Indicator Badge & Selector Trigger (hidden on neutral Entry Home) -->
                 <div id="mode-indicator-shell" class="hidden items-center relative pl-2 sm:pl-3">
-                    <button type="button" id="btn-mode-indicator-trigger" onclick="window.TempoMode.toggleNavbarModeDropdown(event)" class="px-3 py-1 rounded-full text-xs font-bold bg-[#FFE9DC] text-[#B83D08] flex items-center space-x-1.5 shadow-xs hover:bg-[#FFDCC8] border border-[#FFD5C0]/60 transition cursor-pointer" aria-haspopup="true" aria-expanded="false" title="Switch Tempo Mode">
-                        <span id="mode-badge-icon">⚡</span>
-                        <span id="mode-badge-label">Urgent Mode</span>
-                        <span class="text-[10px] ml-0.5">▾</span>
+                    <button type="button" id="btn-mode-indicator-trigger" onclick="window.TempoMode.toggleNavbarModeDropdown(event)" class="h-8 px-3.5 rounded-full text-xs font-bold bg-[#FBF0E9] text-[#D79277] hover:bg-[#F2DCD0] border border-[#D79277]/50 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#D79277]/40" aria-haspopup="true" aria-expanded="false" title="Switch Tempo Mode">
+                        <span id="mode-badge-icon" class="text-xs text-[#D79277] leading-none select-none">⚡</span>
+                        <span id="mode-badge-label" class="font-extrabold tracking-tight">Urgent Mode</span>
+                        <span class="text-[10px] ml-0.5 text-[#D79277]/80 leading-none select-none">▾</span>
                     </button>
                     <!-- Anchored Mode Dropdown Menu for Navbar -->
                     <div id="navbar-mode-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 bg-white border border-[#EAE4DF] rounded-2xl shadow-xl z-50 p-2 space-y-1"></div>
@@ -87,8 +87,8 @@
                 <a id="nav-link-check" href="#stress-check" onclick="window.TempoMode.openStrack('setup', { sourceContext: 'entry' }); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
                     Check
                 </a>
-                <a id="nav-link-plan" href="#plan-workspace" onclick="window.TempoApp.navigateTo('plan-workspace'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
-                    Plan
+                <a id="nav-link-plan" href="#enjoy-tempo-tools" onclick="window.TempoApp.scrollToEnjoyTempoTools(); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Tool
                 </a>
                 <a id="nav-link-learn" href="#learn" data-nav="learn" onclick="window.TempoApp.navigateTo('learn'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
                     Learn
@@ -406,9 +406,9 @@
             <div id="emergency-stage-plan-review" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
 
             <!-- ==========================================
-                 STAGE 9: BREAK DOWN TASKS (In Plan Order)
+                 STAGE 9: BREAK DOWN TASKS (Removed)
                  ========================================== -->
-            <div id="emergency-stage-breakdown" class="max-w-2xl mx-auto py-8 sm:py-12 space-y-8 hidden"></div>
+            <div id="emergency-stage-breakdown" class="hidden"></div>
 
             <!-- ==========================================
                  STAGE 10: START WORKING / CLEAN HANDOFF STATE
@@ -437,6 +437,33 @@
              =================================================================== -->
         <section id="screen-plan-workspace" class="screen-container hidden space-y-8">
             <div id="plan-workspace-root"></div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN: TOOL NOTES (Placeholder Page)
+             =================================================================== -->
+        <section id="screen-tool-notes" class="screen-container hidden space-y-8 py-2 sm:py-6">
+            <!-- Navigation Return Bar -->
+            <div class="max-w-4xl mx-auto flex items-center justify-between pb-2">
+                <button type="button" id="btn-tool-notes-back" onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') window.TempoApp.navigateTo('today'); else window.location.hash = '#today';"
+                        class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
+                    <span>← Back</span>
+                </button>
+            </div>
+            <div class="max-w-xl mx-auto text-center py-14 px-6 sm:px-8 space-y-4 bg-white border border-[#EAE4DF] rounded-3xl shadow-xs">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-[#F9E8E2] border border-[#FFD2BA] flex items-center justify-center text-3xl shadow-2xs">📝</div>
+                <div class="space-y-2">
+                    <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">Tool Notes</h1>
+                    <p class="text-sm sm:text-base text-[#6F6B68] max-w-sm mx-auto leading-relaxed">Your notes space is coming soon.</p>
+                </div>
+                <div class="pt-2">
+                    <button type="button" onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') window.TempoApp.navigateTo('today'); else window.location.hash = '#today';"
+                            class="px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-[#FAF7F4] hover:bg-[#F3EFEA] text-[#6F6B68] hover:text-[#202124] border border-[#EAE4DF] transition cursor-pointer">
+                        ← Back to Dashboard
+                    </button>
+                </div>
+            </div>
         </section>
 
 
@@ -3088,6 +3115,9 @@
         </div>
     </div>
 
+    <!-- 1B. URMODE FLOW & RESET POPUP MODAL -->
+    <div id="modal-urmode-flow" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true"></div>
+
     <!-- 2. QUICK STRESS RELIEF & BREATHING REUSABLE MODAL -->
     <div id="modal-quick-stress-relief" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-3 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true">
         <div class="tempo-card max-w-2xl w-full my-auto max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-[24px] p-5 sm:p-8 space-y-4 relative shadow-xl border border-[#EAE4DF]">
@@ -3763,6 +3793,7 @@
     <script src="unclearMode.js"></script>
     <script src="tempoTools.js"></script>
     <script src="learnSolve.js"></script>
+    <script src="urmodeFlow.js"></script>
     <script src="mode.js"></script>
     <script src="personalSpace.js"></script>
     <script src="app.js"></script>

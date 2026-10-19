@@ -26,7 +26,6 @@ window.TempoEmergencyFlow = (function() {
         'feasibility',
         'generating',
         'plan-review',
-        'breakdown',
         'handoff'
     ];
 
@@ -96,7 +95,6 @@ window.TempoEmergencyFlow = (function() {
             'available-time': 'Available Time',
             'feasibility': 'Feasibility Check',
             'plan-review': 'Plan Review',
-            'breakdown': 'Step Breakdown',
             'handoff': 'Plan Ready'
         };
         return names[stage] || 'Setup';
@@ -133,15 +131,17 @@ window.TempoEmergencyFlow = (function() {
             }
             if (Array.isArray(confirmedPlan.unallocatedTasks)) {
                 confirmedPlan.unallocatedTasks.forEach(t => {
-                    if (t && t.id === taskId) {
-                        Object.assign(t, updates);
+                    const target = (t && t.task) ? t.task : t;
+                    if (target && target.id === taskId) {
+                        Object.assign(target, updates);
                     }
                 });
             }
             if (Array.isArray(confirmedPlan.unarrangedTasks)) {
                 confirmedPlan.unarrangedTasks.forEach(t => {
-                    if (t && t.id === taskId) {
-                        Object.assign(t, updates);
+                    const target = (t && t.task) ? t.task : t;
+                    if (target && target.id === taskId) {
+                        Object.assign(target, updates);
                     }
                 });
             }
@@ -225,7 +225,9 @@ window.TempoEmergencyFlow = (function() {
                     if (draft.dismissedMismatchForTask) dismissedMismatchForTask = draft.dismissedMismatchForTask;
                     if (typeof draft.planHasUserEdits === 'boolean') planHasUserEdits = draft.planHasUserEdits;
                     if (draft.confirmedPlan) confirmedPlan = draft.confirmedPlan;
-                    if (draft.currentStage && STAGES.includes(draft.currentStage)) {
+                    if (draft.currentStage === 'breakdown') {
+                        currentStage = 'plan-review';
+                    } else if (draft.currentStage && STAGES.includes(draft.currentStage)) {
                         currentStage = draft.currentStage;
                     }
                     console.log("[TempoEmergencyFlow] Restored draft setup at stage:", currentStage);
@@ -420,6 +422,9 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function goToStage(stageName) {
+        if (stageName === 'breakdown') {
+            stageName = confirmedPlan ? 'handoff' : 'plan-review';
+        }
         if (!STAGES.includes(stageName)) {
             stageName = 'entry';
         }
@@ -439,6 +444,13 @@ window.TempoEmergencyFlow = (function() {
             const el = document.getElementById(`emergency-stage-${stage}`);
             if (el) el.classList.add('hidden');
         });
+
+        // Ensure removed breakdown stage container stays hidden and empty
+        const breakdownEl = document.getElementById('emergency-stage-breakdown');
+        if (breakdownEl) {
+            breakdownEl.classList.add('hidden');
+            breakdownEl.innerHTML = '';
+        }
 
         // Show target stage container
         const targetEl = document.getElementById(`emergency-stage-${stageName}`);
@@ -464,7 +476,7 @@ window.TempoEmergencyFlow = (function() {
             'reset': ['entry'],
             'organize': ['reality-check', 'prioritize', 'priority-review'],
             'plan': ['available-time', 'feasibility', 'generating', 'plan-review'],
-            'ready': ['breakdown', 'handoff']
+            'ready': ['handoff']
         };
 
         const activePhaseKey = Object.keys(phases).find(key => phases[key].includes(stage)) || 'reset';
@@ -505,9 +517,6 @@ window.TempoEmergencyFlow = (function() {
                 break;
             case 'plan-review':
                 renderPlanReview();
-                break;
-            case 'breakdown':
-                renderBreakdown();
                 break;
             case 'handoff':
                 renderHandoff();
@@ -2533,16 +2542,29 @@ window.TempoEmergencyFlow = (function() {
     // DRAG AND DROP TASK REORDERING & DAY MOVING
     // =========================================================================
     let draggedGlobalIndex = null;
+    let isDraggingTask = false;
 
     function handleDragStart(e, globalIndex) {
+        // Prevent drag initiation from buttons, links, or form controls inside the card
+        if (e.target && e.target.closest && e.target.closest('button, input, select, textarea, a, .btn-primary')) {
+            e.preventDefault();
+            return false;
+        }
         draggedGlobalIndex = globalIndex;
+        isDraggingTask = true;
+        document.body.classList.add('is-dragging-card');
         if (e.dataTransfer) {
             e.dataTransfer.setData('text/plain', String(globalIndex));
             e.dataTransfer.effectAllowed = 'move';
         }
         const card = e.currentTarget.closest('.em-timeline-card') || e.currentTarget;
         if (card) {
-            card.classList.add('opacity-40', 'border-dashed', 'border-[#FF6B2C]');
+            card.classList.add('em-card-dragging', 'opacity-60', 'border-dashed', 'border-[#FF6B2C]', 'shadow-lg');
+            card.classList.remove('opacity-40');
+        }
+        const handle = card ? card.querySelector('.em-drag-handle') : null;
+        if (handle) {
+            handle.classList.add('is-grabbing');
         }
     }
 
@@ -2556,16 +2578,52 @@ window.TempoEmergencyFlow = (function() {
     function handleDragEnter(e) {
         e.preventDefault();
         const card = e.currentTarget.closest('.em-timeline-card');
-        if (card) {
-            card.classList.add('bg-orange-50/60', 'border-[#FF6B2C]');
+        if (card && draggedGlobalIndex !== null) {
+            const targetIdx = parseInt(card.getAttribute('data-global-index'), 10);
+            if (!isNaN(targetIdx) && targetIdx !== draggedGlobalIndex) {
+                card.classList.add('em-drop-target', 'bg-orange-50/60', 'border-[#FF6B2C]');
+                if (draggedGlobalIndex > targetIdx) {
+                    card.classList.add('border-t-2', 'border-t-[#FF6B2C]');
+                    card.classList.remove('border-b-2', 'border-b-[#FF6B2C]');
+                } else {
+                    card.classList.add('border-b-2', 'border-b-[#FF6B2C]');
+                    card.classList.remove('border-t-2', 'border-t-[#FF6B2C]');
+                }
+            }
         }
     }
 
     function handleDragLeave(e) {
         const card = e.currentTarget.closest('.em-timeline-card');
         if (card) {
-            card.classList.remove('bg-orange-50/60', 'border-[#FF6B2C]');
+            if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+            card.classList.remove('em-drop-target', 'bg-orange-50/60', 'border-[#FF6B2C]', 'border-t-2', 'border-t-[#FF6B2C]', 'border-b-2', 'border-b-[#FF6B2C]');
         }
+    }
+
+    function clearTaskDragStyles() {
+        draggedGlobalIndex = null;
+        isDraggingTask = false;
+        document.body.classList.remove('is-dragging-card');
+        document.querySelectorAll('.em-timeline-card').forEach(el => {
+            el.classList.remove(
+                'em-card-dragging',
+                'opacity-60',
+                'opacity-40',
+                'shadow-lg',
+                'border-dashed',
+                'em-drop-target',
+                'bg-orange-50/60',
+                'border-[#FF6B2C]',
+                'border-t-2',
+                'border-t-[#FF6B2C]',
+                'border-b-2',
+                'border-b-[#FF6B2C]'
+            );
+        });
+        document.querySelectorAll('.em-drag-handle').forEach(h => {
+            h.classList.remove('is-grabbing');
+        });
     }
 
     function handleDrop(e, targetGlobalIndex) {
@@ -2576,10 +2634,7 @@ window.TempoEmergencyFlow = (function() {
             const raw = e.dataTransfer.getData('text/plain');
             if (raw) fromIdx = parseInt(raw, 10);
         }
-        draggedGlobalIndex = null;
-        document.querySelectorAll('.em-timeline-card').forEach(el => {
-            el.classList.remove('opacity-40', 'border-dashed', 'bg-orange-50/60', 'border-[#FF6B2C]');
-        });
+        clearTaskDragStyles();
 
         if (fromIdx !== null && !isNaN(fromIdx) && fromIdx !== targetGlobalIndex) {
             reorderPlannedTasks(fromIdx, targetGlobalIndex);
@@ -2594,10 +2649,7 @@ window.TempoEmergencyFlow = (function() {
             const raw = e.dataTransfer.getData('text/plain');
             if (raw) fromIdx = parseInt(raw, 10);
         }
-        draggedGlobalIndex = null;
-        document.querySelectorAll('.em-timeline-card').forEach(el => {
-            el.classList.remove('opacity-40', 'border-dashed', 'bg-orange-50/60', 'border-[#FF6B2C]');
-        });
+        clearTaskDragStyles();
 
         if (fromIdx !== null && !isNaN(fromIdx) && dayDate) {
             moveTaskToDay(fromIdx, dayDate);
@@ -2605,10 +2657,7 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function handleDragEnd(e) {
-        draggedGlobalIndex = null;
-        document.querySelectorAll('.em-timeline-card').forEach(el => {
-            el.classList.remove('opacity-40', 'border-dashed', 'bg-orange-50/60', 'border-[#FF6B2C]');
-        });
+        clearTaskDragStyles();
     }
 
     function reorderPlannedTasks(fromIndex, toIndex) {
@@ -3151,7 +3200,7 @@ window.TempoEmergencyFlow = (function() {
                                     const isWarned = item.hasDeadlineConflict && !ignoredDeadlineWarnings.has(item.task.id);
 
                                     return `
-                                        <div class="em-timeline-card p-4 sm:p-5 space-y-3 shadow-sm transition-all border border-[#EAE4DF] rounded-[22px] bg-white cursor-default"
+                                        <div class="em-timeline-card group p-4 sm:p-5 space-y-3 shadow-xs hover:shadow-md transition-all border border-[#EAE4DF] hover:border-stone-400 rounded-[22px] bg-white cursor-default"
                                              data-global-index="${item.globalIndex}"
                                              data-task-id="${item.task.id}"
                                              draggable="true"
@@ -3165,9 +3214,12 @@ window.TempoEmergencyFlow = (function() {
                                             <div class="flex items-center justify-between">
                                                 <div class="flex items-center space-x-2">
                                                     <!-- Subtle Drag Handle -->
-                                                    <div class="em-drag-handle flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-700 px-1 py-0.5 rounded select-none hover:bg-stone-100 transition mr-0.5"
-                                                         title="Drag to change execution order">
-                                                        <span class="text-sm font-bold tracking-widest leading-none select-none">⋮⋮</span>
+                                                    <div class="em-drag-handle flex items-center justify-center text-stone-400 group-hover:text-stone-700 hover:text-[#B83D08] hover:bg-[#FFE9DC] px-1.5 py-1 rounded-md select-none transition-colors mr-0.5"
+                                                         title="Drag to change execution order"
+                                                         aria-label="Drag to change execution order"
+                                                         tabindex="0"
+                                                         data-drag-handle="true">
+                                                        <span class="text-sm font-bold tracking-widest leading-none select-none pointer-events-none">⋮⋮</span>
                                                     </div>
                                                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${badgeClass}">
                                                         ${item.executionBadge}
@@ -3317,10 +3369,6 @@ window.TempoEmergencyFlow = (function() {
                                      class="w-full sm:w-auto px-5 py-3 rounded-xl border border-[#FF6B2C] text-[#FF6B2C] hover:bg-[#FFE9DC] text-xs font-bold transition">
                                 Start Focus Zone →
                             </button>
-                            <button onclick="window.TempoEmergencyFlow.confirmPlanAndProceed()" 
-                                     class="w-full sm:w-auto px-4 py-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
-                                Review Step Breakdown
-                            </button>
                         </div>
                     </div>
                 ` : `
@@ -3329,8 +3377,8 @@ window.TempoEmergencyFlow = (function() {
                             <h4 class="font-heading text-base font-bold text-[#202124]">Does this plan feel workable?</h4>
                             <p class="text-xs text-[#6F6B68]">You can change it again later as you make progress.</p>
                         </div>
-                        <button onclick="window.TempoEmergencyFlow.confirmPlanAndProceed()" 
-                                 class="btn-primary w-full py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition">
+                        <button id="btn-em-use-plan" onclick="window.TempoEmergencyFlow.savePlan()" 
+                                 class="btn-primary w-full py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition cursor-pointer">
                             <span>Use this plan →</span>
                         </button>
                     </div>
@@ -4069,399 +4117,30 @@ window.TempoEmergencyFlow = (function() {
         `;
     }
 
-    function confirmPlanAndProceed() {
-        if (!confirmedPlan || confirmedPlan.plannedTasks.length === 0) {
+    async function confirmPlanAndProceed() {
+        if (!confirmedPlan || !confirmedPlan.plannedTasks || confirmedPlan.plannedTasks.length === 0) {
             goToStage('reality-check');
             return;
         }
 
-        // Persist confirmed active plan to durable store
-        if (window.TempoPlanStore) {
-            window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
-        }
+        await savePlan();
+    }
 
-        breakdownIndex = 0;
-        showAiSuggestions = false;
-        currentAiSuggestions = [];
-        aiSuggestionError = false;
-        goToStage('breakdown');
+    function reviewStepBreakdown() {
+        // Step Breakdown page has been removed from Urmode workflow
+        goToStage(confirmedPlan ? 'handoff' : 'plan-review');
     }
 
     // =========================================================================
-    // STAGE 8: BREAK DOWN TASKS (In Plan Execution Order)
+    // STAGE 8: BREAK DOWN TASKS (Removed from workflow)
     // =========================================================================
     function renderBreakdown() {
         const container = document.getElementById('emergency-stage-breakdown');
-        if (!container || !confirmedPlan || !confirmedPlan.plannedTasks) return;
-
-        if (breakdownIndex >= confirmedPlan.plannedTasks.length) {
-            startWorking();
-            return;
+        if (container) {
+            container.innerHTML = '';
+            container.classList.add('hidden');
         }
-
-        const planItem = confirmedPlan.plannedTasks[breakdownIndex];
-        const task = planItem.task;
-
-        // Initialize subtasks array if not present
-        if (!task.subtasks) {
-            task.subtasks = [];
-        }
-
-        const totalSubtasksCount = task.subtasks.length;
-        const estimatedSubtasks = task.subtasks.filter(s => typeof s.durationMinutes === 'number' && s.durationMinutes > 0);
-        const unestimatedCount = totalSubtasksCount - estimatedSubtasks.length;
-        const totalKnownSubtaskMin = estimatedSubtasks.reduce((sum, s) => sum + s.durationMinutes, 0);
-        const allSubtasksEstimated = totalSubtasksCount > 0 && unestimatedCount === 0;
-
-        container.innerHTML = `
-            <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
-                <!-- Secondary Back Navigation & Task Stepper -->
-                <div class="flex items-center justify-between">
-                    <button onclick="window.TempoEmergencyFlow.goToStage('plan-review')" 
-                            class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
-                        <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Back to Urgent Plan</span>
-                    </button>
-                    <div class="flex items-center space-x-2 text-xs">
-                        ${breakdownIndex > 0 ? `
-                            <button onclick="window.TempoEmergencyFlow.breakdownPreviousTask()" 
-                                    class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] px-2.5 py-1 rounded-lg border border-gray-200 hover:bg-stone-50 transition">
-                                ← Previous task
-                            </button>
-                        ` : ''}
-                        ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 ? `
-                            <button onclick="window.TempoEmergencyFlow.breakdownNextTask()" 
-                                    class="text-xs font-semibold text-[#FF6B2C] hover:text-[#B83D08] px-2.5 py-1 rounded-lg border border-[#FF6B2C]/30 hover:bg-[#FFE9DC]/50 transition">
-                                Next task →
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-
-                <!-- Header -->
-                <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">STEP BREAKDOWN</span>
-                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        ${breakdownIndex === 0 ? "Let's make your first task easier to start." : `Break down task ${breakdownIndex + 1} of ${confirmedPlan.plannedTasks.length}`}
-                    </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68]">
-                        Task ${breakdownIndex + 1} of ${confirmedPlan.plannedTasks.length} in your planned schedule.
-                    </p>
-                </div>
-
-                <!-- Planned Task Header Card -->
-                <div class="bg-[#FFF8F2] border border-[#FFD2BA]/70 rounded-[22px] p-5 sm:p-6 space-y-2">
-                    <div class="flex items-center space-x-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase badge-up-next">
-                            ${planItem.executionBadge}
-                        </span>
-                        <span class="text-xs text-[#6F6B68]">
-                            ${planItem.startTime && planItem.endTime ? `Scheduled for ${planItem.startTime} – ${planItem.endTime}` : 'Scheduled: Flexible / Untimed'}
-                        </span>
-                    </div>
-                    <h3 class="font-heading text-xl font-bold text-[#202124]">${escapeHTML(task.name)}</h3>
-                    <p class="text-xs text-[#6F6B68] flex items-center space-x-1.5 flex-wrap">
-                        <span>Due: ${task.hasDeadline ? formatHumanDeadline(task.deadlineDate, task.deadlineTime) : 'No fixed deadline'}</span>
-                        <button onclick="window.TempoEmergencyFlow.openDeadlineModal('${task.id}')" 
-                                class="text-[#FF6B2C] hover:underline font-semibold text-[11px] transition">
-                            Edit
-                        </button>
-                        <span>•</span>
-                        <span>Estimated total: <strong>${task.durationLabel || 'Not sure'}</strong></span>
-                    </p>
-                </div>
-
-                <!-- Active Steps Editor (Default Manual Breakdown) -->
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] p-5 sm:p-6 space-y-4 shadow-sm">
-                    <!-- Card Header: Title + Action buttons -->
-                    <div class="flex items-center justify-between pb-2 border-b border-gray-100 flex-wrap gap-2">
-                        <div class="flex items-center space-x-2">
-                            <h4 class="font-heading text-sm font-bold text-[#202124]">Concrete Action Steps</h4>
-                            <span class="text-xs text-[#8E8A85]">(${totalSubtasksCount})</span>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <!-- On-Demand AI Help Button -->
-                            <button type="button" 
-                                    onclick="window.TempoEmergencyFlow.toggleAiHelp()" 
-                                    class="px-2.5 py-1 rounded-lg text-xs font-bold text-[#B83D08] bg-[#FFE9DC] hover:bg-[#FFD2BA] transition flex items-center space-x-1.5 shadow-sm border border-[#FF6B2C]/30"
-                                    title="Get AI starter suggestions for this task">
-                                <span>✨</span>
-                                <span>AI Help</span>
-                            </button>
-                            <!-- Show / Hide Subtask Times Toggle -->
-                            <button type="button" 
-                                    onclick="window.TempoEmergencyFlow.toggleSubtaskDurations()" 
-                                    class="text-xs text-[#6F6B68] hover:text-[#202124] font-medium flex items-center space-x-1 pl-1">
-                                <span>⏱️ Times:</span>
-                                <span class="font-bold underline">${showSubtaskDurations ? 'Hide' : 'Show'}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- "I Already Know" Acknowledgment Banner (if user marked this task) -->
-                    ${task.alreadyKnowWhatToDo ? `
-                        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between">
-                            <div class="flex items-center space-x-2">
-                                <span class="text-emerald-600 font-bold">✓</span>
-                                <span>You've indicated you already know what to do next for this task.</span>
-                            </div>
-                            <button onclick="window.TempoEmergencyFlow.toggleAlreadyKnowWhatToDo(false)" 
-                                    class="text-[11px] text-emerald-700 hover:text-emerald-900 underline font-semibold shrink-0 ml-2">
-                                Reset
-                            </button>
-                        </div>
-                    ` : ''}
-
-                    <!-- On-Demand AI Help Suggestions Card -->
-                    ${showAiSuggestions ? `
-                        <div class="p-4 bg-[#FFFBF8] border border-[#FFD2BA] rounded-2xl space-y-3 animate-fade-in shadow-sm">
-                            <div class="flex items-center justify-between pb-1 border-b border-[#FFE9DC]">
-                                <div class="flex items-center space-x-1.5">
-                                    <span class="text-sm">✨</span>
-                                    <h5 class="text-xs font-bold text-[#202124]">Suggested steps for this task</h5>
-                                </div>
-                                <button onclick="window.TempoEmergencyFlow.closeAiHelp()" 
-                                        class="text-xs text-[#8E8A85] hover:text-[#202124] p-1 font-bold" 
-                                        title="Dismiss suggestions">✕</button>
-                            </div>
-                            ${aiSuggestionError ? `
-                                <p class="text-xs text-stone-600 bg-stone-100 p-2.5 rounded-xl">
-                                    AI suggestions aren't available right now. You can keep breaking this task down yourself.
-                                </p>
-                            ` : currentAiSuggestions.length === 0 ? `
-                                <p class="text-xs text-[#6F6B68]">All suggested steps have been added or already exist.</p>
-                            ` : `
-                                <div class="space-y-2">
-                                    ${currentAiSuggestions.map((sug, sugIdx) => `
-                                        <div class="p-2.5 bg-white border border-[#EAE4DF] rounded-xl flex items-center justify-between gap-2 text-xs">
-                                            <div class="flex items-center space-x-2 flex-1 min-w-0">
-                                                <span class="w-1.5 h-1.5 rounded-full bg-[#FF6B2C] shrink-0"></span>
-                                                <span class="font-medium text-[#202124] truncate">${escapeHTML(sug.title)}</span>
-                                            </div>
-                                            <div class="flex items-center space-x-2 shrink-0">
-                                                ${sug.durationMinutes ? `<span class="text-[11px] text-[#6F6B68] font-semibold">${formatSubtaskDurationDisplay(sug.durationMinutes)}</span>` : ''}
-                                                <button onclick="window.TempoEmergencyFlow.acceptAiSuggestion(${sugIdx})" 
-                                                        class="px-2.5 py-1 bg-stone-100 hover:bg-[#FFE9DC] hover:text-[#B83D08] font-bold text-[11px] rounded-lg border border-stone-200 hover:border-[#FF6B2C]/40 transition">
-                                                    + Add
-                                                </button>
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                                <div class="flex items-center justify-between pt-1 text-xs">
-                                    <button onclick="window.TempoEmergencyFlow.acceptAllAiSuggestions()" 
-                                            class="btn-primary px-3 py-1.5 rounded-xl font-bold text-xs shadow-sm">
-                                        Add all suggestions
-                                    </button>
-                                    <button onclick="window.TempoEmergencyFlow.closeAiHelp()" 
-                                            class="text-xs text-[#8E8A85] hover:text-[#202124] underline">
-                                        Dismiss
-                                    </button>
-                                </div>
-                            `}
-                        </div>
-                    ` : ''}
-
-                    <!-- Subtask Comparison / Mismatch Notice -->
-                    ${(() => {
-                        if (!showSubtaskDurations || totalSubtasksCount === 0 || estimatedSubtasks.length === 0) {
-                            return '';
-                        }
-
-                        // Case 1: Incomplete estimates (one or more subtasks lack a duration estimate)
-                        if (unestimatedCount > 0) {
-                            const stepWord = unestimatedCount === 1 ? "1 step doesn't" : `${unestimatedCount} steps don't`;
-                            return `
-                                <div class="p-3.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-800 space-y-1">
-                                    <p>
-                                        Your estimated steps currently add up to <strong>${formatDurationMinutes(totalKnownSubtaskMin)}</strong> (partial &mdash; ${stepWord} have a time estimate yet). 
-                                        Your main task estimate is <strong>${task.durationLabel || 'Not sure'}</strong>.
-                                    </p>
-                                </div>
-                            `;
-                        }
-
-                        // Case 2: All subtasks have estimates
-                        if (allSubtasksEstimated) {
-                            const isDismissed = dismissedMismatchForTask[task.id] === true;
-                            const isFiniteTask = !task.isUnknownDuration && !task.isLongTerm && typeof task.durationMinutes === 'number' && task.durationMinutes > 0;
-                            const hasDifference = isFiniteTask ? totalKnownSubtaskMin !== task.durationMinutes : true;
-
-                            if (hasDifference && !isDismissed) {
-                                return `
-                                    <div class="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
-                                        <p>
-                                            Your step estimates add up to about <strong>${formatDurationMinutes(totalKnownSubtaskMin)}</strong>. 
-                                            Your main task estimate is currently <strong>${task.durationLabel || 'Not sure'}</strong>.
-                                        </p>
-                                        <div class="flex flex-wrap gap-2 pt-1">
-                                            <button onclick="window.TempoEmergencyFlow.syncTaskDurationFromSteps(${totalKnownSubtaskMin})" 
-                                                    class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 font-bold rounded-lg text-[11px] transition">
-                                                Update task estimate to ${formatDurationMinutes(totalKnownSubtaskMin)}
-                                            </button>
-                                            ${isFiniteTask ? `
-                                                <button onclick="window.TempoEmergencyFlow.keepTaskDurationMismatch()" 
-                                                        class="px-2.5 py-1 bg-white border border-amber-300 text-amber-900 font-semibold rounded-lg text-[11px] hover:bg-amber-100/50 transition">
-                                                    Keep ${task.durationLabel}
-                                                </button>
-                                            ` : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            } else if (!hasDifference) {
-                                return `
-                                    <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center space-x-2">
-                                        <span>✓</span>
-                                        <span>Your step estimates add up to <strong>${formatDurationMinutes(totalKnownSubtaskMin)}</strong>, matching your main task estimate.</span>
-                                    </div>
-                                `;
-                            }
-                        }
-
-                        return '';
-                    })()}
-
-                    <!-- Steps List -->
-                    <div class="space-y-2.5">
-                        ${task.subtasks.length === 0 ? `
-                            <div class="p-4 bg-stone-50 border border-dashed border-[#EAE4DF] rounded-xl text-center space-y-1">
-                                <p class="text-xs text-[#6F6B68]">No concrete steps added yet.</p>
-                                <p class="text-[11px] text-[#8E8A85]">Add a first action below, or click <button type="button" onclick="window.TempoEmergencyFlow.toggleAiHelp()" class="text-[#FF6B2C] font-bold hover:underline">✨ AI Help</button> for ideas.</p>
-                            </div>
-                        ` : task.subtasks.map((step, sIdx) => `
-                            <div class="em-subtask-item p-3 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl flex items-center justify-between gap-3 text-xs transition-all cursor-default"
-                                 data-subtask-index="${sIdx}"
-                                 draggable="true"
-                                 ondragstart="window.TempoEmergencyFlow.handleSubtaskDragStart(event, ${sIdx})"
-                                 ondragover="window.TempoEmergencyFlow.handleSubtaskDragOver(event)"
-                                 ondragenter="window.TempoEmergencyFlow.handleSubtaskDragEnter(event)"
-                                 ondragleave="window.TempoEmergencyFlow.handleSubtaskDragLeave(event)"
-                                 ondrop="window.TempoEmergencyFlow.handleSubtaskDrop(event, ${sIdx})"
-                                 ondragend="window.TempoEmergencyFlow.handleSubtaskDragEnd(event)">
-                                <div class="flex items-center space-x-2 flex-1 min-w-0">
-                                    <!-- Subtle Drag Handle -->
-                                    <div class="em-subtask-drag-handle flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-700 px-1 py-0.5 rounded select-none hover:bg-stone-100 transition shrink-0"
-                                         title="Drag to reorder step"
-                                         data-subtask-index="${sIdx}"
-                                         ontouchstart="window.TempoEmergencyFlow.handleSubtaskTouchStart(event, ${sIdx})"
-                                         ontouchmove="window.TempoEmergencyFlow.handleSubtaskTouchMove(event)"
-                                         ontouchend="window.TempoEmergencyFlow.handleSubtaskTouchEnd(event)"
-                                         ontouchcancel="window.TempoEmergencyFlow.handleSubtaskTouchCancel(event)">
-                                        <span class="text-sm font-bold tracking-widest leading-none select-none">⋮⋮</span>
-                                    </div>
-                                    <span class="w-5 h-5 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-[10px] flex items-center justify-center shrink-0 select-none">
-                                        ${sIdx + 1}
-                                    </span>
-                                    <span class="font-medium text-[#202124] truncate">${escapeHTML(step.title)}</span>
-                                </div>
-
-                                <div class="flex items-center space-x-2 shrink-0">
-                                    ${showSubtaskDurations ? (
-                                        step.durationMinutes && step.durationMinutes > 0 ? `
-                                            <button type="button" 
-                                                    draggable="false"
-                                                    onclick="window.TempoEmergencyFlow.openSubtaskDurationEditor(${sIdx})"
-                                                    class="text-[11px] font-bold text-stone-700 bg-stone-100 hover:bg-[#FFE9DC] hover:text-[#B83D08] px-2.5 py-1 rounded-lg border border-stone-200 hover:border-[#FF6B2C]/40 transition flex items-center space-x-1"
-                                                    title="Click to edit estimate for this step">
-                                                <span>${formatSubtaskDurationDisplay(step.durationMinutes)}</span>
-                                            </button>
-                                        ` : `
-                                            <button type="button" 
-                                                    draggable="false"
-                                                    onclick="window.TempoEmergencyFlow.openSubtaskDurationEditor(${sIdx})"
-                                                    class="text-[11px] font-semibold text-[#FF6B2C] hover:text-[#B83D08] bg-[#FFF8F2] hover:bg-[#FFE9DC] border border-dashed border-[#FF6B2C]/50 px-2.5 py-1 rounded-lg transition flex items-center space-x-1"
-                                                    title="Click to add time estimate for this step">
-                                                + Add time
-                                            </button>
-                                        `
-                                    ) : ''}
-
-                                    <button type="button"
-                                            draggable="false"
-                                            onclick="window.TempoEmergencyFlow.removeSubtask(${sIdx})" 
-                                            class="text-gray-400 hover:text-rose-600 px-1 py-0.5 rounded hover:bg-stone-100 transition" 
-                                            title="Remove step">✕</button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-
-                    <!-- Add Step Input -->
-                    <div class="pt-2 flex flex-col sm:flex-row items-center gap-2">
-                        <input id="em-new-step-title" type="text" placeholder="Add next small action..."
-                               onkeydown="if(event.key === 'Enter') window.TempoEmergencyFlow.addSubtask()"
-                               class="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] bg-[#FFFDFB]">
-                        ${showSubtaskDurations ? `
-                            <input id="em-new-step-duration" type="number" min="5" step="5" placeholder="Mins (opt)"
-                                   onkeydown="if(event.key === 'Enter') window.TempoEmergencyFlow.addSubtask()"
-                                   class="w-24 px-2 py-2 text-xs border border-gray-200 rounded-xl text-center bg-white">
-                        ` : ''}
-                        <button onclick="window.TempoEmergencyFlow.addSubtask()" 
-                                class="btn-primary w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold shrink-0">
-                            + Add step
-                        </button>
-                    </div>
-
-                    <!-- Footer Helper / "I Already Know" Action -->
-                    <div class="flex items-center justify-between pt-1 border-t border-gray-100/60 text-xs flex-wrap gap-2">
-                        <span class="text-[11px] text-[#8E8A85]">Subtask estimates are optional and always editable.</span>
-                        ${!task.alreadyKnowWhatToDo ? `
-                            <button type="button" 
-                                    onclick="window.TempoEmergencyFlow.toggleAlreadyKnowWhatToDo(true)" 
-                                    class="text-[11px] font-semibold text-[#6F6B68] hover:text-[#202124] transition py-0.5 px-2 rounded-lg hover:bg-stone-100 flex items-center space-x-1"
-                                    title="Indicate that you already know what to do without extra breakdown">
-                                <span>✓</span>
-                                <span>I already know what to do</span>
-                            </button>
-                        ` : `
-                            <span class="text-[11px] font-bold text-emerald-700 flex items-center space-x-1">
-                                <span>✓</span>
-                                <span>No further breakdown needed</span>
-                            </span>
-                        `}
-                    </div>
-                </div>
-
-                <!-- Post-Breakdown Action Decision / Bottom Navigation Card -->
-                <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-3 shadow-sm text-center">
-                    <div class="space-y-1">
-                        <h4 class="font-heading text-sm font-bold text-[#202124]">
-                            ${task.subtasks.length > 0 || task.alreadyKnowWhatToDo ? `✨ "${escapeHTML(task.name)}" is ready to execute.` : `Ready to finish "${escapeHTML(task.name)}"?`}
-                        </h4>
-                        <p class="text-xs text-[#6F6B68]">
-                            ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 
-                                ? 'Save your plan whenever you\'re ready, or break down the next task.' 
-                                : 'All tasks are organized. Save your plan to finish setup and choose what to do next.'}
-                        </p>
-                    </div>
-
-                    <div class="pt-2 flex flex-wrap items-center justify-center gap-3">
-                        ${breakdownIndex > 0 ? `
-                            <button onclick="window.TempoEmergencyFlow.breakdownPreviousTask()" 
-                                    class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
-                                ← Previous task
-                            </button>
-                        ` : ''}
-                        <button id="btn-em-save-plan" onclick="window.TempoEmergencyFlow.savePlan()" 
-                                class="btn-primary w-full sm:w-auto px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2">
-                            <span>Save Urgent Plan →</span>
-                        </button>
-                        ${breakdownIndex < confirmedPlan.plannedTasks.length - 1 ? `
-                            <button onclick="window.TempoEmergencyFlow.breakdownNextTask()" 
-                                    class="w-full sm:w-auto px-5 py-3 rounded-xl border border-[#FF6B2C] text-[#FF6B2C] hover:bg-[#FFE9DC] text-xs font-bold transition">
-                                Break down next task →
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Subtask Duration Editor Modal (if active) -->
-            ${renderSubtaskDurationEditorModal()}
-
-            <!-- Deadline Modal Dialog (if active) -->
-            ${renderDeadlineModalHTML()}
-        `;
+        goToStage(confirmedPlan ? 'handoff' : 'plan-review');
     }
 
     function formatSubtaskDurationDisplay(mins) {
@@ -5042,6 +4721,28 @@ window.TempoEmergencyFlow = (function() {
         renderBreakdown();
     }
 
+    function setSubtaskCompleted(taskId, subtaskId, isCompleted) {
+        if (!taskId || !subtaskId) return;
+        const targetCompleted = Boolean(isCompleted);
+        const sTaskId = String(taskId);
+        const sSubtaskId = String(subtaskId);
+
+        if (confirmedPlan && Array.isArray(confirmedPlan.plannedTasks)) {
+            const pt = confirmedPlan.plannedTasks.find(p => p.task && String(p.task.id) === sTaskId);
+            if (pt && pt.task && Array.isArray(pt.task.subtasks)) {
+                const s = pt.task.subtasks.find(sub => String(sub.id) === sSubtaskId);
+                if (s) s.completed = targetCompleted;
+            }
+        }
+        if (Array.isArray(tasks)) {
+            const t = tasks.find(tsk => String(tsk.id) === sTaskId);
+            if (t && Array.isArray(t.subtasks)) {
+                const s = t.subtasks.find(sub => String(sub.id) === sSubtaskId);
+                if (s) s.completed = targetCompleted;
+            }
+        }
+    }
+
     function syncTaskDurationFromSteps(totalMinutes) {
         const planItem = confirmedPlan && confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks[breakdownIndex] : null;
         if (!planItem) return;
@@ -5071,27 +4772,11 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function breakdownNextTask() {
-        if (confirmedPlan && confirmedPlan.plannedTasks && breakdownIndex < confirmedPlan.plannedTasks.length - 1) {
-            breakdownIndex++;
-            showAiSuggestions = false;
-            currentAiSuggestions = [];
-            aiSuggestionError = false;
-            renderBreakdown();
-            scheduleDraftAutosave(true);
-        } else {
-            savePlan();
-        }
+        goToStage(confirmedPlan ? 'handoff' : 'plan-review');
     }
 
     function breakdownPreviousTask() {
-        if (breakdownIndex > 0) {
-            breakdownIndex--;
-            showAiSuggestions = false;
-            currentAiSuggestions = [];
-            aiSuggestionError = false;
-            renderBreakdown();
-            scheduleDraftAutosave(true);
-        }
+        goToStage('plan-review');
     }
 
     /**
@@ -5205,7 +4890,7 @@ window.TempoEmergencyFlow = (function() {
             return;
         }
 
-        const saveBtn = document.getElementById('btn-em-save-plan');
+        const saveBtn = document.getElementById('btn-em-use-plan') || document.getElementById('btn-em-save-plan');
         let origBtnText = '';
         if (saveBtn) {
             origBtnText = saveBtn.innerHTML;
@@ -5220,6 +4905,9 @@ window.TempoEmergencyFlow = (function() {
         }
 
         try {
+            if (!Array.isArray(confirmedPlan.tasks)) {
+                confirmedPlan.tasks = confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks.map(pt => pt.task).filter(Boolean) : [];
+            }
             if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
                 await window.TempoPlanStore.saveActivePlan('emergency', confirmedPlan);
                 if (typeof window.TempoPlanStore.clearDraft === 'function') {
@@ -5236,10 +4924,14 @@ window.TempoEmergencyFlow = (function() {
             }
 
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("Urgent Plan saved successfully.");
+                window.TempoApp.showToast("Working Plan saved successfully.");
             }
 
-            goToStage('handoff');
+            if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.showTaskForNowPopupAfterSave === 'function') {
+                window.TempoUrmodeFlow.showTaskForNowPopupAfterSave(confirmedPlan);
+            } else {
+                goToStage('handoff');
+            }
         } catch (err) {
             console.error("[TempoEmergencyFlow] Failed to save active plan:", err);
             if (saveBtn) {
@@ -5528,30 +5220,101 @@ window.TempoEmergencyFlow = (function() {
         } else if (plan && Array.isArray(plan.tasks)) {
             tasks = [...plan.tasks];
         }
+        if (plan && Array.isArray(plan.availabilityDays) && plan.availabilityDays.length > 0) {
+            availabilityDays = plan.availabilityDays;
+        }
     }
 
-    function toggleTaskCompleted(taskId) {
-        let task = tasks.find(t => t.id === taskId);
-        if (!task && confirmedPlan && confirmedPlan.plannedTasks) {
-            const item = confirmedPlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
-            if (item) task = item.task;
+    function isTaskCompleted(taskId) {
+        const sTaskId = String(taskId);
+        let task = tasks.find(t => String(t.id) === sTaskId);
+        if (!task && confirmedPlan) {
+            if (confirmedPlan.plannedTasks) {
+                const item = confirmedPlan.plannedTasks.find(pt => pt.task && String(pt.task.id) === sTaskId);
+                if (item) task = item.task;
+            }
+            if (!task && confirmedPlan.unarrangedTasks) {
+                const item = confirmedPlan.unarrangedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                if (item) task = item.task || item;
+            }
+            if (!task && confirmedPlan.unallocatedTasks) {
+                const item = confirmedPlan.unallocatedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                if (item) task = item.task || item;
+            }
+            if (!task && confirmedPlan.tasks) {
+                task = confirmedPlan.tasks.find(t => t && String(t.id) === sTaskId);
+            }
         }
         if (!task && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
             const storePlan = window.TempoPlanStore.getActivePlan('emergency');
-            if (storePlan && storePlan.plannedTasks) {
-                const item = storePlan.plannedTasks.find(pt => pt.task && pt.task.id === taskId);
-                if (item) {
-                    task = item.task;
-                    if (!confirmedPlan) confirmedPlan = storePlan;
+            if (storePlan) {
+                if (storePlan.plannedTasks) {
+                    const item = storePlan.plannedTasks.find(pt => pt.task && String(pt.task.id) === sTaskId);
+                    if (item) task = item.task;
+                }
+                if (!task && storePlan.unarrangedTasks) {
+                    const item = storePlan.unarrangedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                    if (item) task = item.task || item;
+                }
+                if (!task && storePlan.unallocatedTasks) {
+                    const item = storePlan.unallocatedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                    if (item) task = item.task || item;
+                }
+                if (!task && storePlan.tasks) {
+                    task = storePlan.tasks.find(t => t && String(t.id) === sTaskId);
                 }
             }
         }
+        return !!(task && task.completed === true);
+    }
+
+    function setTaskCompleted(taskId, completed = true) {
+        const sTaskId = String(taskId);
+        let task = tasks.find(t => String(t.id) === sTaskId);
+        if (!task && confirmedPlan) {
+            if (confirmedPlan.plannedTasks) {
+                const item = confirmedPlan.plannedTasks.find(pt => pt.task && String(pt.task.id) === sTaskId);
+                if (item) task = item.task;
+            }
+            if (!task && confirmedPlan.unarrangedTasks) {
+                const item = confirmedPlan.unarrangedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                if (item) task = item.task || item;
+            }
+            if (!task && confirmedPlan.unallocatedTasks) {
+                const item = confirmedPlan.unallocatedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                if (item) task = item.task || item;
+            }
+            if (!task && confirmedPlan.tasks) {
+                task = confirmedPlan.tasks.find(t => t && String(t.id) === sTaskId);
+            }
+        }
+        if (!task && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            const storePlan = window.TempoPlanStore.getActivePlan('emergency');
+            if (storePlan) {
+                if (storePlan.plannedTasks) {
+                    const item = storePlan.plannedTasks.find(pt => pt.task && String(pt.task.id) === sTaskId);
+                    if (item) task = item.task;
+                }
+                if (!task && storePlan.unarrangedTasks) {
+                    const item = storePlan.unarrangedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                    if (item) task = item.task || item;
+                }
+                if (!task && storePlan.unallocatedTasks) {
+                    const item = storePlan.unallocatedTasks.find(t => String(t && t.task ? t.task.id : t.id) === sTaskId);
+                    if (item) task = item.task || item;
+                }
+                if (!task && storePlan.tasks) {
+                    task = storePlan.tasks.find(t => t && String(t.id) === sTaskId);
+                }
+                if (task && !confirmedPlan) confirmedPlan = storePlan;
+            }
+        }
         if (task) {
-            task.completed = !task.completed;
+            task.completed = !!completed;
             if (task.completed) {
                 task.isInProgress = false;
             }
-            if (window.TempoPlanStore) {
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.updateTaskState === 'function') {
                 window.TempoPlanStore.updateTaskState(taskId, {
                     completed: task.completed,
                     isInProgress: task.isInProgress
@@ -5561,6 +5324,11 @@ window.TempoEmergencyFlow = (function() {
             return task.completed;
         }
         return false;
+    }
+
+    function toggleTaskCompleted(taskId) {
+        const current = isTaskCompleted(taskId);
+        return setTaskCompleted(taskId, !current);
     }
 
     function setTaskInProgress(taskId, inProgress = true) {
@@ -5599,6 +5367,8 @@ window.TempoEmergencyFlow = (function() {
         setConfirmedPlan,
         getAvailabilityDays,
         toggleTaskCompleted,
+        setTaskCompleted,
+        isTaskCompleted,
         setTaskInProgress,
         // Active Plan / Draft Safeguards
         promptStartFresh,
@@ -5655,6 +5425,8 @@ window.TempoEmergencyFlow = (function() {
         handleDrop,
         handleDropOnDay,
         handleDragEnd,
+        clearTaskDragStyles,
+        isDraggingTask: () => isDraggingTask,
         reorderPlannedTasks,
         moveTaskToDay,
         openScheduleModal,
@@ -5686,12 +5458,14 @@ window.TempoEmergencyFlow = (function() {
         toggleDeadlineModalNoDeadline,
         saveDeadlineModal,
         confirmPlanAndProceed,
+        reviewStepBreakdown,
         // Breakdown
         generateSuggestedSteps,
         startCustomBreakdown,
         skipBreakdownForCurrentTask,
         addSubtask,
         removeSubtask,
+        setSubtaskCompleted,
         moveSubtask,
         reorderSubtasks,
         handleSubtaskDragStart,

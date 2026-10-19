@@ -126,6 +126,13 @@ window.TempoApp = (function() {
         if (tabId === 'hub' || tabId === 'learn-solve') {
             tabId = 'learn';
         }
+        if (tabId === 'notes') {
+            tabId = 'tool-notes';
+        }
+        if (tabId === 'tools' || tabId === 'enjoy-tempo-tools') {
+            scrollToEnjoyTempoTools();
+            return;
+        }
 
         // Shared Authenticated Tool: Strack (Self-check)
         if (tabId === 'strack' || tabId === 'stress-check') {
@@ -357,6 +364,27 @@ window.TempoApp = (function() {
 
         // Scroll top gently
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function scrollToEnjoyTempoTools() {
+        const doScroll = () => {
+            const el = document.getElementById('enjoy-tempo-tools')
+                || document.querySelector('[data-tempo-ui="urgent-lower-section"]')
+                || Array.from(document.querySelectorAll('h2')).find(h => (h.textContent || '').includes('Enjoy Tempo Tools'));
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
+        const todayScreen = document.getElementById('screen-today');
+        const isTodayVisible = todayScreen && !todayScreen.classList.contains('hidden');
+
+        if (isTodayVisible) {
+            doScroll();
+        } else {
+            navigateTo('today');
+            setTimeout(doScroll, 100);
+        }
     }
 
     function handleHashChange() {
@@ -686,6 +714,9 @@ window.TempoApp = (function() {
         }
 
         if (state === 'urgent') {
+            if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.queueResetPopup === 'function') {
+                window.TempoUrmodeFlow.queueResetPopup();
+            }
             if (window.TempoMode && typeof window.TempoMode.requestContext === 'function') {
                 window.TempoMode.requestContext('emergency', 'entry');
             } else if (window.TempoMode) {
@@ -820,6 +851,7 @@ window.TempoApp = (function() {
     return {
         init,
         navigateTo,
+        scrollToEnjoyTempoTools,
         setRole,
         showToast,
         triggerConfetti,

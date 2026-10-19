@@ -201,9 +201,9 @@ window.TempoCommunity = (function() {
         const authorInitial = (post.authorName || 'S').charAt(0).toUpperCase();
         const subtitleText = post.context || (post.university ? `${post.university} · ${post.timeAgo || 'Recently'}` : (post.timeAgo || 'Recently'));
 
-        const tagsHTML = post.tags && post.tags.length > 0
+        const tagsHTML = (post.tags && post.tags.length > 0
             ? post.tags.map(t => `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${t.bg || 'bg-stone-100'} ${t.text || 'text-stone-700'}">${escapeHtml(t.label || t)}</span>`).join(' ')
-            : (post.tag ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">${escapeHtml(post.tag)}</span>` : '');
+            : (post.tag ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#B83D08]">${escapeHtml(post.tag)}</span>` : '')) + (post.tag ? ` <span class="sr-only">${escapeHtml(post.tag)}</span>` : '');
 
         const thumbnailsHTML = post.thumbnails && post.thumbnails.length > 0
             ? `
