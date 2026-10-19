@@ -204,9 +204,16 @@ window.TempoPlanWorkspace = (function() {
                 task.executionStatus = 'pending';
             }
 
-            // Sync with TempoEmergencyFlow
-            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.toggleTaskCompleted === 'function') {
-                window.TempoEmergencyFlow.toggleTaskCompleted(taskId);
+            // Sync with TempoEmergencyFlow explicitly
+            if (window.TempoEmergencyFlow) {
+                if (typeof window.TempoEmergencyFlow.setTaskCompleted === 'function') {
+                    window.TempoEmergencyFlow.setTaskCompleted(taskId, task.completed);
+                } else if (typeof window.TempoEmergencyFlow.toggleTaskCompleted === 'function') {
+                    const cur = (window.TempoEmergencyFlow.isTaskCompleted && window.TempoEmergencyFlow.isTaskCompleted(taskId));
+                    if (cur !== task.completed) {
+                        window.TempoEmergencyFlow.toggleTaskCompleted(taskId);
+                    }
+                }
             }
 
             // Sync with planStore
@@ -398,22 +405,72 @@ window.TempoPlanWorkspace = (function() {
         render();
     }
 
+    function setSubtaskCompleted(taskId, subtaskId, isCompleted) {
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        let task = null;
+        if (Array.isArray(plan.plannedTasks)) {
+            const pt = plan.plannedTasks.find(item => item.task && String(item.task.id) === String(taskId));
+            if (pt) task = pt.task;
+        }
+        if (!task && Array.isArray(plan.unarrangedTasks)) {
+            const u = plan.unarrangedTasks.find(item => String(item && item.task ? item.task.id : item.id) === String(taskId));
+            if (u) task = u.task || u;
+        }
+        if (!task && Array.isArray(plan.tasks)) {
+            task = plan.tasks.find(t => String(t.id) === String(taskId));
+        }
+        if (!task || !Array.isArray(task.subtasks)) return;
+
+        const sub = task.subtasks.find(s => String(s.id) === String(subtaskId));
+        if (sub) {
+            sub.completed = Boolean(isCompleted);
+            persistPlan(plan);
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.updateSubtaskState === 'function') {
+                window.TempoPlanStore.updateSubtaskState(taskId, subtaskId, { completed: sub.completed });
+            }
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+                window.TempoEmergencyFlow.setConfirmedPlan(plan);
+            }
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
+            render();
+        }
+    }
+
     function toggleSubtask(taskId, subtaskId) {
         const plan = getActivePlan();
         if (!plan) return;
 
         let task = null;
-        const pt = plan.plannedTasks.find(item => item.task && item.task.id === taskId);
-        if (pt) task = pt.task;
-        if (!task && plan.unarrangedTasks) {
-            task = plan.unarrangedTasks.find(t => t.id === taskId);
+        if (Array.isArray(plan.plannedTasks)) {
+            const pt = plan.plannedTasks.find(item => item.task && String(item.task.id) === String(taskId));
+            if (pt) task = pt.task;
         }
-        if (!task || !task.subtasks) return;
+        if (!task && Array.isArray(plan.unarrangedTasks)) {
+            const u = plan.unarrangedTasks.find(item => String(item && item.task ? item.task.id : item.id) === String(taskId));
+            if (u) task = u.task || u;
+        }
+        if (!task && Array.isArray(plan.tasks)) {
+            task = plan.tasks.find(t => String(t.id) === String(taskId));
+        }
+        if (!task || !Array.isArray(task.subtasks)) return;
 
-        const sub = task.subtasks.find(s => s.id === subtaskId);
+        const sub = task.subtasks.find(s => String(s.id) === String(subtaskId));
         if (sub) {
             sub.completed = !sub.completed;
             persistPlan(plan);
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.updateSubtaskState === 'function') {
+                window.TempoPlanStore.updateSubtaskState(taskId, subtaskId, { completed: sub.completed });
+            }
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+                window.TempoEmergencyFlow.setConfirmedPlan(plan);
+            }
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
             render();
         }
     }
@@ -433,6 +490,134 @@ window.TempoPlanWorkspace = (function() {
 
         const [moved] = task.subtasks.splice(fromIdx, 1);
         task.subtasks.splice(toIdx, 0, moved);
+
+        persistPlan(plan);
+        render();
+    }
+
+    // =========================================================================
+    // TASK DRAG AND DROP REORDERING
+    // =========================================================================
+    let draggedGlobalIndex = null;
+    let isDraggingTask = false;
+
+    function handleDragStart(e, globalIndex) {
+        // Prevent drag initiation from buttons, links, or form controls inside the card
+        if (e.target && e.target.closest && e.target.closest('button, input, select, textarea, a, .btn-primary')) {
+            e.preventDefault();
+            return false;
+        }
+        draggedGlobalIndex = globalIndex;
+        isDraggingTask = true;
+        document.body.classList.add('is-dragging-card');
+        if (e.dataTransfer) {
+            e.dataTransfer.setData('text/plain', String(globalIndex));
+            e.dataTransfer.effectAllowed = 'move';
+        }
+        const card = e.currentTarget.closest('.workspace-task-card') || e.currentTarget;
+        if (card) {
+            card.classList.add('em-card-dragging', 'opacity-60', 'border-dashed', 'border-[#FF6B2C]', 'shadow-lg');
+            card.classList.remove('opacity-40');
+        }
+        const handle = card ? card.querySelector('.workspace-drag-handle') : null;
+        if (handle) {
+            handle.classList.add('is-grabbing');
+        }
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
+        }
+    }
+
+    function handleDragEnter(e) {
+        e.preventDefault();
+        const card = e.currentTarget.closest('.workspace-task-card');
+        if (card && draggedGlobalIndex !== null) {
+            const targetIdx = parseInt(card.getAttribute('data-global-index'), 10);
+            if (!isNaN(targetIdx) && targetIdx !== draggedGlobalIndex) {
+                card.classList.add('em-drop-target', 'bg-orange-50/60', 'border-[#FF6B2C]');
+                if (draggedGlobalIndex > targetIdx) {
+                    card.classList.add('border-t-2', 'border-t-[#FF6B2C]');
+                    card.classList.remove('border-b-2', 'border-b-[#FF6B2C]');
+                } else {
+                    card.classList.add('border-b-2', 'border-b-[#FF6B2C]');
+                    card.classList.remove('border-t-2', 'border-t-[#FF6B2C]');
+                }
+            }
+        }
+    }
+
+    function handleDragLeave(e) {
+        const card = e.currentTarget.closest('.workspace-task-card');
+        if (card) {
+            if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+            card.classList.remove('em-drop-target', 'bg-orange-50/60', 'border-[#FF6B2C]', 'border-t-2', 'border-t-[#FF6B2C]', 'border-b-2', 'border-b-[#FF6B2C]');
+        }
+    }
+
+    function clearTaskDragStyles() {
+        draggedGlobalIndex = null;
+        isDraggingTask = false;
+        document.body.classList.remove('is-dragging-card');
+        document.querySelectorAll('.workspace-task-card').forEach(el => {
+            el.classList.remove(
+                'em-card-dragging',
+                'opacity-60',
+                'opacity-40',
+                'shadow-lg',
+                'border-dashed',
+                'em-drop-target',
+                'bg-orange-50/60',
+                'border-[#FF6B2C]',
+                'border-t-2',
+                'border-t-[#FF6B2C]',
+                'border-b-2',
+                'border-b-[#FF6B2C]'
+            );
+        });
+        document.querySelectorAll('.workspace-drag-handle').forEach(h => {
+            h.classList.remove('is-grabbing');
+        });
+    }
+
+    function handleDrop(e, targetGlobalIndex) {
+        e.preventDefault();
+        e.stopPropagation();
+        let fromIdx = draggedGlobalIndex;
+        if (fromIdx === null && e.dataTransfer) {
+            const raw = e.dataTransfer.getData('text/plain');
+            if (raw) fromIdx = parseInt(raw, 10);
+        }
+        clearTaskDragStyles();
+
+        if (fromIdx !== null && !isNaN(fromIdx) && fromIdx !== targetGlobalIndex) {
+            reorderTasks(fromIdx, targetGlobalIndex);
+        }
+    }
+
+    function handleDragEnd(e) {
+        clearTaskDragStyles();
+    }
+
+    function reorderTasks(fromIndex, toIndex) {
+        const plan = getActivePlan();
+        if (!plan || !plan.plannedTasks) return;
+        if (fromIndex < 0 || fromIndex >= plan.plannedTasks.length) return;
+        if (toIndex < 0 || toIndex >= plan.plannedTasks.length) return;
+        if (fromIndex === toIndex) return;
+
+        const targetItem = plan.plannedTasks[toIndex];
+        const targetDayDate = targetItem.dayDate;
+        const targetDayLabel = targetItem.dayLabel;
+
+        const [movedItem] = plan.plannedTasks.splice(fromIndex, 1);
+        movedItem.dayDate = targetDayDate;
+        if (targetDayLabel) movedItem.dayLabel = targetDayLabel;
+
+        plan.plannedTasks.splice(toIndex, 0, movedItem);
 
         persistPlan(plan);
         render();
@@ -936,14 +1121,28 @@ window.TempoPlanWorkspace = (function() {
                                             const completedSubtasks = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
 
                                             return `
-                                                <div class="p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-2 border-[#FF6B2C] bg-[#FFFBF8] shadow-sm' : 'border-[#EAE4DF] bg-white hover:border-gray-300 shadow-xs'}"
+                                                <div class="workspace-task-card group relative p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-2 border-[#FF6B2C] bg-[#FFFBF8] shadow-sm' : 'border-[#EAE4DF] bg-white hover:border-stone-400 hover:shadow-md shadow-xs'}"
+                                                     data-task-id="${task.id}"
+                                                     data-global-index="${item.globalIndex}"
+                                                     draggable="true"
+                                                     ondragstart="window.TempoPlanWorkspace.handleDragStart(event, ${item.globalIndex})"
+                                                     ondragover="window.TempoPlanWorkspace.handleDragOver(event)"
+                                                     ondragenter="window.TempoPlanWorkspace.handleDragEnter(event)"
+                                                     ondragleave="window.TempoPlanWorkspace.handleDragLeave(event)"
+                                                     ondrop="window.TempoPlanWorkspace.handleDrop(event, ${item.globalIndex})"
+                                                     ondragend="window.TempoPlanWorkspace.handleDragEnd(event)"
                                                      onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
                                                     <!-- Top Card Meta Row -->
                                                     <div class="flex items-center justify-between gap-2 pb-2">
                                                         <div class="flex items-center space-x-2 min-w-0">
                                                             <!-- Drag Handle -->
-                                                            <div class="cursor-grab text-gray-400 hover:text-gray-700 px-1 py-0.5 rounded text-xs select-none" title="Drag to reorder">
-                                                                ⋮⋮
+                                                            <div class="workspace-drag-handle em-drag-handle flex items-center justify-center text-stone-400 group-hover:text-stone-700 hover:text-[#B83D08] hover:bg-[#FFE9DC] px-1.5 py-1 rounded-md text-xs select-none transition-colors"
+                                                                 title="${window.t ? window.t('workspace.dragToReorder', {}, 'Drag to reorder') : 'Drag to reorder'}"
+                                                                 aria-label="${window.t ? window.t('workspace.dragToReorder', {}, 'Drag to reorder') : 'Drag to reorder'}"
+                                                                 tabindex="0"
+                                                                 data-drag-handle="true"
+                                                                 onclick="event.stopPropagation()">
+                                                                <span class="text-xs font-bold tracking-widest leading-none select-none pointer-events-none">⋮⋮</span>
                                                             </div>
                                                             <!-- Checkbox -->
                                                             <button type="button" 
@@ -1664,7 +1863,17 @@ window.TempoPlanWorkspace = (function() {
         addSubtask,
         removeSubtask,
         toggleSubtask,
+        setSubtaskCompleted,
         reorderDrawerSubtask,
+        handleDragStart,
+        handleDragOver,
+        handleDragEnter,
+        handleDragLeave,
+        handleDrop,
+        handleDragEnd,
+        clearTaskDragStyles,
+        isDraggingTask: () => isDraggingTask,
+        reorderTasks,
         openRescheduleModal,
         closeRescheduleModal,
         selectRescheduleWindow,

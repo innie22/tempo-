@@ -150,6 +150,7 @@ window.TempoStressRelief = (function() {
     // State Variables
     let activeContext = 'home'; // 'home' | 'emergency'
     let onReadyCallback = null;
+    let onCloseCallback = null;
     let activeMethod = METHODS[0]; // defaults to Breathing
     let selectedDuration = 3; // minutes
     let currentFilter = 'all'; // 'all' | '1' | '3' | '5' | '10'
@@ -203,6 +204,7 @@ window.TempoStressRelief = (function() {
     function openBreathing(options = {}) {
         activeContext = options.context || 'home';
         onReadyCallback = options.onReady || null;
+        onCloseCallback = options.onClose || null;
         activeMethod = METHODS.find(m => m.id === 'breathing') || METHODS[0];
         selectedDuration = 3;
 
@@ -218,6 +220,9 @@ window.TempoStressRelief = (function() {
         activeContext = options.context || activeContext || 'home';
         if (options.onReady) {
             onReadyCallback = options.onReady;
+        }
+        if (options.onClose) {
+            onCloseCallback = options.onClose;
         }
 
         stopAllTimers();
@@ -242,11 +247,21 @@ window.TempoStressRelief = (function() {
 
     function closeModal() {
         stopAllTimers();
+        const ctx = activeContext;
+        const onClose = onCloseCallback;
+        onReadyCallback = null;
+        onCloseCallback = null;
+        activeContext = 'home';
         const modal = document.getElementById('modal-quick-stress-relief');
         if (modal) {
             modal.classList.add('hidden');
         }
         document.body.classList.remove('overflow-hidden');
+        if (typeof onClose === 'function') {
+            onClose();
+        } else if (ctx === 'emergency_reset' && window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.showResetPopup === 'function') {
+            window.TempoUrmodeFlow.showResetPopup();
+        }
     }
 
     function stopAllTimers() {
@@ -523,6 +538,10 @@ window.TempoStressRelief = (function() {
             } else {
                 // Session finished!
                 stopAllTimers();
+                if (activeContext === 'emergency_reset') {
+                    handleReady();
+                    return;
+                }
                 renderCheckpoint();
                 return;
             }
@@ -703,6 +722,10 @@ window.TempoStressRelief = (function() {
                 }
             } else {
                 stopAllTimers();
+                if (activeContext === 'emergency_reset') {
+                    handleReady();
+                    return;
+                }
                 renderCheckpoint();
             }
         }, 1000);
@@ -732,6 +755,10 @@ window.TempoStressRelief = (function() {
 
     function endSessionEarly() {
         stopAllTimers();
+        if (activeContext === 'emergency_reset') {
+            handleReady();
+            return;
+        }
         renderCheckpoint();
     }
 
@@ -739,6 +766,10 @@ window.TempoStressRelief = (function() {
     // VIEW 6: CHECKPOINT PANEL (How are you feeling now?)
     // =========================================================================
     function renderCheckpoint() {
+        if (activeContext === 'emergency_reset') {
+            handleReady();
+            return;
+        }
         const container = document.getElementById('stress-relief-content-body');
         if (!container) return;
 
@@ -781,19 +812,30 @@ window.TempoStressRelief = (function() {
     }
 
     function handleReady() {
-        closeModal();
+        const cb = onReadyCallback;
+        const ctx = activeContext;
+        stopAllTimers();
+        onReadyCallback = null;
+        onCloseCallback = null;
+        activeContext = 'home';
+        const modal = document.getElementById('modal-quick-stress-relief');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+        document.body.classList.remove('overflow-hidden');
 
-        if (activeContext === 'emergency') {
+        if (ctx === 'emergency') {
             if (window.TempoEmergencyFlow) {
                 window.TempoEmergencyFlow.goToStage('reality-check');
             }
-            if (typeof onReadyCallback === 'function') {
-                onReadyCallback();
-            }
-        } else {
+        } else if (ctx !== 'emergency_reset') {
             if (window.TempoApp) {
                 window.TempoApp.showToast("Nicely done. Take your grounded energy into your next step.");
             }
+        }
+
+        if (typeof cb === 'function') {
+            cb();
         }
     }
 

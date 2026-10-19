@@ -250,9 +250,8 @@ def run_tests():
         """)
 
         assert not top_invariants['hasH1'], f"Urgent Home must NOT have a standalone H1 hero banner, found: {top_invariants['h1Text']}"
-        assert not top_invariants['hasSeparateAmbient'], "Urgent Home must NOT have separate top ambient greeting banner"
-        assert top_invariants['hasDate'], "Date display must exist in top utility row"
-        log("✓ No standalone greeting hero / banner verified.")
+        assert not top_invariants['hasDate'], "Date display must be removed entirely from top utility row"
+        log("✓ No standalone greeting hero / banner and date element removal verified.")
 
         # =====================================================================
         # CONTRACT CHECK 3: ~65 / 35 Execution Core & Internal Greeting
@@ -304,14 +303,14 @@ def run_tests():
         assert core_info['hasLeftCol'] and core_info['hasRightCol'], "65 / 35 column structure must exist"
         assert core_info['isWarmBorder'] and core_info['isWarmBg'], "Left card must have warm peach/orange styling"
         assert core_info['isRightColWhite'], "Right plan container must be neutral white structured card"
-        assert any(g in core_info['greetingText'] for g in ["Hi", "Chào"]), f"Greeting must be rendered INSIDE left primary card, got: {core_info['greetingText']}"
+        assert not core_info['greetingText'], "Redundant internal greeting should be removed from urgent-card-now"
         assert any(l in core_info['badgeLabel'] for l in ["YOUR TASK FOR NOW", "VIỆC CẦN LÀM NGAY"]), "Badge label must indicate YOUR TASK FOR NOW"
-        assert core_info['hasNowBadge'], "Card must display NOW badge"
+        assert not core_info['hasNowBadge'], "Redundant top-right NOW badge should be removed from urgent-card-now"
         assert core_info['titleText'] == 'Contract Law Essay', f"Title mismatch: {core_info['titleText']}"
         assert core_info['subtitleText'] == 'Finish section 2 legal argument', f"Subtitle mismatch: {core_info['subtitleText']}"
         assert any(b in core_info['focusBtnText'] for b in ["Focus on this task", "Tập trung vào việc này"]), f"Focus CTA mismatch: {core_info['focusBtnText']}"
         assert core_info['hasViewBtn'], "View task button must exist"
-        log("✓ 65/35 composition, internal greeting, warm priority emphasis, and task CTAs verified.")
+        log("✓ 65/35 composition, clean priority card, warm priority emphasis, and task CTAs verified.")
 
         # =====================================================================
         # CONTRACT CHECK 4: Dedicated Support Row & Prohibited Additions

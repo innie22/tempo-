@@ -151,11 +151,11 @@ def run_tests():
                             }
                         },
                         {
-                            dayDate: today,
-                            dayLabel: 'Today',
-                            startTime: '04:00 PM',
-                            endTime: '05:00 PM',
-                            executionBadge: 'LATER',
+                            dayDate: tomorrow,
+                            dayLabel: 'Tomorrow',
+                            startTime: '09:00 AM',
+                            endTime: '10:00 AM',
+                            executionBadge: 'DO THIS FIRST',
                             task: {
                                 id: 'task-u3',
                                 name: 'Prepare slides',
@@ -171,9 +171,9 @@ def run_tests():
                         {
                             dayDate: tomorrow,
                             dayLabel: 'Tomorrow',
-                            startTime: '09:00 AM',
-                            endTime: '10:00 AM',
-                            executionBadge: 'DO THIS FIRST',
+                            startTime: '10:30 AM',
+                            endTime: '11:30 AM',
+                            executionBadge: 'THEN',
                             task: {
                                 id: 'task-u4',
                                 name: 'Tomorrow Lab writeup',
@@ -187,13 +187,29 @@ def run_tests():
                             }
                         }
                     ],
+                    unarrangedTasks: [
+                        {
+                            id: 'task-u5',
+                            name: 'Project reflection',
+                            description: 'Write brief project reflection',
+                            hasDeadline: false,
+                            durationLabel: '45 min',
+                            durationMinutes: 45,
+                            completed: false,
+                            isInProgress: false,
+                            subtasks: []
+                        }
+                    ],
                     tasks: [],
                     availabilityDays: [
                         { date: today, label: 'Today', blocks: [{ start: '09:00', end: '23:59', minutes: 840 }] },
                         { date: tomorrow, label: 'Tomorrow', blocks: [{ start: '09:00', end: '23:59', minutes: 840 }] }
                     ]
                 };
-                testPlan.tasks = testPlan.plannedTasks.map(pt => pt.task);
+                testPlan.tasks = [
+                    ...testPlan.plannedTasks.map(pt => pt.task),
+                    ...testPlan.unarrangedTasks
+                ];
 
                 // Seed into both TempoEmergencyFlow and TempoPlanStore
                 if (window.TempoPlanStore && window.TempoPlanStore.saveActivePlan) {
@@ -334,14 +350,14 @@ def run_tests():
         """)
 
         assert now_info is not None, "Priority #1 'Your Task for Now' card should be rendered"
-        assert any(g in now_info['greetingText'] for g in ["Hi", "Chào"]), f"Greeting should be inside urgent-card-now, got: {now_info['greetingText']}"
+        assert not now_info['greetingText'], "Redundant internal greeting should be removed from urgent-card-now"
         assert any(l in now_info['label'] for l in ["YOUR TASK FOR NOW", "VIỆC CẦN LÀM NGAY"]), f"Label should say 'YOUR TASK FOR NOW', got: {now_info['label']}"
-        assert now_info['hasNowBadge'], "Card should display NOW badge"
+        assert not now_info['hasNowBadge'], "Redundant top-right NOW badge should be removed from urgent-card-now"
         assert now_info['title'] == 'Marketing Report', f"Title should be 'Marketing Report', got: {now_info['title']}"
         assert now_info['subtitle'] == 'Finish competitor analysis section', f"Subtitle should show first unfinished subtask, got: {now_info['subtitle']}"
         assert any(b in now_info['focusBtnText'] for b in ["Focus on this task", "Tập trung vào việc này"]), f"Focus button mismatch: {now_info['focusBtnText']}"
         assert any(b in now_info['viewBtnText'] for b in ["View task", "Xem công việc"]), f"View task button mismatch: {now_info['viewBtnText']}"
-        log("✓ Priority #1 'Your Task for Now' structure with internal greeting verified.")
+        log("✓ Priority #1 'Your Task for Now' clean structure (redundant elements removed) verified.")
 
         # Test Clicking "Focus on this task" opens Focus Zone with task-u1
         fz_debug = eval_js("""
@@ -406,30 +422,31 @@ def run_tests():
         """)
 
         assert plan_info is not None, "Right column should be rendered"
-        assert any(h in plan_info['headerText'] for h in ['Your plan for today', 'Kế hoạch hôm nay']), f"Header mismatch: {plan_info['headerText']}"
-        assert any(v in plan_info['viewPlanText'] for v in ["View / Edit Plan", "Xem / Sửa kế hoạch", "Xem / Chỉnh sửa kế hoạch", "Xem / chỉnh sửa"]), f"Button text mismatch: {plan_info['viewPlanText']}"
-        assert any(p in plan_info['progressText'] for p in ["1 of 3 completed", "1/3 hoàn thành", "1/3 đã hoàn thành", "1 trên 3"]), f"Progress text mismatch: {plan_info['progressText']}"
-        assert plan_info['timelineCount'] == 3, f"Today has 3 planned tasks, got: {plan_info['timelineCount']}"
-        assert plan_info['lineCount'] == 2, f"Should have connector lines between items (3 items = 2 lines), got: {plan_info['lineCount']}"
+        assert any(h in plan_info['headerText'] for h in ['Your plan for today', 'Kế hoạch hôm nay', 'Your Working Plan']), f"Header mismatch: {plan_info['headerText']}"
+        assert any(v in plan_info['viewPlanText'] for v in ["View / Edit Plan", "Xem / Sửa kế hoạch", "Xem / Chỉnh sửa kế hoạch", "Xem / chỉnh sửa", "Adjust Plan"]), f"Button text mismatch: {plan_info['viewPlanText']}"
+        assert any(p in plan_info['progressText'] for p in ["1 of 5 completed", "1/5 hoàn thành", "1/5 đã hoàn thành", "1 trên 5"]), f"Progress text mismatch: {plan_info['progressText']}"
+        assert plan_info['timelineCount'] == 5, f"Working plan has 5 planned tasks, got: {plan_info['timelineCount']}"
 
         # Check badges
         assert plan_info['items'][0]['title'] == 'Marketing Report' and (plan_info['items'][0]['badge'] in ['NOW', 'ĐANG LÀM', 'Đang làm'])
         assert plan_info['items'][1]['title'] == 'Read chapter 4' and (plan_info['items'][1]['badge'] in ['Completed', 'Đã xong', 'Đã hoàn thành', 'Hoàn thành']) and plan_info['items'][1]['isStrikethrough']
         assert plan_info['items'][2]['title'] == 'Prepare slides' and (plan_info['items'][2]['badge'] in ['UP NEXT', 'TIẾP THEO', 'Tiếp theo'])
-        log("✓ Priority #2 'Your plan for today' vertical timeline, connectors, badges, and progress bar verified.")
+        assert plan_info['items'][3]['title'] == 'Tomorrow Lab writeup' and (plan_info['items'][3]['badge'] in ['UP NEXT', 'TIẾP THEO', 'Tiếp theo'])
+        assert plan_info['items'][4]['title'] == 'Project reflection' and (plan_info['items'][4]['badge'] in ['Not scheduled', 'Chưa lên lịch'])
+        log("✓ Priority #2 'Your Working Plan' vertical timeline, badges, and progress bar verified for complete 5-task plan (4 scheduled + 1 unscheduled at bottom).")
 
-        # Test Toggling Completion from Home
+        # Test Toggling Completion from Home on unscheduled task
         toggle_res = eval_js("""
             (() => {
-                // Toggle task-u3 to completed
-                window.TempoMode.toggleTaskCompletion('task-u3');
+                // Toggle task-u5 (the unscheduled task at the bottom) to completed
+                window.TempoMode.toggleTaskCompletion('task-u5');
                 const rightCol = document.querySelector('.urgent-right-col');
                 const progressText = rightCol ? rightCol.querySelector('.text-\\\\[\\\\#6F6B68\\\\].font-medium').textContent.trim() : '';
                 return progressText;
             })()
         """)
-        assert any(p in toggle_res for p in ["2 of 3 completed", "2/3 hoàn thành", "2/3 đã hoàn thành", "2 trên 3"]), f"Progress text should update to 2 of 3, got: {toggle_res}"
-        log("✓ Task completion toggle updates progress and re-renders timeline accurately.")
+        assert any(p in toggle_res for p in ["2 of 5 completed", "2/5 hoàn thành", "2/5 đã hoàn thành", "2 trên 5"]), f"Progress text should update to 2 of 5, got: {toggle_res}"
+        log("✓ Unscheduled task completion toggle updates progress and re-renders timeline accurately.")
 
         # =====================================================================
         # TEST 4: Support Row & Tempo Posts (Social Community Feed)
@@ -559,9 +576,8 @@ def run_tests():
         eval_js("""
             (() => {
                 const dates = window.__setupTestPlan();
-                // Mark all today's tasks as completed
+                // Mark all today's tasks as completed (task-u2 is already completed in testPlan)
                 window.TempoEmergencyFlow.toggleTaskCompleted('task-u1');
-                window.TempoEmergencyFlow.toggleTaskCompleted('task-u3');
                 window.TempoMode.renderEmodeHome();
             })()
         """)
@@ -581,6 +597,7 @@ def run_tests():
                 window.TempoEmergencyFlow.toggleTaskCompleted('task-u1');
                 window.TempoEmergencyFlow.toggleTaskCompleted('task-u3');
                 window.TempoEmergencyFlow.toggleTaskCompleted('task-u4');
+                window.TempoEmergencyFlow.toggleTaskCompleted('task-u5');
                 window.TempoMode.renderEmodeHome();
             })()
         """)

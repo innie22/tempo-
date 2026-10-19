@@ -686,23 +686,54 @@ window.TempoPlanStore = (function() {
     async function updateTaskState(taskId, updates) {
         if (!taskId || !updates) return;
         const userId = getUserId();
+        const sTaskId = String(taskId);
 
-        // 1. Update in-memory active plan(s)
-        Object.keys(activePlans).forEach(pt => {
-            const plan = activePlans[pt];
-            if (plan && Array.isArray(plan.plannedTasks)) {
-                const item = plan.plannedTasks.find(ptItem => ptItem.task && ptItem.task.id === taskId);
-                if (item) {
-                    Object.assign(item.task, updates);
+        // 1. Update in-memory active plan(s) and local storage
+        const planTypes = ['emergency', 'action'];
+        planTypes.forEach(pt => {
+            let plan = activePlans[pt];
+            let fromStorage = false;
+            if (!plan) {
+                plan = readLocal(getActiveKey(userId, pt));
+                if (plan) fromStorage = true;
+            }
+            if (plan) {
+                let mutated = false;
+                if (Array.isArray(plan.plannedTasks)) {
+                    const item = plan.plannedTasks.find(ptItem => ptItem.task && String(ptItem.task.id) === sTaskId);
+                    if (item && item.task) {
+                        Object.assign(item.task, updates);
+                        mutated = true;
+                    }
+                }
+                if (Array.isArray(plan.unallocatedTasks)) {
+                    const item = plan.unallocatedTasks.find(u => String(u && u.task ? u.task.id : u.id) === sTaskId);
+                    if (item) {
+                        if (item.task) Object.assign(item.task, updates);
+                        else Object.assign(item, updates);
+                        mutated = true;
+                    }
+                }
+                if (Array.isArray(plan.unarrangedTasks)) {
+                    const item = plan.unarrangedTasks.find(u => String(u && u.task ? u.task.id : u.id) === sTaskId);
+                    if (item) {
+                        if (item.task) Object.assign(item.task, updates);
+                        else Object.assign(item, updates);
+                        mutated = true;
+                    }
+                }
+                if (Array.isArray(plan.tasks)) {
+                    const t = plan.tasks.find(task => task && String(task.id) === sTaskId);
+                    if (t) {
+                        Object.assign(t, updates);
+                        mutated = true;
+                    }
+                }
+                if (mutated || !fromStorage) {
+                    activePlans[pt] = plan;
+                    writeLocal(getActiveKey(userId, pt), plan);
                 }
             }
-            if (plan && Array.isArray(plan.unallocatedTasks)) {
-                const task = plan.unallocatedTasks.find(t => t.id === taskId);
-                if (task) {
-                    Object.assign(task, updates);
-                }
-            }
-            writeLocal(getActiveKey(userId, pt), plan);
         });
 
         // 2. Also update in draft if exists
@@ -762,6 +793,27 @@ window.TempoPlanStore = (function() {
                 plan.plannedTasks.forEach(item => {
                     if (item.task && Array.isArray(item.task.subtasks)) {
                         const sub = item.task.subtasks.find(s => s.id === subtaskId);
+                        if (sub) {
+                            Object.assign(sub, updates);
+                        }
+                    }
+                });
+            }
+            if (plan && Array.isArray(plan.tasks)) {
+                plan.tasks.forEach(t => {
+                    if (t && Array.isArray(t.subtasks)) {
+                        const sub = t.subtasks.find(s => s.id === subtaskId);
+                        if (sub) {
+                            Object.assign(sub, updates);
+                        }
+                    }
+                });
+            }
+            if (plan && Array.isArray(plan.unarrangedTasks)) {
+                plan.unarrangedTasks.forEach(item => {
+                    const t = (item && item.task) ? item.task : item;
+                    if (t && Array.isArray(t.subtasks)) {
+                        const sub = t.subtasks.find(s => s.id === subtaskId);
                         if (sub) {
                             Object.assign(sub, updates);
                         }

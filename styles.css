@@ -152,6 +152,22 @@ h1, h2, h3, h4, h5, h6, .font-heading {
     box-shadow: 0 4px 14px rgba(255, 107, 44, 0.25);
 }
 
+.btn-terracotta {
+    background-color: #D79277;
+    color: #FFFFFF;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-terracotta:hover {
+    background-color: #C68166;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(215, 146, 119, 0.35);
+}
+
+.soft-card-shadow {
+    box-shadow: 0 4px 12px -2px rgba(75, 55, 40, 0.06), 0 12px 24px -4px rgba(75, 55, 40, 0.08);
+}
+
+
 /* Breathing Circle Animation (Box Breathing 4-4-4-4) */
 @keyframes boxBreathe {
     0%, 100% {
@@ -462,14 +478,96 @@ header nav {
     font-weight: 700 !important;
 }
 
-.em-timeline-card {
+/* ==========================================================================
+   WORKING PLAN / TIMELINE TASK CARDS & DRAG-AND-DROP AFFORDANCE
+   ========================================================================== */
+
+.em-timeline-card,
+.workspace-task-card {
     background-color: #FFFFFF;
     border: 1.5px solid #EAE4DF;
     border-radius: 20px;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+    cursor: default;
+    position: relative;
 }
-.em-timeline-card:hover {
+
+/* Card hover: subtle elevation and restrained border change */
+.em-timeline-card:hover,
+.workspace-task-card:hover {
     border-color: #D3CDC7;
+    box-shadow: 0 4px 14px -2px rgba(75, 55, 40, 0.08), 0 2px 6px -1px rgba(75, 55, 40, 0.04);
+}
+
+/* Drag Handle Cursor & Affordance (Pixel-style Grab Hand matching reference) */
+.em-drag-handle,
+.workspace-drag-handle {
+    cursor: url('assets/cursors/grab.png') 16 16, url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAUElEQVR42u2VwQoAIAhD9/8/vS7dNUIntQcDD4GPxAKMMeYc7kR1WfNszecFKs6Hc5cIUH0DowTwrQCVAlBuwI2E/CFq+Q/am48RyMQYY1IsGhw5x3pR/DYAAAAASUVORK5CYII=') 16 16, grab;
+    user-select: none;
+    -webkit-user-select: none;
+    color: #A8A29E;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+/* Increase handle contrast when hovering the card */
+.em-timeline-card:hover .em-drag-handle,
+.workspace-task-card:hover .workspace-drag-handle {
+    color: #57534E;
+}
+
+/* Prominent contrast & brand touch when hovering or grabbing the handle directly */
+.em-drag-handle:hover,
+.workspace-drag-handle:hover {
+    color: #B83D08 !important;
+    background-color: #FFE9DC !important;
+}
+
+/* Actively grabbing / dragging */
+.em-drag-handle:active,
+.workspace-drag-handle:active,
+.em-drag-handle.is-grabbing,
+.workspace-drag-handle.is-grabbing,
+body.is-dragging-card,
+body.is-dragging-card * {
+    cursor: url('assets/cursors/grabbing.png') 16 16, url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAU0lEQVR42u2VQQoAIAgE9/+ftkv3hNi2aAYED4KDoEoAAA9SM1a5tXk3LALd3C7gqG+N/rhApSdwlYC+FaikgJIbsCMRP0TWfxBrfo1A5BMCgIUBalJAwCPGX58AAAAASUVORK5CYII=') 16 16, grabbing !important;
+}
+
+/* Dragging State: clear but restrained feedback (stronger shadow, slightly reduced opacity) */
+.em-timeline-card.em-card-dragging,
+.workspace-task-card.em-card-dragging,
+.em-timeline-card.opacity-60,
+.workspace-task-card.opacity-60 {
+    opacity: 0.65 !important;
+    border-style: dashed !important;
+    border-color: #FF6B2C !important;
+    box-shadow: 0 12px 28px -6px rgba(75, 55, 40, 0.18), 0 4px 12px -2px rgba(75, 55, 40, 0.08) !important;
+}
+
+/* Drop-Position Indicator: subtle highlight and clear insertion position */
+.em-timeline-card.em-drop-target,
+.workspace-task-card.em-drop-target {
+    background-color: #FFF8F3 !important;
+    border-color: #FF6B2C !important;
+}
+
+.em-timeline-card.border-t-2,
+.workspace-task-card.border-t-2 {
+    border-top: 2.5px solid #FF6B2C !important;
+}
+
+.em-timeline-card.border-b-2,
+.workspace-task-card.border-b-2 {
+    border-bottom: 2.5px solid #FF6B2C !important;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .em-timeline-card,
+    .workspace-task-card,
+    .em-drag-handle,
+    .workspace-drag-handle {
+        transition: none !important;
+    }
 }
 
 .badge-up-next {
@@ -530,6 +628,49 @@ header nav {
     background-size: 16px 16px;
 }
 
+/* Your Working Plan Card - Height Preservation & Scrollable Tasks */
+.urgent-working-plan-card {
+    height: 388px;
+    min-height: 388px;
+    max-height: 388px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.urgent-working-plan-empty-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.urgent-working-plan-footer {
+    margin-top: auto;
+}
+
+.urgent-working-plan-tasks-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #D9D4D0 transparent;
+}
+
+.urgent-working-plan-tasks-scroll::-webkit-scrollbar {
+    width: 5px;
+}
+
+.urgent-working-plan-tasks-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.urgent-working-plan-tasks-scroll::-webkit-scrollbar-thumb {
+    background: #D9D4D0;
+    border-radius: 9999px;
+}
+
+.urgent-working-plan-tasks-scroll::-webkit-scrollbar-thumb:hover {
+    background: #B0A9A2;
+}
+
 /* Primary Asymmetric Desktop Layout (~65% Left / ~35% Right) & Responsive Stack */
 @media (min-width: 1024px) {
     .urgent-home-main-grid,
@@ -537,13 +678,13 @@ header nav {
         display: grid;
         grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
         gap: 1.5rem;
-        align-items: stretch;
+        align-items: start;
     }
     .urgent-left-col,
     .recovery-left-col {
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1.25rem;
     }
     .urgent-support-row,
     .recovery-support-row {
@@ -551,11 +692,14 @@ header nav {
         grid-template-columns: 1fr 1fr;
         gap: 1.25rem;
     }
-    .urgent-right-col,
+    .urgent-right-col {
+        display: flex;
+        flex-direction: column;
+        margin-top: -110px;
+    }
     .recovery-right-col {
         display: flex;
         flex-direction: column;
-        height: 100%;
     }
 }
 
@@ -573,6 +717,7 @@ header nav {
     }
     .urgent-right-col {
         order: 2;
+        margin-top: 0;
     }
     .urgent-support-row {
         display: contents;
