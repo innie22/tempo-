@@ -92,10 +92,13 @@ def run_tests():
         # Sign in as authenticated user
         eval_js("""
             (async () => {
+                try {
+                    await window.TempoAuth.register('Alex Chen', 'alex.chen@university.edu', 'demo1234');
+                } catch (e) {}
                 await window.TempoAuth.signIn('alex.chen@university.edu', 'demo1234');
             })()
         """)
-        time.sleep(0.5)
+        time.sleep(0.8)
         log("Authenticated test user: alex.chen@university.edu")
 
         # =========================================================================
@@ -215,18 +218,15 @@ def run_tests():
         ucheck_state = eval_js("""
             (() => {
                 return {
-                    tool: window.TempoMode.getActiveSharedTool(),
-                    sourceContext: window.TempoMode.getSourceContext(),
+                    mode: window.TempoMode.getMode(),
                     activeContext: window.TempoMode.getActiveContext(),
                     umodeVisible: !document.getElementById('umode-home-content').classList.contains('hidden')
                 };
             })()
         """)
-        assert ucheck_state["tool"] == "ucheck", f"Expected activeSharedTool=ucheck, got {ucheck_state['tool']}"
-        assert ucheck_state["sourceContext"] == "emergency", f"Expected sourceContext=emergency, got {ucheck_state['sourceContext']}"
-        assert ucheck_state["activeContext"] == "emergency", f"Expected activeContext=emergency, got {ucheck_state['activeContext']}"
+        assert ucheck_state["mode"] == "unclear", f"Expected mode=unclear, got {ucheck_state['mode']}"
         assert ucheck_state["umodeVisible"], "Unclear Mode content should be visible"
-        log("3B: Unclear Mode (Ucheck) opened cleanly from Mode Selector without page reload.")
+        log("3B: Unclear Mode opened cleanly from Mode Selector without page reload.")
 
         # =========================================================================
         # TEST 4: IN UNCLEAR MODE -> MODE SELECTOR WORKS -> SWITCH TO RMODE

@@ -402,13 +402,6 @@ window.TempoUnclearMode = (function() {
     // =========================================================================
 
     function renderHome() {
-        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
-                window.TempoMode.openUcheck();
-                return;
-            }
-        }
-
         const container = document.getElementById('umode-home-content');
         if (!container) return;
 
@@ -432,21 +425,13 @@ window.TempoUnclearMode = (function() {
     // =========================================================================
 
     function renderHomeView(container) {
-        const todayObj = new Date();
-        const formattedDate = todayObj.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric'
-        });
-
-        // Greeting
+        // Dynamic greeting name from auth profile or default to Innie
         const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
-        let greetingText = 'Hi there 👋';
+        let userName = 'Innie';
         if (profile) {
             const nameCandidate = profile.preferred_name || profile.display_name || profile.first_name;
-            if (nameCandidate && typeof nameCandidate === 'string' && nameCandidate.trim().length >= 2 && nameCandidate.trim().length <= 14) {
-                const clean = nameCandidate.trim().charAt(0).toUpperCase() + nameCandidate.trim().slice(1);
-                greetingText = `Hi, ${clean} 👋`;
+            if (nameCandidate && typeof nameCandidate === 'string' && nameCandidate.trim().length >= 1) {
+                userName = nameCandidate.trim().charAt(0).toUpperCase() + nameCandidate.trim().slice(1);
             }
         }
 
@@ -458,89 +443,89 @@ window.TempoUnclearMode = (function() {
 
         container.innerHTML = `
             <div id="unclear-home-view" class="space-y-6">
-                <!-- Top Utility Row: Return Home + Mode Selector + Current Date -->
-                <div class="relative pb-1">
-                    <div class="flex items-center justify-between gap-4">
-                        <div class="flex items-center space-x-2">
-                            <!-- Return to Source Context Button -->
-                            <button type="button" 
-                                    onclick="window.TempoUnclearMode.returnToHome()"
-                                    class="px-3.5 py-1.5 rounded-full text-xs font-bold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 transition flex items-center space-x-1 cursor-pointer shadow-xs"
-                                    title="Return Home">
-                                <span>←</span>
-                                <span>Return Home</span>
+                <!-- Top Navigation Row: Return Home + Unclear Pill + ((SOS)) I don't feel safe -->
+                <div class="flex items-center justify-between gap-4 pb-1">
+                    <!-- Left: Return Home & Unclear Mode pill -->
+                    <div class="flex items-center space-x-3">
+                        <button type="button" 
+                                onclick="window.TempoUnclearMode.returnToHome()"
+                                class="px-5 py-2 rounded-full text-xs sm:text-sm font-bold text-[#5B5550] hover:text-[#202124] bg-white/90 hover:bg-white border border-[#E8D9CF] transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+                                title="Return Home">
+                            <span>←</span>
+                            <span>Return Home</span>
+                        </button>
+
+                        <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
+                            <button id="btn-home-mode-selector" 
+                                    type="button" 
+                                    onclick="window.TempoMode.toggleModeDropdown(event)" 
+                                    class="px-7 py-2 rounded-full text-xs sm:text-sm font-extrabold bg-[#FFF6EF] text-[#C2785C] hover:bg-[#FDEBD0] border border-[#E2B7A0] transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                                    aria-haspopup="true"
+                                    aria-expanded="false"
+                                    title="Switch Tempo Mode">
+                                <span>Unclear</span>
                             </button>
-
-                            <!-- Anchored Mode Selector Dropdown -->
-                            <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
-                                <button id="btn-home-mode-selector" 
-                                        type="button" 
-                                        onclick="window.TempoMode.toggleModeDropdown(event)" 
-                                        class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] hover:bg-[#FDEBD0] border border-[#FDE5BE] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-                                        aria-haspopup="true"
-                                        aria-expanded="false"
-                                        title="Switch Tempo Mode">
-                                    <span>🧭</span>
-                                    <span class="font-extrabold">Unclear Mode</span>
-                                    <span class="text-[10px] ml-0.5 opacity-80">▾</span>
-                                </button>
-                                <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
-                            </div>
-                        </div>
-
-                        <!-- Date Display -->
-                        <div class="text-xs font-semibold text-[#8E8A85]">
-                            ${escapeHTML(formattedDate)}
+                            <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
                         </div>
                     </div>
+
+                    <!-- Right: ((SOS)) I don't feel safe -->
+                    <button type="button"
+                            onclick="window.TempoEmergencySupport.openSOS()"
+                            class="px-5 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-extrabold text-white bg-[#BD3022] hover:bg-[#A9271A] transition shadow-xs flex items-center space-x-2 cursor-pointer"
+                            title="I don't feel safe">
+                        <span class="tracking-widest font-black">((sos))</span>
+                        <span>I don’t feel safe</span>
+                    </button>
                 </div>
 
-                <!-- Primary Entry Card (Mode = Context, Not Hero) -->
-                <div class="relative overflow-hidden rounded-3xl border border-[#FDE5BE] bg-gradient-to-br from-white via-[#FFFAF5] to-[#FFF3E8] p-6 sm:p-8 md:p-10 shadow-xs">
-                    <div class="max-w-xl space-y-4 relative z-10">
-                        <p class="text-xs sm:text-sm font-bold text-[#FF6B2C] tracking-wide">
-                            ${escapeHTML(greetingText)}
-                        </p>
-                        <h2 class="font-heading text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#202124] tracking-tight leading-tight">
-                            Something feels off?
-                        </h2>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed max-w-md">
-                            You don't need to know why yet. Take a quick look at what's been going on lately, and what you might need from here.
-                        </p>
-                        <div class="pt-2 flex flex-col items-start gap-2.5">
-                            <button type="button" onclick="window.TempoUnclearMode.startNewCheckIn()"
-                                    class="btn-primary px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer flex items-center space-x-2 hover:opacity-95">
-                                <span>Check in with myself</span>
-                                <span>→</span>
-                            </button>
-                            ${hasUnfinishedDraft ? `
-                                <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${draft.id}')"
-                                        class="text-xs font-semibold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1.5 transition cursor-pointer pt-1">
-                                    <span>Continue where I left off</span>
-                                    <span>→</span>
-                                    <span class="text-stone-400 font-normal">(${draft.current_stage} of 4 steps)</span>
+                <!-- Main Content Area: Two-Column Layout -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                    <!-- Left card: Welcome and Tempo Test -->
+                    <div data-card="welcome-tempo-test" class="lg:col-span-7 flex flex-col justify-between bg-[#FEFAF4] border border-[#F2ECE4] rounded-[28px] p-6 sm:p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                        <div class="space-y-3">
+                            <div class="text-xl sm:text-2xl font-extrabold text-[#C2785C] flex items-center space-x-2">
+                                <span>👋</span>
+                                <span>Hi ${escapeHTML(userName)},</span>
+                            </div>
+                            <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#46413C] tracking-tight leading-tight">
+                                Not sure where to start?
+                            </h2>
+                            <h3 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#46413C] tracking-tight leading-tight">
+                                Let’s figure it out together.
+                            </h3>
+                            <p class="italic text-sm sm:text-base text-[#6F6B68] leading-relaxed pt-1">
+                                Let’s try a few quick check-ins to understand what you need.
+                            </p>
+                        </div>
+
+                        <div class="pt-8">
+                            <div class="flex flex-wrap items-center gap-3.5">
+                                <button type="button"
+                                        onclick="window.TempoUnclearMode.startNewCheckIn()"
+                                        class="bg-[#829B87] hover:bg-[#728A77] text-white font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-xs transition hover:opacity-95 cursor-pointer">
+                                    Do Tempo Test
                                 </button>
-                                ${incompleteDrafts.length > 1 ? `
-                                    <div class="pt-1.5 space-y-1 w-full border-t border-[#F5EBE1]">
-                                        <span class="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">Other incomplete checks:</span>
-                                        ${incompleteDrafts.slice(1).map((inc, i) => `
-                                            <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${inc.id}')"
-                                                    class="text-xs text-stone-600 hover:text-[#FF6B2C] flex items-center space-x-1.5 transition cursor-pointer py-0.5">
-                                                <span>Check-in #${inc.version || (i + 2)} (Step ${inc.current_stage || 1} of 4)</span>
-                                                <span class="text-stone-400 text-[10px]">• ${new Date(inc.updated_at || inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            </button>
-                                        `).join('')}
-                                    </div>
-                                ` : ''}
-                            ` : (lastCheckin && lastCheckin.completed_at ? `
-                                <div class="pt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-400">
-                                    <span>Last check-in: ${new Date(lastCheckin.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${lastCheckin.version ? ` (V${lastCheckin.version})` : ''}</span>
-                                    <button type="button" onclick="window.TempoUnclearMode.adjustCompletedCheckIn('${lastCheckin.id}')"
-                                            class="text-[#FF6B2C] hover:underline font-bold cursor-pointer">
-                                        Adjust check-in (creates V${(lastCheckin.version || 1) + 1}) →
+                                <button type="button"
+                                        onclick="window.TempoApp.navigateTo('my-test-results')"
+                                        class="bg-white hover:bg-stone-50 border border-[#C5BCB3] hover:border-stone-400 text-[#5B5550] font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-xs transition cursor-pointer">
+                                    View my results
+                                </button>
+                            </div>
+
+                            ${hasUnfinishedDraft ? `
+                                <div class="pt-3">
+                                    <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${draft.id}')"
+                                            class="text-xs font-semibold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1.5 transition cursor-pointer">
+                                        <span>Continue where I left off</span>
+                                        <span>→</span>
+                                        <span class="text-stone-400 font-normal">(${draft.current_stage} of 4 steps)</span>
                                     </button>
-                                    <button type="button" onclick="window.TempoUnclearMode.viewCompletedCheckIn('${lastCheckin.id}')"
-                                            class="text-stone-500 hover:underline font-semibold cursor-pointer">
+                                </div>
+                            ` : (lastCheckin && lastCheckin.completed_at ? `
+                                <div class="pt-3 text-[11px] text-stone-400 flex items-center space-x-2">
+                                    <span>Last check-in: ${new Date(lastCheckin.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                    <button type="button" onclick="window.TempoUnclearMode.viewCompletedCheckIn('${lastCheckin.id}')" class="text-stone-500 hover:underline">
                                         View reflection →
                                     </button>
                                 </div>
@@ -548,60 +533,84 @@ window.TempoUnclearMode = (function() {
                         </div>
                     </div>
 
-                    <!-- Subtle Decorative Signpost Motif (Understated, non-intrusive) -->
-                    <div class="hidden sm:block absolute right-8 top-1/2 -translate-y-1/2 opacity-75 pointer-events-none select-none">
-                        <svg width="140" height="150" viewBox="0 0 140 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="62" y="15" width="16" height="125" rx="8" fill="#FFD2BA" fill-opacity="0.45" />
-                            <!-- Signpost 1 (Right) -->
-                            <path d="M40 38H115L128 50L115 62H40V38Z" fill="#FFE9DC" fill-opacity="0.8" />
-                            <path d="M40 38H115L128 50L115 62H40" stroke="#FFD2BA" stroke-width="2" />
-                            <!-- Signpost 2 (Left) -->
-                            <path d="M100 78H25L12 90L25 102H100V78Z" fill="#FFE9DC" fill-opacity="0.65" />
-                            <path d="M100 78H25L12 90L25 102H100" stroke="#FFD2BA" stroke-width="2" />
-                        </svg>
+                    <!-- Right card: Explore Mental Health Tests -->
+                    <div data-card="explore-assessments" class="lg:col-span-5 flex flex-col justify-between bg-[#829B87] border border-[#728A77] rounded-[28px] p-6 sm:p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                        <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug mb-6">
+                            Explore Mental<br />Health Tests
+                        </h2>
+                        <div class="space-y-3 w-full">
+                            <button type="button"
+                                    onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'depression')"
+                                    class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
+                                Depression Assessments
+                            </button>
+                            <button type="button"
+                                    onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'stress')"
+                                    class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
+                                Stress Assessments
+                            </button>
+                            <button type="button"
+                                    onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'anxiety')"
+                                    class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
+                                Anxiety Assessments
+                            </button>
+                            <button type="button"
+                                    onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'other')"
+                                    class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
+                                Other Assessments
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Secondary Support Utilities: Quick Relief & Focus Zone -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- Quick Relief Card -->
-                    <div class="rounded-3xl border border-[#EAE4DF] bg-white p-5 sm:p-6 space-y-4 shadow-2xs flex flex-col justify-between hover:border-[#FFD2BA] transition">
-                        <div class="space-y-2.5">
-                            <div class="w-10 h-10 rounded-2xl bg-[#FFE9DC] text-[#B83D08] flex items-center justify-center text-lg font-bold shadow-xs">
-                                ⚡
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-bold text-[#202124]">Quick Relief</h3>
-                                <p class="text-xs text-[#6F6B68] mt-0.5 leading-relaxed">Take a short break to feel a bit calmer right now.</p>
-                            </div>
+                <!-- Bottom Tool Cards: Quick Relief, Learn & Solve, Tempo break -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                    <!-- 1. Quick Relief -->
+                    <div data-card="quick-relief"
+                         onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal('unclear'); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
+                         class="bg-[#D9E7E0] border border-[#BACAD0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
+                         title="Quick Relief">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#4A6356] mb-1 group-hover:text-[#384F43] transition">
+                                Quick Relief
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#5C7568] leading-snug">
+                                Quick ways to ease stress and feel better.
+                            </p>
                         </div>
-                        <div>
-                            <button type="button" onclick="if (window.TempoStressRelief) { window.TempoStressRelief.openModal(); } else if (window.TempoTriage) { window.TempoTriage.openBoxBreathingModal(); }"
-                                    class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                                <span>Open Quick Relief</span>
-                                <span>→</span>
-                            </button>
-                        </div>
+                        <img src="assets/quick-relief-mascot-transparent.png" alt="Quick Relief Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
                     </div>
 
-                    <!-- Focus Zone Card -->
-                    <div class="rounded-3xl border border-[#EAE4DF] bg-white p-5 sm:p-6 space-y-4 shadow-2xs flex flex-col justify-between hover:border-[#FFD2BA] transition">
-                        <div class="space-y-2.5">
-                            <div class="w-10 h-10 rounded-2xl bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center text-lg font-bold shadow-xs">
-                                🎯
-                            </div>
-                            <div>
-                                <h3 class="text-sm font-bold text-[#202124]">Focus Zone</h3>
-                                <p class="text-xs text-[#6F6B68] mt-0.5 leading-relaxed">Work on your own flow with a timer and simple tools.</p>
-                            </div>
+                    <!-- 2. Learn & Solve -->
+                    <div data-card="learn-solve"
+                         onclick="if (window.TempoApp) { window.TempoApp.navigateTo('learn'); } else { window.location.hash = '#learn'; }"
+                         class="bg-[#FBEDD9] border border-[#DFCFC0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
+                         title="Learn & Solve">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#6D583F] mb-1 group-hover:text-[#5B4833] transition">
+                                Learn &amp; Solve
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#7D6B54] leading-snug">
+                                Tips and tools to help you cope.
+                            </p>
                         </div>
-                        <div>
-                            <button type="button" onclick="if (window.TempoFocusZone && typeof window.TempoFocusZone.openQuickEntry === 'function') { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoFocusZone && typeof window.TempoFocusZone.open === 'function') { window.TempoFocusZone.open(); } else if (window.TempoTriage) { window.TempoTriage.launchFocusMode(); }"
-                                    class="text-xs font-bold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1 transition cursor-pointer">
-                                <span>Open Focus Zone</span>
-                                <span>→</span>
-                            </button>
+                        <img src="assets/learn-solve-mascot.png" alt="Learn & Solve Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
+                    </div>
+
+                    <!-- 3. Tempo break -->
+                    <div data-card="tempo-break"
+                         onclick="if (window.TempoTools && typeof window.TempoTools.openBreak === 'function') { window.TempoTools.openBreak(); } else if (window.TempoFocusZone) { window.TempoFocusZone.openQuickEntry(); }"
+                         class="bg-[#D3DFE4] border border-[#BACAD0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
+                         title="Tempo break">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#3D4E56] mb-1 group-hover:text-[#2A373E] transition">
+                                Tempo break
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#5B6C74] leading-snug">
+                                Take a break with fun activities to unwind.
+                            </p>
                         </div>
+                        <img src="assets/tempo-break-mascot.png" alt="Tempo break Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
                     </div>
                 </div>
             </div>
@@ -724,14 +733,27 @@ window.TempoUnclearMode = (function() {
         renderHome();
     }
 
+    function resetFlowState() {
+        const uid = getUserId();
+        try {
+            sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
+        } catch (e) {}
+        viewState = 'home';
+    }
+
     function returnToHome() {
         const uid = getUserId();
         sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
         if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
             window.TempoMode.returnToSourceContext();
+        } else if (window.TempoMode && typeof window.TempoMode.setMode === 'function') {
+            window.TempoMode.setMode('default');
         } else {
             viewState = 'home';
             renderHome();
+        }
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('today');
         }
     }
 
@@ -743,15 +765,19 @@ window.TempoUnclearMode = (function() {
     }
 
     function goBack() {
-        if (!currentDraft) {
+        if (!currentDraft || currentDraft.current_stage <= 1) {
+            const currentMode = window.TempoMode ? window.TempoMode.getMode() : null;
+            if (currentMode === 'unclear') {
+                const uid = getUserId();
+                sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
+                viewState = 'home';
+                renderHome();
+                return;
+            }
             returnToHome();
             return;
         }
-        if (currentDraft.current_stage <= 1) {
-            returnToHome();
-        } else {
-            goToStage(currentDraft.current_stage - 1);
-        }
+        goToStage(currentDraft.current_stage - 1);
     }
 
     function chooseDirection(directionKey, optionalNextStep) {
@@ -2129,6 +2155,7 @@ window.TempoUnclearMode = (function() {
         renderHome,
         startNewCheckIn,
         resumeDraft,
+        resetFlowState,
         returnToHome,
         goToStage,
         goBack,
