@@ -70,6 +70,7 @@
 
     const SUGGESTIONS = [
         { name: 'Trouble focusing', category: 'stress_sign', check_method: 'yes_no', direction: 'higher_concerning' },
+        { name: 'Tension', category: 'stress_sign', check_method: 'percentage', direction: 'higher_concerning' },
         { name: 'Feeling overwhelmed', category: 'stress_sign', check_method: 'scale', scale_min: 1, scale_max: 5, scale_min_label: 'Low', scale_max_label: 'Very high', direction: 'higher_concerning' },
         { name: 'Energy', category: 'neutral', check_method: 'scale', scale_min: 1, scale_max: 5, scale_min_label: 'Drained', scale_max_label: 'Energized', direction: 'higher_better' },
         { name: 'Sleep quality', category: 'supportive', check_method: 'scale', scale_min: 1, scale_max: 5, scale_min_label: 'Poor', scale_max_label: 'Restful', direction: 'higher_better' },
@@ -173,8 +174,138 @@
     // TRACKERS API
     // =========================================================================
 
+    function getCanonicalTrackerKey(tracker) {
+        if (!tracker) return '';
+        const nameLower = (tracker.name || '').trim().toLowerCase();
+        if (nameLower.includes('tension')) {
+            return 'stress_sign::tension';
+        }
+        const cat = (tracker.category || CATEGORIES.STRESS_SIGN).toLowerCase();
+        return `${cat}::${nameLower}`;
+    }
+
+    function consolidateDuplicateTrackers(trackers) {
+        if (!Array.isArray(trackers) || trackers.length === 0) return [];
+
+        const uid = getUserId();
+        const activeTrackers = trackers.filter(t => !t.is_archived);
+        const groups = new Map();
+
+        // Group active trackers by canonical concept key
+        activeTrackers.forEach(t => {
+            const key = getCanonicalTrackerKey(t);
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key).push(t);
+        });
+
+        let hasMutations = false;
+        const supersededIds = new Set();
+        const idReplacements = new Map(); // oldId -> authoritativeId
+
+        groups.forEach((groupTrackers, key) => {
+            if (groupTrackers.length > 1) {
+                hasMutations = true;
+                // Determine authoritative tracker:
+                // 1. If it's Tension, prefer one with check_method === 'percentage'
+                // 2. Otherwise prefer the one with the latest updated_at or created_at
+                let authoritative = groupTrackers[0];
+                for (let i = 1; i < groupTrackers.length; i++) {
+                    const candidate = groupTrackers[i];
+                    if (key === 'stress_sign::tension') {
+                        if (candidate.check_method === 'percentage' && authoritative.check_method !== 'percentage') {
+                            authoritative = candidate;
+                            continue;
+                        }
+                    }
+                    const candTime = candidate.updated_at || candidate.created_at || '';
+                    const authTime = authoritative.updated_at || authoritative.created_at || '';
+                    if (candTime > authTime) {
+                        authoritative = candidate;
+                    }
+                }
+
+                // If authoritative is Tension, ensure check_method is 'percentage'
+                if (key === 'stress_sign::tension' && authoritative.check_method !== 'percentage') {
+                    authoritative.check_method = 'percentage';
+                    authoritative.updated_at = new Date().toISOString();
+                }
+
+                if (!Array.isArray(authoritative.alias_ids)) {
+                    authoritative.alias_ids = [];
+                }
+
+                groupTrackers.forEach(t => {
+                    if (t.id !== authoritative.id) {
+                        t.is_archived = true;
+                        t.archived_at = t.archived_at || new Date().toISOString();
+                        t.updated_at = new Date().toISOString();
+                        supersededIds.add(t.id);
+                        idReplacements.set(t.id, authoritative.id);
+                        if (!authoritative.alias_ids.includes(t.id)) {
+                            authoritative.alias_ids.push(t.id);
+                        }
+                        if (Array.isArray(t.alias_ids)) {
+                            t.alias_ids.forEach(aid => {
+                                if (!authoritative.alias_ids.includes(aid)) authoritative.alias_ids.push(aid);
+                                idReplacements.set(aid, authoritative.id);
+                            });
+                        }
+                    }
+                });
+            } else if (groupTrackers.length === 1 && key === 'stress_sign::tension') {
+                const singleTension = groupTrackers[0];
+                if (singleTension.check_method !== 'percentage') {
+                    singleTension.check_method = 'percentage';
+                    singleTension.updated_at = new Date().toISOString();
+                    hasMutations = true;
+                }
+            }
+        });
+
+        if (hasMutations) {
+            saveToStorage('trackers', trackers);
+
+            // Re-point observations with superseded tracker_ids to authoritative tracker_id
+            if (idReplacements.size > 0) {
+                try {
+                    const obsKey = getStorageKey('observations');
+                    const rawObs = localStorage.getItem(obsKey);
+                    if (rawObs) {
+                        const allObs = JSON.parse(rawObs);
+                        let obsChanged = false;
+                        allObs.forEach(o => {
+                            if (o && o.tracker_id && idReplacements.has(o.tracker_id)) {
+                                o.tracker_id = idReplacements.get(o.tracker_id);
+                                obsChanged = true;
+                            }
+                        });
+                        if (obsChanged) {
+                            localStorage.setItem(obsKey, JSON.stringify(allObs));
+                            if (uid === 'local_user') {
+                                localStorage.setItem('tempo_selfcheck_observations', JSON.stringify(allObs));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[SelfCheck] Error migrating duplicate observations:', e);
+                }
+
+                // If Supabase is active, sync archived state
+                supersededIds.forEach(id => {
+                    const trk = trackers.find(t => t.id === id);
+                    if (trk) syncTrackerToSupabase(trk, 'update');
+                });
+            }
+        }
+
+        return trackers;
+    }
+
     function getTrackers(includeArchived = false) {
-        const trackers = loadFromStorage('trackers', []);
+        const rawTrackers = loadFromStorage('trackers', []);
+        const trackers = consolidateDuplicateTrackers(rawTrackers);
         if (includeArchived) return trackers;
         return trackers.filter(t => !t.is_archived);
     }
@@ -347,13 +478,39 @@
             throw new Error("Tracker name is required.");
         }
 
-        const trackers = loadFromStorage('trackers', []);
+        const rawTrackers = loadFromStorage('trackers', []);
+        const trackers = consolidateDuplicateTrackers(rawTrackers);
+        const cleanName = data.name.trim();
+        const cleanCategory = data.category || CATEGORIES.STRESS_SIGN;
+        const targetCanonicalKey = getCanonicalTrackerKey({ name: cleanName, category: cleanCategory });
+
+        // Check if an active tracker with this canonical concept already exists
+        const existingActive = trackers.find(t => !t.is_archived && getCanonicalTrackerKey(t) === targetCanonicalKey);
+        if (existingActive) {
+            // Update existing active tracker rather than inserting duplicate
+            return updateTracker(existingActive.id, data);
+        }
+
+        // Check if an archived tracker with this canonical concept exists
+        const existingArchived = trackers.find(t => t.is_archived && getCanonicalTrackerKey(t) === targetCanonicalKey);
+        if (existingArchived) {
+            // Reactivate existing tracker, preserving past observation history
+            existingArchived.is_archived = false;
+            delete existingArchived.archived_at;
+            existingArchived.updated_at = new Date().toISOString();
+            saveToStorage('trackers', trackers);
+            return updateTracker(existingArchived.id, data);
+        }
+
         const todayDateStr = getTodayDateStr();
+        const isTension = cleanName.toLowerCase().includes('tension');
+        const effMethod = isTension ? 'percentage' : (data.check_method || CHECK_METHODS.YES_NO);
+
         const initialVersion = {
             version_id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             effective_from: todayDateStr,
             effective_to: null,
-            check_method: data.check_method || CHECK_METHODS.YES_NO,
+            check_method: effMethod,
             options: data.options !== undefined ? data.options : null,
             quantity_unit: data.quantity_unit ? data.quantity_unit.trim() : '',
             scale_min: data.scale_min !== undefined ? Number(data.scale_min) : 1,
@@ -370,9 +527,9 @@
         const newTracker = {
             id: 'trk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             user_id: getUserId(),
-            name: data.name.trim(),
-            category: data.category || CATEGORIES.STRESS_SIGN,
-            check_method: data.check_method || CHECK_METHODS.YES_NO,
+            name: cleanName,
+            category: cleanCategory,
+            check_method: effMethod,
             scale_min: data.scale_min !== undefined ? Number(data.scale_min) : 1,
             scale_max: data.scale_max !== undefined ? Number(data.scale_max) : 5,
             scale_min_label: data.scale_min_label || 'Very low',

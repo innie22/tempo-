@@ -1147,9 +1147,10 @@
             const createdNewIds = [];
             adjustmentDraft.newTrackers.forEach(nt => {
                 if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.createTracker === 'function') {
+                    const isTension = (nt.name || '').toLowerCase().includes('tension');
                     const created = window.TempoRecoverySelfCheck.createTracker({
                         name: nt.name,
-                        check_method: nt.check_method,
+                        check_method: isTension ? 'percentage' : nt.check_method,
                         quantity_unit: nt.quantity_unit,
                         options: nt.options,
                         scale_max: nt.scale_max,
@@ -1793,10 +1794,11 @@
             const trimmed = name.trim();
             if (trimmed && !seenNames.has(trimmed.toLowerCase())) {
                 seenNames.add(trimmed.toLowerCase());
+                const isTension = trimmed.toLowerCase().includes('tension');
                 candidateSuggestionsCache.push({
                     name: trimmed,
                     category: 'stress_sign',
-                    check_method: 'yes_no',
+                    check_method: isTension ? 'percentage' : 'yes_no',
                     direction: 'higher_concerning',
                     pattern_notices_enabled: true
                 });
@@ -1819,6 +1821,7 @@
 
         // Add standard helpful suggestions if not already added by reflection
         const standardSuggestions = [
+            { name: 'Tension', category: 'stress_sign', check_method: 'percentage', direction: 'higher_concerning', pattern_notices_enabled: true },
             { name: 'Trouble focusing', category: 'stress_sign', check_method: 'yes_no', direction: 'higher_concerning', pattern_notices_enabled: true },
             { name: 'Feeling overwhelmed', category: 'stress_sign', check_method: 'scale', scale_min: 1, scale_max: 5, scale_min_label: 'Low', scale_max_label: 'Very high', direction: 'higher_concerning', pattern_notices_enabled: true },
             { name: 'Sleep quality', category: 'supportive', check_method: 'scale', scale_min: 1, scale_max: 5, scale_min_label: 'Poor', scale_max_label: 'Restful', direction: 'higher_better', pattern_notices_enabled: false },

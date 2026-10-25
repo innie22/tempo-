@@ -4960,9 +4960,24 @@ window.TempoMode = (function() {
             ? window.TempoRecoverySelfCheck.calculateStreak()
             : ((selfCheckState && typeof selfCheckState.streak === 'number') ? selfCheckState.streak : 0);
 
-        const activeTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+        let rawActiveTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
             ? window.TempoRecoverySelfCheck.getActiveTrackers()
             : [];
+
+        // Deduplicate by canonical concept
+        const seenSelfCheckConcepts = new Set();
+        const activeTrackers = [];
+        rawActiveTrackers.forEach(trk => {
+            if (!trk || !trk.name) return;
+            const nameLower = trk.name.trim().toLowerCase();
+            const conceptKey = nameLower.includes('tension') 
+                ? 'stress_sign::tension' 
+                : `${(trk.category || 'stress_sign').toLowerCase()}::${nameLower}`;
+            if (!seenSelfCheckConcepts.has(conceptKey)) {
+                seenSelfCheckConcepts.add(conceptKey);
+                activeTrackers.push(trk);
+            }
+        });
 
         if (activeTrackers.length === 0) {
             return `
@@ -5193,7 +5208,7 @@ window.TempoMode = (function() {
         `;
     }
 
-    function getAuthoritativeTrackerObservations(trackerId) {
+    function getAuthoritativeTrackerObservations(trackerOrId) {
         const uid = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function')
             ? (window.TempoAuth.getCurrentUserId() || 'local_user')
             : 'local_user';
@@ -5222,13 +5237,58 @@ window.TempoMode = (function() {
 
         if (!Array.isArray(allObs)) return [];
 
-        return allObs
-            .filter(o => o && o.tracker_id === trackerId && o.status === 'answered' && o.value !== null && o.value !== undefined)
+        const trackerId = (trackerOrId && typeof trackerOrId === 'object') ? trackerOrId.id : trackerOrId;
+        const trackerObj = (trackerOrId && typeof trackerOrId === 'object')
+            ? trackerOrId
+            : (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackerById === 'function' ? window.TempoRecoverySelfCheck.getTrackerById(trackerId) : null);
+
+        const trackerName = (trackerObj && trackerObj.name) ? trackerObj.name.trim().toLowerCase() : '';
+        const isTension = trackerName.includes('tension');
+        const aliasIds = new Set();
+        if (trackerId) aliasIds.add(trackerId);
+        if (trackerObj && Array.isArray(trackerObj.alias_ids)) {
+            trackerObj.alias_ids.forEach(aid => aliasIds.add(aid));
+        }
+
+        // Also match any trackers with identical canonical name/concept in storage
+        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackers === 'function') {
+            try {
+                const allTrks = window.TempoRecoverySelfCheck.getTrackers(true);
+                allTrks.forEach(t => {
+                    if (t && t.name) {
+                        const tName = t.name.trim().toLowerCase();
+                        if (trackerName && tName === trackerName) aliasIds.add(t.id);
+                        if (isTension && tName.includes('tension')) aliasIds.add(t.id);
+                    }
+                });
+            } catch (e) {}
+        }
+
+        const matchedObs = allObs
+            .filter(o => o && aliasIds.has(o.tracker_id) && o.status === 'answered' && o.value !== null && o.value !== undefined && o.value !== '')
             .map(o => ({
                 ...o,
                 date: dateMap[o.checkin_id] || todayStr
             }))
-            .filter(o => o.date <= todayStr)
+            .filter(o => o.date <= todayStr);
+
+        // Deduplicate observations by date (keep the most recently updated observation per calendar date)
+        const obsByDate = new Map();
+        matchedObs.forEach(o => {
+            const dateKey = o.date;
+            const existing = obsByDate.get(dateKey);
+            if (!existing) {
+                obsByDate.set(dateKey, o);
+            } else {
+                const existingTime = existing.updated_at || existing.created_at || '';
+                const newTime = o.updated_at || o.created_at || '';
+                if (newTime >= existingTime) {
+                    obsByDate.set(dateKey, o);
+                }
+            }
+        });
+
+        return Array.from(obsByDate.values())
             .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     }
 
@@ -5261,6 +5321,22 @@ window.TempoMode = (function() {
             } catch (e) {}
         }
 
+        // Defensive deduplication by canonical tracker concept
+        const seenConcepts = new Set();
+        const uniqueActiveTrackers = [];
+        activeTrackers.forEach(trk => {
+            if (!trk || !trk.name) return;
+            const nameLower = trk.name.trim().toLowerCase();
+            const conceptKey = nameLower.includes('tension') 
+                ? 'stress_sign::tension' 
+                : `${(trk.category || 'stress_sign').toLowerCase()}::${nameLower}`;
+            if (!seenConcepts.has(conceptKey)) {
+                seenConcepts.add(conceptKey);
+                uniqueActiveTrackers.push(trk);
+            }
+        });
+        activeTrackers = uniqueActiveTrackers;
+
         const countdownText = getWeeklyReportCountdownText();
 
         let itemsHTML = '';
@@ -5279,21 +5355,24 @@ window.TempoMode = (function() {
                     (tracker.category === 'supportive' ? '#5A9E75' : '#7B9688'))
                 );
 
-                const observations = getAuthoritativeTrackerObservations(tracker.id);
+                const observations = getAuthoritativeTrackerObservations(tracker);
                 const latestObs = observations.length > 0 ? observations[observations.length - 1] : null;
 
                 let description = '';
                 let formattedValue = '';
 
+                const isTension = nameLower.includes('tension');
+                const method = isTension ? 'percentage' : (latestObs?.check_method || tracker.check_method || 'yes_no');
+
                 if (!latestObs) {
                     // Missing data: never invent values, never treat missing check-in as zero
-                    if (tracker.check_method === 'percentage' || nameLower.includes('tension')) {
+                    if (method === 'percentage' || isTension) {
                         description = `Your average ${escapeHTML(nameLower)} level is`;
-                    } else if (tracker.check_method === 'options' || tracker.check_method === 'yes_no') {
+                    } else if (method === 'options' || method === 'yes_no') {
                         description = nameLower.includes('sleep') ? 'Nights of Quality Sleep' : 'Latest recorded choice';
-                    } else if (tracker.check_method === 'scale') {
+                    } else if (method === 'scale') {
                         description = 'Latest recorded rating';
-                    } else if (tracker.check_method === 'quantity' || nameLower.includes('walk')) {
+                    } else if (method === 'quantity' || nameLower.includes('walk')) {
                         description = nameLower.includes('walk') ? 'You have walked for' : 'You have logged';
                     } else {
                         description = `Your average ${escapeHTML(nameLower)} level is`;
@@ -5301,12 +5380,13 @@ window.TempoMode = (function() {
                     formattedValue = '<span class="text-[#8E8A85] text-sm font-normal">—</span>';
                 } else {
                     // Format historical values according to the method that was active when recorded
-                    const method = latestObs.check_method || tracker.check_method || 'yes_no';
-
-                    if (method === 'percentage' || (!latestObs.check_method && nameLower.includes('tension'))) {
-                        const pctObs = observations.filter(o => o.value !== null && o.value !== undefined && (typeof o.value === 'number' || !isNaN(parseFloat(o.value))));
+                    if (method === 'percentage' || isTension) {
+                        const pctObs = observations.filter(o => 
+                            o.value !== null && o.value !== undefined && o.value !== '' &&
+                            (typeof o.value === 'number' || (typeof o.value === 'string' && !isNaN(Number(o.value.replace('%', '')))))
+                        );
                         if (pctObs.length > 0) {
-                            const sum = pctObs.reduce((acc, o) => acc + parseFloat(o.value), 0);
+                            const sum = pctObs.reduce((acc, o) => acc + parseFloat(String(o.value).replace('%', '')), 0);
                             const avg = Math.round(sum / pctObs.length);
                             description = `Your average ${escapeHTML(nameLower)} level is`;
                             formattedValue = `${avg}%`;

@@ -1212,6 +1212,18 @@ window.TempoSelfCheckWorkspace = (function () {
 
         try {
             if (adjustDraftState.mode === 'create') {
+                // If an active tracker with this name already exists, update it instead of creating a duplicate
+                const existingActive = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+                    ? window.TempoRecoverySelfCheck.getActiveTrackers().find(t => (t.name || '').trim().toLowerCase() === cleanName.toLowerCase())
+                    : null;
+
+                if (existingActive) {
+                    adjustDraftState.mode = 'edit';
+                    adjustDraftState.trackerId = existingActive.id;
+                }
+            }
+
+            if (adjustDraftState.mode === 'create') {
                 let newTracker = null;
                 if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.createTracker === 'function') {
                     newTracker = window.TempoRecoverySelfCheck.createTracker(trackerPayload);
