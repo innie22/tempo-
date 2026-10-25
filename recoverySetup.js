@@ -190,19 +190,35 @@
         } catch (e) {}
     }
 
+    function hasCompletedRmodeSetup(optionalUid) {
+        const uid = optionalUid || getUserId();
+        if (!uid) return false;
+
+        // 1. Explicit account-scoped setup completion status
+        try {
+            const status = localStorage.getItem(`tempo_recovery_setup_status_${uid}`);
+            if (status === 'completed') return true;
+        } catch (e) {}
+
+        // 2. Persisted setups for this account
+        try {
+            const rawSetups = localStorage.getItem(`tempo_recovery_setups_${uid}`) || localStorage.getItem(`tempo_selfcheck_setups_${uid}`);
+            if (rawSetups) {
+                const parsed = JSON.parse(rawSetups);
+                if (Array.isArray(parsed) && parsed.length > 0) return true;
+            }
+        } catch (e) {}
+
+        return false;
+    }
+
     // Determine if first-time Recovery visitor (Case 1 vs Case 2 & 3)
     function shouldShowFirstTimeWelcome() {
-        if (isIntroSeen() || isSetupCompleted()) return false;
-        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function') {
-            const trackers = window.TempoRecoverySelfCheck.getActiveTrackers();
-            // If setup draft is in progress, allow it to continue
-            if (setupDraft && setupDraft.currentStage > 1) {
-                return true;
-            }
-            if (trackers.length > 0) {
-                // User already has meaningful trackers -> Case 2: do not force setup
-                return false;
-            }
+        if (hasCompletedRmodeSetup()) return false;
+        if (isIntroSeen()) return false;
+        // If setup draft is in progress, allow it to continue
+        if (setupDraft && setupDraft.currentStage > 1) {
+            return true;
         }
         return true;
     }
@@ -258,6 +274,10 @@
         return el;
     }
 
+    function isReturningUser() {
+        return hasCompletedRmodeSetup();
+    }
+
     function open(stage = 1) {
         if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
             if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
@@ -267,7 +287,12 @@
         }
         ensureModalMounted();
         loadDraftFromStorage();
-        goToStage(stage);
+
+        if (stage === 1 && isReturningUser()) {
+            goToStage('hub');
+        } else {
+            goToStage(stage);
+        }
 
         const modal = document.getElementById('modal-recovery-setup');
         if (modal) {
@@ -307,7 +332,12 @@
         const container = document.getElementById('recovery-setup-stage-container');
         if (!container) return;
 
-        if (stageNum === 1) renderStage1Welcome(container);
+        if (stageNum === 'hub') renderReturningHub(container);
+        else if (stageNum === 'confirm_new_setup') renderCreateNewSetupConfirm(container);
+        else if (stageNum === 'adjust_trackers') renderStageAdjustTrackers(container);
+        else if (stageNum === 'adjust_note') renderStageAdjustNote(container);
+        else if (stageNum === 'adjust_review') renderStageAdjustReview(container);
+        else if (stageNum === 1) renderStage1Welcome(container);
         else if (stageNum === 2) renderStage2LookingBack(container);
         else if (stageNum === 3) renderStage3WhatHelped(container);
         else if (stageNum === 4) renderStage4RecoveryNote(container);
@@ -317,6 +347,856 @@
     }
 
     // =========================================================================
+    // =========================================================================
+    // RETURNING USER SETUP HUB & ADJUSTMENT FLOW (PHASE 3B)
+    // =========================================================================
+
+    let adjustmentDraft = {
+        trackers: [],
+        newTrackers: [],
+        noteItems: [],
+        editingTrackerIndex: null,
+        editingIsNew: false
+    };
+
+    function startAdjustmentFlow() {
+        const activeTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+            ? window.TempoRecoverySelfCheck.getActiveTrackers()
+            : [];
+
+        adjustmentDraft.trackers = activeTrackers.map(t => ({
+            ...t,
+            isKept: true,
+            originalMethod: t.check_method,
+            originalName: t.name,
+            originalUnit: t.quantity_unit || '',
+            wasEdited: false
+        }));
+
+        adjustmentDraft.newTrackers = [];
+        adjustmentDraft.editingTrackerIndex = null;
+        adjustmentDraft.editingIsNew = false;
+
+        const noteItems = (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.getItems === 'function')
+            ? window.TempoRecoveryNote.getItems()
+            : [];
+        adjustmentDraft.noteItems = noteItems.map(item => ({ ...item }));
+
+        goToStage('adjust_trackers');
+    }
+
+    function promptCreateNewSetup() {
+        goToStage('confirm_new_setup');
+    }
+
+    function confirmCreateNewSetup() {
+        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.archiveCurrentSetup === 'function') {
+            window.TempoRecoverySelfCheck.archiveCurrentSetup();
+        }
+
+        // Reset setup draft for fresh start
+        setupDraft = {
+            currentStage: 1,
+            lookingBackSelections: [],
+            lookingBackCustom: [],
+            whatHelpedSelections: [],
+            whatHelpedCustom: [],
+            noteWarningSigns: [],
+            noteHelpers: [],
+            noteReminders: [],
+            noteSupportPeople: [],
+            selectedTrackerIds: []
+        };
+        saveDraftToStorage();
+
+        const uid = getUserId();
+        localStorage.removeItem(`tempo_recovery_setup_status_${uid}`);
+
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast("Current setup archived safely. Starting your new setup.");
+        }
+
+        goToStage(1);
+    }
+
+    function renderReturningHub(container) {
+        const activeTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+            ? window.TempoRecoverySelfCheck.getActiveTrackers()
+            : [];
+
+        container.innerHTML = `
+            <div class="space-y-6 py-2">
+                <div class="space-y-2 text-center max-w-lg mx-auto">
+                    <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA] text-xs font-extrabold uppercase tracking-wider">
+                        <span>🌱</span>
+                        <span>RECOVERY MODE · SETUP</span>
+                    </div>
+                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
+                        Setup Management
+                    </h2>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        You're currently tracking ${activeTrackers.length} item${activeTrackers.length === 1 ? '' : 's'}. You can adjust your active setup or start fresh with a new setup.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <!-- Option 1: Adjust My Current Setup -->
+                    <div class="p-5 rounded-2xl bg-white border-2 border-[#CDE9DA] hover:border-[#166545] transition-all shadow-xs flex flex-col justify-between space-y-4">
+                        <div class="space-y-2">
+                            <div class="w-10 h-10 rounded-xl bg-[#EDF7F1] text-[#166545] flex items-center justify-center text-lg font-bold">
+                                ⚙️
+                            </div>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">Adjust my current setup</h3>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed">
+                                Keep or stop items, change tracking methods (effective today), edit names and units, add new trackers, and review your Recovery Note. All past records remain completely safe.
+                            </p>
+                        </div>
+                        <button type="button" onclick="window.TempoRecoverySetup.startAdjustmentFlow()"
+                                class="btn-primary w-full py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                            Adjust current setup →
+                        </button>
+                    </div>
+
+                    <!-- Option 2: Create a New Setup -->
+                    <div class="p-5 rounded-2xl bg-white border border-stone-200 hover:border-stone-400 transition-all shadow-xs flex flex-col justify-between space-y-4">
+                        <div class="space-y-2">
+                            <div class="w-10 h-10 rounded-xl bg-stone-100 text-stone-700 flex items-center justify-center text-lg font-bold">
+                                📦
+                            </div>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">Create a new setup</h3>
+                            <p class="text-xs text-[#6F6B68] leading-relaxed">
+                                Safely archive your current setup and its check-in history. Start completely fresh through the calm setup flow without losing your past records in storage.
+                            </p>
+                        </div>
+                        <button type="button" onclick="window.TempoRecoverySetup.promptCreateNewSetup()"
+                                class="w-full py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-stone-100 hover:bg-stone-200 text-stone-800 transition cursor-pointer">
+                            Create a new setup →
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-2 text-center">
+                    <button type="button" onclick="window.TempoRecoverySetup.close()"
+                            class="text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                        Return to Dashboard
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderCreateNewSetupConfirm(container) {
+        const activeTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+            ? window.TempoRecoverySelfCheck.getActiveTrackers()
+            : [];
+
+        container.innerHTML = `
+            <div class="space-y-6 py-4 max-w-lg mx-auto text-center">
+                <div class="w-12 h-12 rounded-2xl bg-[#FFE9DC] text-[#B83D08] border border-[#FFD2BA] flex items-center justify-center text-2xl font-bold mx-auto">
+                    📦
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#B83D08]">CONFIRM NEW SETUP</span>
+                    <h2 class="font-heading text-2xl font-extrabold text-[#202124]">Archive Current Setup & Start Fresh?</h2>
+                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        Your ${activeTrackers.length} active tracking item${activeTrackers.length === 1 ? '' : 's'} and all past check-in records will be <strong>safely preserved in your archive</strong>.
+                    </p>
+                    <p class="text-xs text-[#6F6B68] leading-relaxed bg-[#FBF9F6] p-3 rounded-xl border border-stone-200">
+                        They will no longer appear in your active daily check-in flow, but will never be deleted. You will then be guided through the calm setup flow to select fresh tracking items.
+                    </p>
+                </div>
+
+                <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button type="button" onclick="window.TempoRecoverySetup.confirmCreateNewSetup()"
+                            class="btn-primary w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer bg-[#B83D08] hover:bg-[#9E3406] border-none text-white">
+                        Archive & start new setup →
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('hub')"
+                            class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 transition cursor-pointer">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // =========================================================================
+    // ADJUSTMENT STAGE 1: TRACKERS REVIEW & EDITING
+    // =========================================================================
+
+    function toggleTrackerKept(idx) {
+        if (adjustmentDraft.trackers[idx]) {
+            adjustmentDraft.trackers[idx].isKept = !adjustmentDraft.trackers[idx].isKept;
+            renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+        }
+    }
+
+    function removeNewTracker(idx) {
+        if (adjustmentDraft.newTrackers[idx]) {
+            adjustmentDraft.newTrackers.splice(idx, 1);
+            renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+        }
+    }
+
+    function openEditTrackerInAdjustment(idx, isNew = false) {
+        adjustmentDraft.editingTrackerIndex = idx;
+        adjustmentDraft.editingIsNew = isNew;
+        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+    }
+
+    function closeTrackerEditInAdjustment() {
+        adjustmentDraft.editingTrackerIndex = null;
+        adjustmentDraft.editingIsNew = false;
+        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+    }
+
+    function saveTrackerEditInAdjustment(idx, isNew) {
+        const nameInput = document.getElementById('adjust-edit-name');
+        const methodSelect = document.getElementById('adjust-edit-method');
+        const unitInput = document.getElementById('adjust-edit-unit');
+        const optionsInput = document.getElementById('adjust-edit-options');
+        const scaleRangeSelect = document.getElementById('adjust-edit-scale-range');
+        const alertToggle = document.getElementById('adjust-edit-alert-toggle');
+
+        if (!nameInput || !nameInput.value.trim()) {
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Tracking name cannot be empty.");
+            }
+            return;
+        }
+
+        const target = isNew ? adjustmentDraft.newTrackers[idx] : adjustmentDraft.trackers[idx];
+        if (!target) return;
+
+        target.name = nameInput.value.trim();
+        const newMethod = methodSelect ? methodSelect.value : target.check_method;
+        if (newMethod !== target.check_method) {
+            target.check_method = newMethod;
+            target.wasEdited = true;
+        }
+        if (unitInput) {
+            target.quantity_unit = unitInput.value.trim();
+        }
+        if (optionsInput && (newMethod === 'options' || newMethod === 'yes_no')) {
+            const rawOpts = optionsInput.value.split(',').map(s => s.trim()).filter(Boolean);
+            if (rawOpts.length > 0) target.options = rawOpts;
+        }
+        if (scaleRangeSelect && newMethod === 'scale') {
+            target.scale_range = scaleRangeSelect.value;
+            target.scale_max = scaleRangeSelect.value === '1-10' ? 10 : 5;
+        }
+        if (alertToggle) {
+            target.alert_enabled = alertToggle.checked;
+        }
+
+        target.wasEdited = true;
+        closeTrackerEditInAdjustment();
+    }
+
+    function promptAddNewTrackerInAdjustment() {
+        const name = prompt("Enter a name for the new tracking item:");
+        if (!name || !name.trim()) return;
+
+        const cleanName = name.trim();
+        adjustmentDraft.newTrackers.push({
+            name: cleanName,
+            category: 'stress_sign',
+            check_method: 'percentage',
+            scale_min: 1,
+            scale_max: 5,
+            quantity_unit: '',
+            options: null,
+            type_id: 'stress_sign',
+            type_label: 'Sign of stress',
+            type_color: '#D48366',
+            alert_enabled: false,
+            isKept: true,
+            isNew: true
+        });
+
+        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+    }
+
+    function renderStageAdjustTrackers(container) {
+        const editingIdx = adjustmentDraft.editingTrackerIndex;
+        const editingIsNew = adjustmentDraft.editingIsNew;
+        const editingTracker = editingIdx !== null
+            ? (editingIsNew ? adjustmentDraft.newTrackers[editingIdx] : adjustmentDraft.trackers[editingIdx])
+            : null;
+
+        const trackersListHTML = adjustmentDraft.trackers.map((t, idx) => {
+            const dotColor = t.type_color || (t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#166545' : '#1E40AF'));
+            const isKept = t.isKept !== false;
+            const methodChanged = t.wasEdited && t.check_method !== t.originalMethod;
+
+            let methodDesc = t.check_method;
+            if (t.check_method === 'percentage') methodDesc = 'Percentage (%)';
+            else if (t.check_method === 'quantity') methodDesc = `Quantity (${t.quantity_unit || 'units'})`;
+            else if (t.check_method === 'scale') methodDesc = `Scale 1–${t.scale_max || 5}`;
+            else if (t.check_method === 'options' || t.check_method === 'yes_no') {
+                methodDesc = `Options (${(t.options || ['Good', 'Not good']).join(', ')})`;
+            }
+
+            return `
+                <div class="p-3.5 rounded-2xl border ${isKept ? 'border-[#CDE9DA] bg-[#FBFDFB]' : 'border-stone-200 bg-stone-50/70 opacity-75'} space-y-2 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="w-3 h-3 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h4 class="text-xs sm:text-sm font-bold text-[#202124]">${escapeHTML(t.name)}</h4>
+                                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isKept ? 'bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]' : 'bg-stone-200 text-stone-600'}">
+                                        ${isKept ? 'Active' : 'Stopping (Archived)'}
+                                    </span>
+                                </div>
+                                <span class="text-[11px] text-stone-500">${escapeHTML(t.type_label || 'Tracker')} · ${escapeHTML(methodDesc)}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-2">
+                            ${isKept ? `
+                                <button type="button" onclick="window.TempoRecoverySetup.openEditTrackerInAdjustment(${idx}, false)"
+                                        class="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white transition cursor-pointer">
+                                    Edit
+                                </button>
+                                <button type="button" onclick="window.TempoRecoverySetup.toggleTrackerKept(${idx})"
+                                        class="px-2.5 py-1 rounded-lg text-xs font-semibold text-[#B83D08] hover:bg-[#FFE9DC]/50 border border-[#FFD2BA] bg-white transition cursor-pointer">
+                                    Stop tracking
+                                </button>
+                            ` : `
+                                <button type="button" onclick="window.TempoRecoverySetup.toggleTrackerKept(${idx})"
+                                        class="px-2.5 py-1 rounded-lg text-xs font-bold text-[#166545] hover:bg-[#EDF7F1] border border-[#CDE9DA] bg-white transition cursor-pointer">
+                                    Keep tracking
+                                </button>
+                            `}
+                        </div>
+                    </div>
+
+                    ${!isKept ? `
+                        <p class="text-[11px] text-[#B83D08] italic">
+                            ✓ This item will be removed from daily check-ins. Its past check-in records will remain preserved in your archive.
+                        </p>
+                    ` : ''}
+
+                    ${methodChanged ? `
+                        <div class="p-2 rounded-xl bg-[#FFF8F3] border border-[#FFD2BA] text-[11px] text-[#B83D08] flex items-center space-x-1.5">
+                            <span>⚡</span>
+                            <span>Method changed from <strong>${escapeHTML(t.originalMethod)}</strong> to <strong>${escapeHTML(t.check_method)}</strong>. This change will take effect starting today; historical check-ins remain in their original format.</span>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        const newTrackersHTML = adjustmentDraft.newTrackers.map((t, idx) => `
+            <div class="p-3.5 rounded-2xl border border-dashed border-[#166545]/40 bg-[#F4F9F6] flex items-center justify-between">
+                <div class="flex items-center space-x-2.5">
+                    <span class="text-sm">✨</span>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h4 class="text-xs sm:text-sm font-bold text-[#166545]">${escapeHTML(t.name)} (New)</h4>
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#EDF7F1] text-[#166545]">To be added</span>
+                        </div>
+                        <span class="text-[11px] text-stone-500">${escapeHTML(t.check_method)}</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button type="button" onclick="window.TempoRecoverySetup.openEditTrackerInAdjustment(${idx}, true)"
+                            class="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white cursor-pointer">
+                        Edit
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.removeNewTracker(${idx})"
+                            class="text-stone-400 hover:text-red-500 text-xs font-bold px-1 cursor-pointer">
+                        ✕
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        // Modal for editing tracker
+        let editModalHTML = '';
+        if (editingTracker) {
+            const isScale = editingTracker.check_method === 'scale';
+            const isQuantity = editingTracker.check_method === 'quantity';
+            const isOptions = editingTracker.check_method === 'options' || editingTracker.check_method === 'yes_no';
+            const isPct = editingTracker.check_method === 'percentage';
+
+            editModalHTML = `
+                <div class="fixed inset-0 z-[70] flex items-center justify-center modal-backdrop p-4">
+                    <div class="tempo-card max-w-md w-full p-6 space-y-4 bg-white rounded-3xl shadow-2xl relative border border-stone-300">
+                        <div class="flex items-center justify-between border-b pb-2">
+                            <h4 class="font-heading text-lg font-bold text-[#202124]">Edit Tracking Configuration</h4>
+                            <button type="button" onclick="window.TempoRecoverySetup.closeTrackerEditInAdjustment()"
+                                    class="text-stone-400 hover:text-stone-700 text-base font-bold cursor-pointer">✕</button>
+                        </div>
+
+                        <div class="space-y-3 text-xs">
+                            <div class="space-y-1">
+                                <label class="font-bold text-stone-700">Tracking Name</label>
+                                <input type="text" id="adjust-edit-name" value="${escapeHTML(editingTracker.name)}"
+                                       class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs text-[#202124]">
+                            </div>
+
+                            <div class="space-y-1">
+                                <label class="font-bold text-stone-700">Tracking Method</label>
+                                <select id="adjust-edit-method" onchange="window.TempoRecoverySetup.onAdjustmentMethodSelectChange()"
+                                        class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs text-[#202124] bg-white">
+                                    <option value="percentage" ${isPct ? 'selected' : ''}>Percentage (%)</option>
+                                    <option value="options" ${isOptions ? 'selected' : ''}>Options</option>
+                                    <option value="scale" ${isScale ? 'selected' : ''}>Scale</option>
+                                    <option value="quantity" ${isQuantity ? 'selected' : ''}>Quantity</option>
+                                </select>
+                            </div>
+
+                            <div id="adjust-edit-method-details" class="space-y-2 pt-1">
+                                <div id="adjust-edit-unit-row" class="${isQuantity ? '' : 'hidden'} space-y-1">
+                                    <label class="font-bold text-stone-700">Unit (e.g. min, steps, hrs)</label>
+                                    <input type="text" id="adjust-edit-unit" value="${escapeHTML(editingTracker.quantity_unit || '')}" placeholder="min"
+                                           class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs">
+                                </div>
+
+                                <div id="adjust-edit-options-row" class="${isOptions ? '' : 'hidden'} space-y-1">
+                                    <label class="font-bold text-stone-700">Options (comma-separated)</label>
+                                    <input type="text" id="adjust-edit-options" value="${escapeHTML((editingTracker.options || ['Good', 'Not good']).join(', '))}" placeholder="Good, Not good"
+                                           class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs">
+                                </div>
+
+                                <div id="adjust-edit-scale-row" class="${isScale ? '' : 'hidden'} space-y-1">
+                                    <label class="font-bold text-stone-700">Scale Range</label>
+                                    <select id="adjust-edit-scale-range" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white">
+                                        <option value="1-5" ${editingTracker.scale_max === 5 || editingTracker.scale_range === '1-5' ? 'selected' : ''}>1 to 5</option>
+                                        <option value="1-10" ${editingTracker.scale_max === 10 || editingTracker.scale_range === '1-10' ? 'selected' : ''}>1 to 10</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="pt-1 flex items-center space-x-2">
+                                <input type="checkbox" id="adjust-edit-alert-toggle" ${editingTracker.alert_enabled ? 'checked' : ''} class="rounded text-[#166545]">
+                                <label for="adjust-edit-alert-toggle" class="font-semibold text-stone-700">Enable Alert System</label>
+                            </div>
+
+                            <div class="p-2.5 rounded-xl bg-[#FFF8F3] border border-[#FFD2BA] text-[11px] text-[#B83D08]">
+                                ℹ️ Method changes take effect starting today. Historical check-ins remain in their original recorded format.
+                            </div>
+                        </div>
+
+                        <div class="pt-3 border-t flex items-center justify-end space-x-2">
+                            <button type="button" onclick="window.TempoRecoverySetup.closeTrackerEditInAdjustment()"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer">
+                                Cancel
+                            </button>
+                            <button type="button" onclick="window.TempoRecoverySetup.saveTrackerEditInAdjustment(${editingIdx}, ${editingIsNew})"
+                                    class="btn-primary px-5 py-2 rounded-xl text-xs font-bold shadow-xs cursor-pointer">
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="space-y-5">
+                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
+                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 1 OF 3 · TRACKING SYSTEM</span>
+                    <span>Setup Adjustment</span>
+                </div>
+
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        Adjust your tracking items
+                    </h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        Choose which items to keep, update tracking methods, or stop tracking items. Stopped items are archived and past data is preserved.
+                    </p>
+                </div>
+
+                <!-- Items list -->
+                <div class="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
+                    ${trackersListHTML}
+                    ${newTrackersHTML}
+                </div>
+
+                <!-- Add Button -->
+                <div class="pt-1">
+                    <button type="button" onclick="window.TempoRecoverySetup.promptAddNewTrackerInAdjustment()"
+                            class="px-4 py-2 rounded-xl border border-stone-300 hover:border-stone-400 text-xs font-bold text-[#202124] transition cursor-pointer flex items-center space-x-1.5 bg-white shadow-2xs">
+                        <span>+ Add new tracking item</span>
+                    </button>
+                </div>
+
+                <!-- Nav footer -->
+                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('hub')"
+                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                        ← Back to Hub
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_note')"
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
+                        <span>Continue to Recovery Note</span>
+                        <span>→</span>
+                    </button>
+                </div>
+
+                ${editModalHTML}
+            </div>
+        `;
+    }
+
+    function onAdjustmentMethodSelectChange() {
+        const methodSelect = document.getElementById('adjust-edit-method');
+        const unitRow = document.getElementById('adjust-edit-unit-row');
+        const optsRow = document.getElementById('adjust-edit-options-row');
+        const scaleRow = document.getElementById('adjust-edit-scale-row');
+        if (!methodSelect) return;
+
+        const val = methodSelect.value;
+        if (unitRow) unitRow.classList.toggle('hidden', val !== 'quantity');
+        if (optsRow) optsRow.classList.toggle('hidden', val !== 'options' && val !== 'yes_no');
+        if (scaleRow) scaleRow.classList.toggle('hidden', val !== 'scale');
+    }
+
+    // =========================================================================
+    // ADJUSTMENT STAGE 2: RECOVERY NOTE REVIEW
+    // =========================================================================
+
+    function renderStageAdjustNote(container) {
+        const warningSigns = adjustmentDraft.noteItems.filter(i => i.type === 'warning_sign');
+        const helpers = adjustmentDraft.noteItems.filter(i => i.type === 'helper');
+        const reminders = adjustmentDraft.noteItems.filter(i => i.type === 'reminder');
+        const people = adjustmentDraft.noteItems.filter(i => i.type === 'support_person');
+
+        container.innerHTML = `
+            <div class="space-y-5">
+                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
+                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 2 OF 3 · RECOVERY NOTE</span>
+                    <span>Review Recovery Note</span>
+                </div>
+
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        Review your Recovery Note
+                    </h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        Review warning signs, things that help, reminders, and support contacts.
+                    </p>
+                </div>
+
+                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1">
+                    <!-- Warning Signs -->
+                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#B83D08]">
+                            1. When I start getting overwhelmed (${warningSigns.length})
+                        </span>
+                        <div class="space-y-1">
+                            ${warningSigns.map((w, idx) => `
+                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
+                                    <span>${escapeHTML(w.text)}</span>
+                                    <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('warning_sign', ${idx})"
+                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="flex items-center space-x-2 pt-1">
+                            <input type="text" id="input-adjust-custom-sign" placeholder="+ Add warning sign..."
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                            <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('warning_sign')"
+                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Helpers -->
+                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">
+                            2. Things that seem to help (${helpers.length})
+                        </span>
+                        <div class="space-y-1">
+                            ${helpers.map((h, idx) => `
+                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
+                                    <span>${escapeHTML(h.text)}</span>
+                                    <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('helper', ${idx})"
+                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="flex items-center space-x-2 pt-1">
+                            <input type="text" id="input-adjust-custom-helper" placeholder="+ Add helpful thing..."
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                            <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('helper')"
+                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Reminders -->
+                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#1E40AF]">
+                            3. Gentle reminders (${reminders.length})
+                        </span>
+                        <div class="space-y-1">
+                            ${reminders.map((r, idx) => `
+                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
+                                    <span>"${escapeHTML(r.text)}"</span>
+                                    <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('reminder', ${idx})"
+                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="flex items-center space-x-2 pt-1">
+                            <input type="text" id="input-adjust-custom-reminder" placeholder="+ Add reminder..."
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                            <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('reminder')"
+                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                        </div>
+                    </div>
+
+                    <!-- Support People -->
+                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#7C3AED]">
+                            4. People I can reach out to (${people.length})
+                        </span>
+                        <div class="space-y-1">
+                            ${people.map((p, idx) => `
+                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
+                                    <span><strong>${escapeHTML(p.text)}</strong> ${p.metadata && p.metadata.relationship ? `<span class="text-stone-400">(${escapeHTML(p.metadata.relationship)})</span>` : ''}</span>
+                                    <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('support_person', ${idx})"
+                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nav footer -->
+                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_trackers')"
+                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                        ← Back to Trackers
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_review')"
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
+                        <span>Review Proposed Changes</span>
+                        <span>→</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function addAdjustmentNoteItem(type) {
+        let inputId = '';
+        if (type === 'warning_sign') inputId = 'input-adjust-custom-sign';
+        else if (type === 'helper') inputId = 'input-adjust-custom-helper';
+        else if (type === 'reminder') inputId = 'input-adjust-custom-reminder';
+
+        const input = document.getElementById(inputId);
+        if (!input || !input.value.trim()) return;
+
+        adjustmentDraft.noteItems.push({
+            type,
+            text: input.value.trim(),
+            source: 'custom'
+        });
+        input.value = '';
+        renderStageAdjustNote(document.getElementById('recovery-setup-stage-container'));
+    }
+
+    function removeAdjustmentNoteItem(type, idxInType) {
+        let count = 0;
+        for (let i = 0; i < adjustmentDraft.noteItems.length; i++) {
+            if (adjustmentDraft.noteItems[i].type === type) {
+                if (count === idxInType) {
+                    adjustmentDraft.noteItems.splice(i, 1);
+                    break;
+                }
+                count++;
+            }
+        }
+        renderStageAdjustNote(document.getElementById('recovery-setup-stage-container'));
+    }
+
+    // =========================================================================
+    // ADJUSTMENT STAGE 3: FINAL REVIEW & EXPLICIT CONFIRMATION
+    // =========================================================================
+
+    function renderStageAdjustReview(container) {
+        const keptTrackers = adjustmentDraft.trackers.filter(t => t.isKept !== false);
+        const stoppedTrackers = adjustmentDraft.trackers.filter(t => t.isKept === false);
+        const newTrackers = adjustmentDraft.newTrackers;
+
+        container.innerHTML = `
+            <div class="space-y-5">
+                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
+                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 3 OF 3 · FINAL CONFIRMATION</span>
+                    <span>Review & Confirm</span>
+                </div>
+
+                <div class="space-y-1">
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
+                        Review proposed setup changes
+                    </h3>
+                    <p class="text-xs text-[#6F6B68]">
+                        Please confirm your updates. Changes will be saved only after explicit confirmation.
+                    </p>
+                </div>
+
+                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1 text-xs">
+                    <!-- Kept Trackers -->
+                    <div class="p-3.5 rounded-2xl bg-white border border-[#CDE9DA] space-y-2">
+                        <span class="font-extrabold uppercase tracking-wider text-[#166545] text-[11px] block">
+                            Active Tracking Items (${keptTrackers.length + newTrackers.length})
+                        </span>
+                        <div class="space-y-1.5">
+                            ${keptTrackers.map(t => {
+                                const methodChanged = t.wasEdited && t.check_method !== t.originalMethod;
+                                return `
+                                    <div class="flex items-center justify-between p-2 rounded-xl bg-[#F7FCF9] border border-[#CDE9DA]/60">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-bold text-[#202124]">${escapeHTML(t.name)}</span>
+                                            <span class="text-stone-500">(${escapeHTML(t.check_method)})</span>
+                                        </div>
+                                        ${methodChanged ? `
+                                            <span class="text-[10px] font-bold text-[#B83D08] bg-[#FFE9DC] px-2 py-0.5 rounded-full border border-[#FFD2BA]">
+                                                Method: ${escapeHTML(t.originalMethod)} → ${escapeHTML(t.check_method)} (effective today)
+                                            </span>
+                                        ` : '<span class="text-[10px] font-bold text-[#166545]">Active</span>'}
+                                    </div>
+                                `;
+                            }).join('')}
+                            ${newTrackers.map(t => `
+                                <div class="flex items-center justify-between p-2 rounded-xl bg-[#F4F9F6] border border-dashed border-[#166545]/40">
+                                    <span class="font-bold text-[#166545]">${escapeHTML(t.name)} (${escapeHTML(t.check_method)})</span>
+                                    <span class="text-[10px] font-bold text-[#166545] bg-[#EDF7F1] px-2 py-0.5 rounded-full">New item</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Stopped Trackers -->
+                    ${stoppedTrackers.length > 0 ? `
+                        <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
+                            <span class="font-extrabold uppercase tracking-wider text-[#B83D08] text-[11px] block">
+                                Items to Stop Tracking (${stoppedTrackers.length})
+                            </span>
+                            <div class="space-y-1.5">
+                                ${stoppedTrackers.map(t => `
+                                    <div class="p-2 rounded-xl bg-white border border-stone-200 flex items-center justify-between">
+                                        <span class="font-medium text-[#202124]">${escapeHTML(t.name)}</span>
+                                        <span class="text-[11px] text-stone-500">✓ Past check-in records safely preserved</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Recovery Note summary -->
+                    <div class="p-3.5 rounded-2xl bg-[#FEFAF4] border border-[#F0EBE6] space-y-1">
+                        <span class="font-extrabold uppercase tracking-wider text-[#484541] text-[11px] block">
+                            Recovery Note
+                        </span>
+                        <p class="text-stone-600">
+                            ${adjustmentDraft.noteItems.length} personal reflection items saved.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Footer Nav with Explicit Save Confirmation -->
+                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_trackers')"
+                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
+                        ← Back to Edit
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.executeAdjustSetupConfirm()"
+                            class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#166545] hover:bg-[#0E4A32] text-white">
+                        <span>Confirm & Save Setup</span>
+                        <span>✓</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function executeAdjustSetupConfirm() {
+        try {
+            // 1. Process stopped trackers (archive them)
+            const stoppedTrackers = adjustmentDraft.trackers.filter(t => t.isKept === false);
+            stoppedTrackers.forEach(t => {
+                if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.archiveTracker === 'function') {
+                    window.TempoRecoverySelfCheck.archiveTracker(t.id);
+                }
+            });
+
+            // 2. Process edited trackers (update with version bump if method/unit changed)
+            const keptTrackers = adjustmentDraft.trackers.filter(t => t.isKept !== false);
+            keptTrackers.forEach(t => {
+                if (t.wasEdited && window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.updateTracker === 'function') {
+                    window.TempoRecoverySelfCheck.updateTracker(t.id, {
+                        name: t.name,
+                        check_method: t.check_method,
+                        quantity_unit: t.quantity_unit,
+                        options: t.options,
+                        scale_max: t.scale_max,
+                        scale_range: t.scale_range,
+                        alert_enabled: t.alert_enabled,
+                        category: t.category
+                    });
+                }
+            });
+
+            // 3. Process new trackers
+            const createdNewIds = [];
+            adjustmentDraft.newTrackers.forEach(nt => {
+                if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.createTracker === 'function') {
+                    const created = window.TempoRecoverySelfCheck.createTracker({
+                        name: nt.name,
+                        check_method: nt.check_method,
+                        quantity_unit: nt.quantity_unit,
+                        options: nt.options,
+                        scale_max: nt.scale_max,
+                        scale_range: nt.scale_range,
+                        alert_enabled: nt.alert_enabled,
+                        category: nt.category || 'stress_sign'
+                    });
+                    if (created && created.id) createdNewIds.push(created.id);
+                }
+            });
+
+            // 4. Save Recovery Note items
+            if (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.setNoteItems === 'function') {
+                window.TempoRecoveryNote.setNoteItems(adjustmentDraft.noteItems);
+            }
+
+            // 5. Update active setup record
+            const activeTrackerIds = [
+                ...keptTrackers.map(t => t.id),
+                ...createdNewIds
+            ];
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.updateActiveSetup === 'function') {
+                window.TempoRecoverySelfCheck.updateActiveSetup({ tracker_ids: activeTrackerIds });
+            }
+
+            // 6. Complete setup status and close
+            markSetupCompleted();
+            close();
+
+            // 7. Refresh recovery home and self check workspace
+            if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+                window.TempoMode.renderRmodeHome();
+            }
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
+                window.TempoSelfCheckWorkspace.render();
+            }
+
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("✓ Setup changes saved successfully.");
+            }
+        } catch (err) {
+            console.error("Error confirming setup adjustments:", err);
+            if (window.TempoApp && typeof window.TempoApp.showToast === "function") { window.TempoApp.showToast("Failed to save changes. Your active setup has not been altered."); }
+        }
+    }
+
+
     // STAGE 1: WELCOME
     // =========================================================================
 
@@ -1426,9 +2306,24 @@
         isIntroSeen,
         markIntroSeen,
         isSetupCompleted,
+        hasCompletedRmodeSetup,
         markSetupCompleted,
         resetSetupState,
         shouldShowFirstTimeWelcome,
+        isReturningUser,
+        startAdjustmentFlow,
+        promptCreateNewSetup,
+        confirmCreateNewSetup,
+        toggleTrackerKept,
+        removeNewTracker,
+        openEditTrackerInAdjustment,
+        closeTrackerEditInAdjustment,
+        saveTrackerEditInAdjustment,
+        promptAddNewTrackerInAdjustment,
+        onAdjustmentMethodSelectChange,
+        addAdjustmentNoteItem,
+        removeAdjustmentNoteItem,
+        executeAdjustSetupConfirm,
         open,
         close,
         exploreFirst,

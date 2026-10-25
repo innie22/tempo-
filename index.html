@@ -62,7 +62,7 @@
             <!-- 1. Left Region: Brand Logo (+ Mode Indicator) -->
             <div class="flex items-center shrink-0">
                 <!-- Tempo Official Logo (Prominent size, preserved aspect ratio) -->
-                <div id="brand-logo-container" onclick="window.TempoApp.navigateTo('today')" class="flex items-center cursor-pointer shrink-0 py-1" title="Tempo — A calmer you, one step at a time.">
+                <div id="brand-logo-container" onclick="if (window.TempoApp && typeof window.TempoApp.handleLogoClick === 'function') { window.TempoApp.handleLogoClick(); } else if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') { window.TempoMode.navigateToActiveDashboard(); } else if (window.TempoApp) { window.TempoApp.navigateTo('today'); }" class="flex items-center cursor-pointer shrink-0 py-1" title="Tempo — A calmer you, one step at a time.">
                     <img src="assets/tempo-logo.png" alt="Tempo — A calmer you, one step at a time." class="h-14 sm:h-[62px] lg:h-[80px] w-auto object-contain block">
                 </div>
 
@@ -84,11 +84,11 @@
                 <a id="nav-link-what-is-tempo" href="#about" onclick="window.TempoApp.navigateTo('about'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
                     About
                 </a>
-                <a id="nav-link-check" href="#stress-check" onclick="window.TempoMode.openStrack('setup', { sourceContext: 'entry' }); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                <a id="nav-link-check" href="#stress-check" onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open'); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; } return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
                     Check
                 </a>
-                <a id="nav-link-plan" href="#enjoy-tempo-tools" onclick="window.TempoApp.scrollToEnjoyTempoTools(); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
-                    Tool
+                <a id="nav-link-plan" href="#plan-workspace" onclick="if (window.TempoMode && typeof window.TempoMode.openPlanWorkspace === 'function') { window.TempoMode.openPlanWorkspace(); } else if (window.TempoApp) { window.TempoApp.navigateTo('plan-workspace'); } return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
+                    Plan
                 </a>
                 <a id="nav-link-learn" href="#learn" data-nav="learn" onclick="window.TempoApp.navigateTo('learn'); return false;" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">
                     Learn
@@ -468,118 +468,11 @@
 
 
         <!-- ===================================================================
-             SCREEN 3: STRESS SELF-ASSESSMENT (6 DIMENSIONS)
+             SCREEN 3: TEMPO SELF-CHECK TOOL PAGE
              =================================================================== -->
-        <section id="screen-stress-check" class="screen-container hidden space-y-8">
-            <!-- Navigation Return Bar -->
-            <div class="max-w-4xl mx-auto flex items-center justify-between pb-2">
-                <button type="button" onclick="if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') window.TempoMode.returnToSourceContext(); else if (window.TempoApp) window.TempoApp.navigateTo('today');"
-                        class="inline-flex items-center space-x-1.5 text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
-                    <span>←</span>
-                    <span id="stress-check-return-text">Return</span>
-                </button>
-            </div>
-            <div class="max-w-2xl mx-auto text-center space-y-2">
-                <h2 class="font-heading text-3xl font-extrabold text-gray-900">6-Dimension Stress Self-Check</h2>
-                <p class="text-sm text-gray-600">A quick self-awareness gauge to locate where your stress is concentrated today.</p>
-                <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 max-w-xl mx-auto">
-                    ℹ️ <strong>Non-Clinical Notice:</strong> This is a self-reflection tool, not a medical or psychological diagnosis. It does not replace professional care.
-                </div>
-            </div>
-
-            <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-                <!-- Left Column: 6 Interactive Sliders -->
-                <div class="tempo-card p-6 md:p-8 space-y-5">
-                    <h3 class="font-heading text-base font-bold text-gray-900 pb-2 border-b border-gray-100">Rate your current state (1-10)</h3>
-
-                    <!-- 1. Perceived Stress -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>1. Perceived Stress (Feeling out of control)</span>
-                            <span id="val-perceivedStress" class="text-[#FF6B2C] font-bold">7</span>
-                        </div>
-                        <input type="range" id="slider-perceivedStress" min="1" max="10" value="7">
-                    </div>
-
-                    <!-- 2. Deadline Pressure -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>2. Deadline Pressure (Upcoming submission density)</span>
-                            <span id="val-deadlinePressure" class="text-[#FF6B2C] font-bold">9</span>
-                        </div>
-                        <input type="range" id="slider-deadlinePressure" min="1" max="10" value="9">
-                    </div>
-
-                    <!-- 3. Sleep Quality -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>3. Sleep Quality (Restlessness & bedtime worry)</span>
-                            <span id="val-sleepQuality" class="text-[#FF6B2C] font-bold">4</span>
-                        </div>
-                        <input type="range" id="slider-sleepQuality" min="1" max="10" value="4">
-                    </div>
-
-                    <!-- 4. Concentration Capacity -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>4. Concentration (Brain fog & staying on task)</span>
-                            <span id="val-concentration" class="text-[#FF6B2C] font-bold">5</span>
-                        </div>
-                        <input type="range" id="slider-concentration" min="1" max="10" value="5">
-                    </div>
-
-                    <!-- 5. Emotional Exhaustion -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>5. Emotional Exhaustion (Drained energy & stamina)</span>
-                            <span id="val-exhaustion" class="text-[#FF6B2C] font-bold">7</span>
-                        </div>
-                        <input type="range" id="slider-exhaustion" min="1" max="10" value="7">
-                    </div>
-
-                    <!-- 6. Burnout Early Signs -->
-                    <div class="space-y-1.5">
-                        <div class="flex justify-between text-xs font-semibold text-gray-700">
-                            <span>6. Burnout Signs (Cynicism, detachment, physical tension)</span>
-                            <span id="val-burnoutSigns" class="text-[#FF6B2C] font-bold">6</span>
-                        </div>
-                        <input type="range" id="slider-burnoutSigns" min="1" max="10" value="6">
-                    </div>
-
-                    <!-- Buttons -->
-                    <div class="pt-4 flex items-center justify-between text-xs">
-                        <button id="btn-reset-stress" class="text-gray-500 hover:text-gray-800 underline">Reset to Neutral</button>
-                        <button id="btn-save-stress-result" class="btn-primary px-4 py-2 rounded-lg font-medium">Save to Profile</button>
-                    </div>
-                </div>
-
-                <!-- Right Column: Visual Radar & Tailored Actions -->
-                <div class="space-y-6">
-                    <!-- Radar SVG Card -->
-                    <div class="tempo-card p-6 flex flex-col items-center justify-center text-center space-y-4">
-                        <div class="flex items-center justify-between w-full">
-                            <span class="text-xs font-semibold text-gray-500">Holistic Radar</span>
-                            <span id="stress-status-badge"></span>
-                        </div>
-
-                        <!-- Dynamic SVG Radar Chart -->
-                        <div class="w-full flex justify-center py-2">
-                            <svg id="stress-radar-svg" width="300" height="300" viewBox="0 0 300 300" class="overflow-visible"></svg>
-                        </div>
-
-                        <div class="text-center">
-                            <span class="text-xs text-gray-400">Total Stress Index</span>
-                            <h4 id="stress-total-score" class="font-heading text-3xl font-extrabold text-gray-900">38 / 60</h4>
-                            <p id="stress-advice-text" class="text-xs text-gray-600 mt-1 max-w-sm"></p>
-                        </div>
-                    </div>
-
-                    <!-- Tailored Next Steps Card -->
-                    <div id="stress-tailored-actions" class="space-y-3">
-                        <!-- Populated by stress.js -->
-                    </div>
-                </div>
-            </div>
+        <section id="screen-stress-check" class="screen-container hidden" data-tempo-ui="tempo-self-check">
+            <span id="stress-check-return-text" class="hidden">Return</span>
+            <div id="self-check-workspace-root"></div>
         </section>
 
 
@@ -926,27 +819,118 @@
 
 
         <!-- ===================================================================
-             SCREEN: UNCLEAR MODE (PLACEHOLDER)
+             SCREEN: UNCLEAR MODE
              =================================================================== -->
         <section id="screen-unclear-mode" class="screen-container hidden space-y-8">
-            <div class="max-w-xl mx-auto text-center py-16 px-4 space-y-6">
-                <div class="w-16 h-16 rounded-2xl bg-[#FEF7EC] text-[#9A5B13] border border-[#FDE5BE] flex items-center justify-center mx-auto text-2xl shadow-sm">
-                    🧭
+            <div class="max-w-7xl mx-auto py-2">
+                <!-- Routed Unclear Mode View Container -->
+                <div id="routed-unclear-container"></div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN: MY TEST RESULTS (PLACEHOLDER)
+             =================================================================== -->
+        <section id="screen-my-test-results" class="screen-container hidden space-y-6">
+            <div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 space-y-6">
+                <!-- Back Button -->
+                <div>
+                    <button type="button" 
+                            onclick="window.TempoMode.setMode('unclear'); if (window.TempoApp) window.TempoApp.navigateTo('today');"
+                            class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-[#5B5550] hover:text-[#202124] bg-white hover:bg-stone-50 border border-[#E8D9CF] transition shadow-xs cursor-pointer">
+                        <span>←</span>
+                        <span>Back to Unclear Mode</span>
+                    </button>
                 </div>
+
+                <!-- Page Header -->
                 <div class="space-y-2">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#9A5B13]">UNCLEAR MODE</span>
-                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124]">Unclear Mode is being prepared</h2>
-                    <p class="text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        We're designing a guided unpack flow to help you navigate when you feel off but can't clearly identify what you need right now.
+                    <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
+                        My Test Results
+                    </h1>
+                    <p class="text-sm sm:text-base text-[#6F6B68]">
+                        Your assessment results will be collected here.
                     </p>
                 </div>
-                <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <button onclick="window.TempoApp.navigateTo('today')" class="btn-primary px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-sm transition">
-                        ← Return to Home
+
+                <!-- Dedicated Placeholder Container -->
+                <div class="bg-white rounded-3xl border border-[#EAE4DF] p-8 sm:p-12 text-center space-y-4 shadow-xs">
+                    <div class="w-16 h-16 rounded-2xl bg-[#FFF6EF] text-[#C2785C] border border-[#F5D5C6] flex items-center justify-center mx-auto text-2xl shadow-xs">
+                        📋
+                    </div>
+                    <div class="space-y-1">
+                        <h2 class="text-lg sm:text-xl font-bold text-[#202124]">Assessment Archive</h2>
+                        <p class="text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
+                            This space is reserved for your results from the Tempo Test (Ucheck) and other mental health assessments. Take a check-in to begin building your wellness reflection history.
+                        </p>
+                    </div>
+                    <div class="pt-2">
+                        <button type="button"
+                                onclick="window.TempoMode.setMode('unclear'); if (window.TempoUnclearMode) window.TempoUnclearMode.startNewCheckIn();"
+                                class="btn-primary px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer">
+                            Take Tempo Test
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ===================================================================
+             SCREEN: EXPLORE MENTAL HEALTH TESTS (PLACEHOLDER)
+             =================================================================== -->
+        <section id="screen-explore-mental-health-tests" class="screen-container hidden space-y-6">
+            <div class="max-w-4xl mx-auto py-4 sm:py-6 px-4 space-y-6">
+                <!-- Back Button -->
+                <div>
+                    <button type="button" 
+                            onclick="window.TempoMode.setMode('unclear'); if (window.TempoApp) window.TempoApp.navigateTo('today');"
+                            class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-[#5B5550] hover:text-[#202124] bg-white hover:bg-stone-50 border border-[#E8D9CF] transition shadow-xs cursor-pointer">
+                        <span>←</span>
+                        <span>Back to Unclear Mode</span>
                     </button>
-                    <button onclick="window.TempoApp.navigateTo('stress-check')" class="px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-stone-50 transition">
-                        Take Self-Check in the Meantime
-                    </button>
+                </div>
+
+                <!-- Page Header -->
+                <div class="space-y-2">
+                    <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
+                        Explore Mental Health Tests
+                    </h1>
+                    <p class="text-sm sm:text-base text-[#6F6B68]">
+                        Find an assessment that fits what you need.
+                    </p>
+                </div>
+
+                <!-- Category Navigation Controls / Tabs -->
+                <div class="bg-white rounded-2xl border border-[#EAE4DF] p-2 shadow-xs">
+                    <div id="explore-categories-nav" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button type="button" data-cat="depression"
+                                onclick="window.TempoExploreAssessments.selectCategory('depression')"
+                                class="explore-cat-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-center transition cursor-pointer">
+                            Depression Assessment
+                        </button>
+                        <button type="button" data-cat="stress"
+                                onclick="window.TempoExploreAssessments.selectCategory('stress')"
+                                class="explore-cat-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-center transition cursor-pointer">
+                            Stress Assessments
+                        </button>
+                        <button type="button" data-cat="anxiety"
+                                onclick="window.TempoExploreAssessments.selectCategory('anxiety')"
+                                class="explore-cat-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-center transition cursor-pointer">
+                            Anxiety Assessments
+                        </button>
+                        <button type="button" data-cat="other"
+                                onclick="window.TempoExploreAssessments.selectCategory('other')"
+                                class="explore-cat-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-center transition cursor-pointer">
+                            Other Assessments
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category Placeholder Detail Section -->
+                <div id="explore-category-content" class="bg-white rounded-3xl border border-[#EAE4DF] p-8 sm:p-12 text-center space-y-4 shadow-xs">
+                    <!-- Populated dynamically by window.TempoExploreAssessments.render() -->
                 </div>
             </div>
         </section>
@@ -2958,7 +2942,7 @@
             <span class="text-base">⚡</span>
             <span>Support</span>
         </button>
-        <a href="#stress-check" data-nav="stress-check" class="flex flex-col items-center text-[10px] text-gray-500">
+        <a href="#stress-check" data-nav="stress-check" onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open'); return false; }" class="flex flex-col items-center text-[10px] text-gray-500">
             <span class="text-base">📊</span>
             <span>Check</span>
         </a>
@@ -3783,6 +3767,7 @@
     <script src="planStore.js"></script>
     <script src="emergencyFlow.js"></script>
     <script src="focusZone.js"></script>
+    <script src="toolNotes.js"></script>
     <script src="planWorkspace.js"></script>
     <script src="recoverySelfCheck.js"></script>
     <script src="recoveryNote.js"></script>
@@ -3790,12 +3775,19 @@
     <script src="selfCheckPatterns.js"></script>
     <script src="selfCheckHistory.js"></script>
     <script src="weeklyReview.js"></script>
+    <script src="selfCheckWorkspace.js"></script>
     <script src="unclearMode.js"></script>
     <script src="tempoTools.js"></script>
     <script src="learnSolve.js"></script>
     <script src="urmodeFlow.js"></script>
     <script src="mode.js"></script>
     <script src="personalSpace.js"></script>
+    <script src="exploreAssessments.js"></script>
+    <script src="phq9Assessment.js"></script>
+    <script src="cesdAssessment.js"></script>
+    <script src="gad7Assessment.js"></script>
+    <script src="pasAssessment.js"></script>
+    <script src="tempoAlertSystem.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

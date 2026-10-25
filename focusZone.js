@@ -62,6 +62,8 @@ window.TempoFocusZone = (function() {
         customBreak: 10
     };
 
+    let isEditingNoteInFocusZone = false;
+
     // Helper: Load saved Focus Rhythm
     function loadSavedRhythm() {
         try {
@@ -1048,6 +1050,46 @@ window.TempoFocusZone = (function() {
     }
 
     // -------------------------------------------------------------------------
+    // TASK NOTE EDITING IN FOCUS ZONE
+    // -------------------------------------------------------------------------
+    function openEditNoteModal() {
+        if (!session.taskId) return;
+        isEditingNoteInFocusZone = true;
+        render();
+    }
+
+    function closeEditNoteModal() {
+        isEditingNoteInFocusZone = false;
+        render();
+    }
+
+    function saveNoteFromFocusZone() {
+        if (!session.taskId) {
+            closeEditNoteModal();
+            return;
+        }
+        const textarea = document.getElementById('fz-task-note-textarea');
+        const text = textarea ? textarea.value : '';
+        if (window.TempoToolNotes && typeof window.TempoToolNotes.saveTaskNote === 'function') {
+            window.TempoToolNotes.saveTaskNote(session.taskId, session.taskName, text);
+        }
+        isEditingNoteInFocusZone = false;
+        render();
+    }
+
+    function deleteNoteFromFocusZone() {
+        if (!session.taskId) {
+            closeEditNoteModal();
+            return;
+        }
+        if (window.TempoToolNotes && typeof window.TempoToolNotes.deleteTaskNote === 'function') {
+            window.TempoToolNotes.deleteTaskNote(session.taskId);
+        }
+        isEditingNoteInFocusZone = false;
+        render();
+    }
+
+    // -------------------------------------------------------------------------
     // MINI-GAME: GENTLE MATCH (MVP BOUNDED BREAK GAME)
     // -------------------------------------------------------------------------
     function initGentleMatch() {
@@ -1471,6 +1513,46 @@ window.TempoFocusZone = (function() {
         } catch (e) {}
     }
 
+    function renderFocusZoneNoteModal() {
+        if (!isEditingNoteInFocusZone) return '';
+        const currentNote = session.taskId && window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(session.taskId) : null;
+        const currentNoteText = currentNote ? (currentNote.text || '') : '';
+        return `
+            <div class="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+                 onclick="if (event.target === this) window.TempoFocusZone.closeEditNoteModal();"
+                 role="dialog" aria-modal="true">
+                <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-2xl max-w-md w-full relative text-left">
+                    <button type="button" onclick="window.TempoFocusZone.closeEditNoteModal()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
+                    <div class="space-y-1 pr-6">
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">Note for ${escapeHTML(session.taskName)}</h3>
+                        <p class="text-xs text-[#6F6B68]">Synchronized with Tool Notes and your Working Plan.</p>
+                    </div>
+                    <div>
+                        <textarea id="fz-task-note-textarea" rows="4" placeholder="Write any notes, reminders, or thoughts for this task..."
+                                  class="w-full p-3 text-xs sm:text-sm border border-[#E3C7A5] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] text-[#202124]">${escapeHTML(currentNoteText)}</textarea>
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                        <div>
+                            ${currentNoteText ? `
+                                <button type="button" onclick="window.TempoFocusZone.deleteNoteFromFocusZone()" class="text-xs font-semibold text-rose-600 hover:text-rose-800 cursor-pointer">
+                                    Delete note
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button type="button" onclick="window.TempoFocusZone.closeEditNoteModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
+                                Cancel
+                            </button>
+                            <button type="button" onclick="window.TempoFocusZone.saveNoteFromFocusZone()" class="btn-primary px-5 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer">
+                                Save note
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     // -------------------------------------------------------------------------
     // MAIN RENDER DISPATCHER
     // -------------------------------------------------------------------------
@@ -1562,6 +1644,7 @@ window.TempoFocusZone = (function() {
                     ${contentHtml}
                 </div>
             </div>
+            ${renderFocusZoneNoteModal()}
         `;
     }
 
@@ -1760,6 +1843,28 @@ window.TempoFocusZone = (function() {
                     </div>
                 </div>
 
+                <!-- Task Note Section (if task has saved note) -->
+                ${(() => {
+                    const taskNote = session.taskId && window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(session.taskId) : null;
+                    if (!taskNote || !taskNote.text || !taskNote.text.trim()) return '';
+                    return `
+                        <div class="p-3 sm:p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-left shadow-2xs space-y-1">
+                            <div class="flex items-center justify-between pb-0.5">
+                                <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 flex items-center space-x-1">
+                                    <span>📝</span>
+                                    <span>Note for ${escapeHTML(session.taskName)}</span>
+                                </span>
+                                <button type="button" onclick="window.TempoFocusZone.openEditNoteModal()" class="text-xs font-bold text-amber-700 hover:text-amber-900 hover:underline cursor-pointer">
+                                    Edit note
+                                </button>
+                            </div>
+                            <p class="text-xs text-stone-700 whitespace-pre-wrap leading-relaxed max-h-24 overflow-y-auto">
+                                ${escapeHTML(taskNote.text)}
+                            </p>
+                        </div>
+                    `;
+                })()}
+
                 <!-- Focus Rhythm Selector (4 Horizontal Chips) -->
                 <div class="space-y-2 text-left">
                     <label class="block text-xs font-bold text-[#202124]">Focus rhythm</label>
@@ -1948,6 +2053,28 @@ window.TempoFocusZone = (function() {
                         </span>
                     </div>
                 `}
+
+                <!-- Task Note Section (if task has saved note) -->
+                ${(() => {
+                    const taskNote = session.taskId && window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(session.taskId) : null;
+                    if (!taskNote || !taskNote.text || !taskNote.text.trim()) return '';
+                    return `
+                        <div class="w-full max-w-md mx-auto my-1 p-3 rounded-2xl ${style.isDark ? 'bg-stone-800/90 border border-stone-700 text-stone-200' : 'bg-amber-50/90 border border-amber-200/90 text-stone-800'} text-left shadow-2xs space-y-1">
+                            <div class="flex items-center justify-between pb-0.5">
+                                <span class="text-[10px] font-extrabold uppercase tracking-wider ${style.isDark ? 'text-amber-400' : 'text-amber-800'} flex items-center space-x-1">
+                                    <span>📝</span>
+                                    <span>Note for ${escapeHTML(session.taskName)}</span>
+                                </span>
+                                <button type="button" onclick="window.TempoFocusZone.openEditNoteModal()" class="text-xs font-bold ${style.isDark ? 'text-amber-300 hover:text-white' : 'text-amber-700 hover:text-amber-900'} hover:underline cursor-pointer">
+                                    Edit note
+                                </button>
+                            </div>
+                            <p class="text-xs ${style.isDark ? 'text-stone-300' : 'text-stone-700'} whitespace-pre-wrap leading-relaxed max-h-20 overflow-y-auto">
+                                ${escapeHTML(taskNote.text)}
+                            </p>
+                        </div>
+                    `;
+                })()}
 
                 <!-- Large Circular Progress Ring -->
                 <div class="relative w-64 h-64 sm:w-72 sm:h-72 mx-auto my-2 flex items-center justify-center select-none">
@@ -3365,6 +3492,10 @@ window.TempoFocusZone = (function() {
         setVolume,
         toggleMute,
         handleExitClick,
+        openEditNoteModal,
+        closeEditNoteModal,
+        saveNoteFromFocusZone,
+        deleteNoteFromFocusZone,
         render,
         getSessionState: () => ({ ...session }),
         _setSessionForTesting: (patch) => {

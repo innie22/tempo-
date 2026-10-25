@@ -47,6 +47,10 @@
     --radius-pill: 9999px;
 }
 
+html, body {
+    overflow-x: hidden;
+}
+
 body {
     background-color: #F6F0EB;
     color: var(--tempo-ink);
@@ -628,6 +632,20 @@ body.is-dragging-card * {
     background-size: 16px 16px;
 }
 
+/* Recovery Mode Today's Self-check Card - Matching Urmode 'Your Task for Now' Dimensions with 30px width reduction & centered */
+.recovery-card-selfcheck {
+    min-height: 290px;
+    height: 290px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: calc(100% - 30px);
+    max-width: calc(100% - 30px);
+    margin-inline: auto;
+    background-color: #FEFAF4;
+    box-shadow: 0 4px 12px -2px rgba(75, 55, 40, 0.06), 0 12px 24px -4px rgba(75, 55, 40, 0.08);
+}
+
 /* Your Working Plan Card - Height Preservation & Scrollable Tasks */
 .urgent-working-plan-card {
     height: 388px;
@@ -671,20 +689,138 @@ body.is-dragging-card * {
     background: #B0A9A2;
 }
 
+/* Recovery Working Plan Bidirectional Scroll Container */
+.recovery-plan-col {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Recovery Working Plan Card - Fixed Height Preservation & Internal Scrolling */
+.recovery-working-plan-card {
+    background-color: #FEFAF4;
+    height: 462px;
+    min-height: 462px;
+    max-height: 462px;
+    display: flex;
+    flex-direction: column;
+}
+
+.recovery-working-plan-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #C2BCB6 #F0ECE8;
+}
+
+.recovery-working-plan-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 8px;
+}
+
+.recovery-working-plan-scroll::-webkit-scrollbar-track {
+    background: #F0ECE8;
+    border-radius: 9999px;
+}
+
+.recovery-working-plan-scroll::-webkit-scrollbar-thumb {
+    background: #C2BCB6;
+    border-radius: 9999px;
+}
+
+.recovery-working-plan-scroll::-webkit-scrollbar-thumb:hover {
+    background: #A8A29D;
+}
+
+.recovery-working-plan-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Recovery Working Plan Columns - Two-Column Layout (Tasks & Task Done) */
+.recovery-plan-columns,
+.recovery-plan-columns.grid,
+.recovery-working-plan-scroll .recovery-plan-columns {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 1.25rem !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 100% !important;
+}
+
+.recovery-plan-column,
+.recovery-plan-columns > [data-tempo-ui="recovery-date-column"],
+.recovery-plan-columns > [data-tempo-ui="recovery-done-column"] {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: 50% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    max-height: 100% !important;
+}
+
+.recovery-plan-divider {
+    flex: 0 0 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: stretch !important;
+    padding: 0 0.25rem !important;
+    width: auto !important;
+}
+
+.recovery-column-tasks {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: thin;
+    scrollbar-color: #C2BCB6 transparent;
+}
+
+.recovery-column-tasks::-webkit-scrollbar {
+    width: 5px;
+}
+
+.recovery-column-tasks::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.recovery-column-tasks::-webkit-scrollbar-thumb {
+    background: #C2BCB6;
+    border-radius: 9999px;
+}
+
+.recovery-column-tasks::-webkit-scrollbar-thumb:hover {
+    background: #A8A29D;
+}
+
 /* Primary Asymmetric Desktop Layout (~65% Left / ~35% Right) & Responsive Stack */
 @media (min-width: 1024px) {
     .urgent-home-main-grid,
-    .recovery-home-main-grid {
+    .recovery-plan-comm-grid {
         display: grid;
         grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
         gap: 1.5rem;
         align-items: start;
     }
+    .recovery-home-main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+        gap: 1.5rem;
+        align-items: stretch;
+    }
     .urgent-left-col,
-    .recovery-left-col {
+    .recovery-left-col,
+    .recovery-plan-col {
         display: flex;
         flex-direction: column;
         gap: 1.25rem;
+        min-width: 0;
+        max-width: 100%;
     }
     .urgent-support-row,
     .recovery-support-row {
@@ -700,6 +836,60 @@ body.is-dragging-card * {
     .recovery-right-col {
         display: flex;
         flex-direction: column;
+        justify-content: flex-start;
+        height: 100%;
+    }
+    .recovery-comm-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+}
+
+.recovery-mode-header {
+    padding-bottom: 0 !important;
+}
+
+.recovery-greeting {
+    margin-top: -15px !important;
+    padding-top: 0 !important;
+}
+
+.recovery-card-recently {
+    margin-top: 10px !important;
+    background-color: #FEFAF4;
+}
+
+.recovery-prompt-wrap {
+    margin-top: 20px !important;
+    padding-top: 0 !important;
+}
+
+.recovery-card-focus-now {
+    min-height: 165px;
+}
+
+@media (min-width: 640px) {
+    .recovery-card-focus-now {
+        min-height: 165px;
+        height: 203px;
+        margin-bottom: -5px;
+        width: calc(100% + 12px);
+        margin-right: -12px;
+        z-index: 1;
+    }
+}
+
+.recovery-card-focus-now .recovery-focus-mascot {
+    height: 98px;
+    width: auto;
+    margin-left: -6px;
+}
+
+@media (min-width: 640px) {
+    .recovery-card-focus-now .recovery-focus-mascot {
+        height: 116px;
+        margin-left: -10px;
     }
 }
 
@@ -729,31 +919,29 @@ body.is-dragging-card * {
         order: 4;
     }
 
-    .recovery-home-main-grid {
+    .recovery-home-main-grid,
+    .recovery-plan-comm-grid {
         display: flex;
         flex-direction: column;
         gap: 1.25rem;
     }
-    .recovery-left-col {
-        display: contents;
-    }
-    .recovery-card-selfcheck {
-        order: 1;
+    .recovery-left-col,
+    .recovery-plan-col,
+    .recovery-comm-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        height: auto;
     }
     .recovery-right-col {
-        display: contents;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        height: auto;
     }
-    .recovery-card-recently {
-        order: 2;
-    }
-    .recovery-support-row {
-        display: contents;
-    }
-    .recovery-card-quickrelief {
-        order: 3;
-    }
-    .recovery-card-focuszone {
-        order: 4;
+    .recovery-prompt-wrap {
+        margin-top: 20px !important;
+        padding-top: 0 !important;
     }
 }
 
@@ -1037,4 +1225,91 @@ body.is-dragging-card * {
         flex: 1 1 0%;
         max-width: 42rem;
     }
+}
+
+/* ==========================================================================
+   TEMPO WORKING PLAN CUSTOM SCROLLBAR & STYLING
+   ========================================================================== */
+.plan-custom-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #D99E87 transparent;
+}
+
+.plan-custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.plan-custom-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.plan-custom-scroll::-webkit-scrollbar-thumb {
+    background-color: #D99E87;
+    border-radius: 9999px;
+}
+
+.plan-custom-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: #C98E77;
+}
+
+
+
+/* ==========================================================================
+   TEMPO SELF-CHECK CUSTOM SCROLLBAR & SLIDER STYLING
+   ========================================================================== */
+.selfcheck-custom-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #8C9E90 transparent;
+}
+
+.selfcheck-custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.selfcheck-custom-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.selfcheck-custom-scroll::-webkit-scrollbar-thumb {
+    background-color: #8C9E90;
+    border-radius: 9999px;
+}
+
+.selfcheck-custom-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: #728476;
+}
+
+/* Custom peach slider for Tension */
+.selfcheck-tension-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    background: #FCEEE8;
+    border-radius: 9999px;
+    outline: none;
+}
+
+.selfcheck-tension-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #D48366;
+    border: 2px solid #FFFFFF;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.selfcheck-tension-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #D48366;
+    border: 2px solid #FFFFFF;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }

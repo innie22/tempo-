@@ -102,10 +102,13 @@
             const raw = localStorage.getItem(key);
             if (raw) return JSON.parse(raw);
 
-            // Also check legacy non-scoped key for seamless upgrade
-            const legacyKey = `tempo_selfcheck_${type}`;
-            const legacyRaw = localStorage.getItem(legacyKey);
-            if (legacyRaw) return JSON.parse(legacyRaw);
+            // Only check legacy non-scoped key for default local_user to avoid cross-account leak
+            const uid = getUserId();
+            if (uid === 'local_user') {
+                const legacyKey = `tempo_selfcheck_${type}`;
+                const legacyRaw = localStorage.getItem(legacyKey);
+                if (legacyRaw) return JSON.parse(legacyRaw);
+            }
         } catch (e) {
             console.warn(`[SelfCheck] Error loading ${type} from storage:`, e);
         }
@@ -185,12 +188,185 @@
         return trackers.find(t => t.id === id) || null;
     }
 
+    function getTrackerConfigForDate(tracker, dateStr) {
+        if (!tracker) return null;
+        const versions = Array.isArray(tracker.config_versions) ? tracker.config_versions : [];
+        if (versions.length === 0) {
+            return {
+                check_method: tracker.check_method,
+                quantity_unit: tracker.quantity_unit,
+                options: tracker.options,
+                scale_min: tracker.scale_min,
+                scale_max: tracker.scale_max,
+                scale_range: tracker.scale_range,
+                type_id: tracker.type_id,
+                type_label: tracker.type_label,
+                type_color: tracker.type_color,
+                alert_enabled: tracker.alert_enabled,
+                alert_config: tracker.alert_config
+            };
+        }
+        const sorted = [...versions].sort((a, b) => (a.effective_from || '').localeCompare(b.effective_from || ''));
+        const match = sorted.find(v => {
+            const fromOk = !v.effective_from || v.effective_from <= dateStr;
+            const toOk = !v.effective_to || dateStr < v.effective_to;
+            return fromOk && toOk;
+        });
+        if (match) return match;
+        if (sorted.length > 0 && dateStr < (sorted[0].effective_from || '')) return sorted[0];
+        return sorted[sorted.length - 1];
+    }
+
+    // =========================================================================
+    // SETUP MANAGEMENT & ARCHIVAL API
+    // =========================================================================
+
+    function saveSetups(setups) {
+        saveToStorage('setups', setups);
+        try {
+            const uid = getUserId();
+            localStorage.setItem(`tempo_recovery_setups_${uid}`, JSON.stringify(setups));
+        } catch (e) {}
+    }
+
+    function getSetups() {
+        const uid = getUserId();
+        let setups = loadFromStorage('setups', []);
+        if (setups.length === 0) {
+            try {
+                const raw = localStorage.getItem(`tempo_recovery_setups_${uid}`);
+                if (raw) setups = JSON.parse(raw);
+            } catch (e) {}
+        }
+        if (setups.length === 0) {
+            const isCompleted = localStorage.getItem(`tempo_recovery_setup_status_${uid}`) === 'completed';
+            const activeTrackers = getActiveTrackers();
+            if (isCompleted && activeTrackers.length > 0) {
+                const initialSetup = {
+                    id: 'setup_default_' + uid,
+                    user_id: uid,
+                    name: 'Initial Setup',
+                    status: 'active',
+                    created_at: activeTrackers[0].created_at || new Date().toISOString(),
+                    archived_at: null,
+                    tracker_ids: activeTrackers.map(t => t.id)
+                };
+                setups.push(initialSetup);
+                saveSetups(setups);
+            }
+        }
+        return setups;
+    }
+
+    function getActiveSetup() {
+        const setups = getSetups();
+        return setups.find(s => s.status === 'active') || null;
+    }
+
+    function archiveCurrentSetup() {
+        const activeTrackers = getActiveTrackers();
+        const setups = getSetups();
+        const todayDateStr = getTodayDateStr();
+
+        let activeSetup = setups.find(s => s.status === 'active');
+        if (!activeSetup) {
+            activeSetup = {
+                id: 'setup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                user_id: getUserId(),
+                name: `Setup (${formatHumanDate(todayDateStr)})`,
+                status: 'active',
+                created_at: new Date().toISOString(),
+                archived_at: null,
+                tracker_ids: activeTrackers.map(t => t.id)
+            };
+            setups.push(activeSetup);
+        }
+
+        activeSetup.status = 'archived';
+        activeSetup.archived_at = new Date().toISOString();
+        activeSetup.trackers_snapshot = activeTrackers.map(t => ({ ...t }));
+        activeSetup.recovery_note = (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.getItems === 'function')
+            ? window.TempoRecoveryNote.getItems()
+            : [];
+
+        // Archive all currently active trackers so they do not appear in the new daily checkin flow
+        const allTrackers = loadFromStorage('trackers', []);
+        allTrackers.forEach(t => {
+            if (activeTrackers.some(act => act.id === t.id)) {
+                t.is_archived = true;
+                t.archived_at = new Date().toISOString();
+                t.updated_at = new Date().toISOString();
+            }
+        });
+        saveToStorage('trackers', allTrackers);
+        saveSetups(setups);
+
+        return activeSetup;
+    }
+
+    function createActiveSetup(name, trackerIds = []) {
+        const setups = getSetups();
+        setups.forEach(s => {
+            if (s.status === 'active') {
+                s.status = 'archived';
+                s.archived_at = new Date().toISOString();
+            }
+        });
+
+        const newSetup = {
+            id: 'setup_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            user_id: getUserId(),
+            name: name || 'Active Setup',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            archived_at: null,
+            tracker_ids: trackerIds
+        };
+        setups.push(newSetup);
+        saveSetups(setups);
+        return newSetup;
+    }
+
+    function updateActiveSetup(data) {
+        const setups = getSetups();
+        let active = setups.find(s => s.status === 'active');
+        if (!active) {
+            active = createActiveSetup('Active Setup', data.tracker_ids || []);
+        } else {
+            if (data.name) active.name = data.name;
+            if (Array.isArray(data.tracker_ids)) active.tracker_ids = data.tracker_ids;
+            if (data.metadata) active.metadata = { ...(active.metadata || {}), ...data.metadata };
+            active.updated_at = new Date().toISOString();
+            saveSetups(setups);
+        }
+        return active;
+    }
+
     function createTracker(data) {
         if (!data || !data.name || !data.name.trim()) {
             throw new Error("Tracker name is required.");
         }
 
         const trackers = loadFromStorage('trackers', []);
+        const todayDateStr = getTodayDateStr();
+        const initialVersion = {
+            version_id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            effective_from: todayDateStr,
+            effective_to: null,
+            check_method: data.check_method || CHECK_METHODS.YES_NO,
+            options: data.options !== undefined ? data.options : null,
+            quantity_unit: data.quantity_unit ? data.quantity_unit.trim() : '',
+            scale_min: data.scale_min !== undefined ? Number(data.scale_min) : 1,
+            scale_max: data.scale_max !== undefined ? Number(data.scale_max) : 5,
+            scale_range: data.scale_range !== undefined ? data.scale_range : null,
+            type_id: data.type_id !== undefined ? data.type_id : null,
+            type_label: data.type_label !== undefined ? data.type_label : null,
+            type_color: data.type_color !== undefined ? data.type_color : null,
+            alert_enabled: data.alert_enabled !== undefined ? Boolean(data.alert_enabled) : false,
+            alert_config: data.alert_config !== undefined ? data.alert_config : null,
+            created_at: new Date().toISOString()
+        };
+
         const newTracker = {
             id: 'trk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             user_id: getUserId(),
@@ -206,6 +382,14 @@
             pattern_notices_enabled: Boolean(data.pattern_notices_enabled),
             linked_note_item_ids: Array.isArray(data.linked_note_item_ids) ? data.linked_note_item_ids : [],
             is_archived: false,
+            type_id: data.type_id !== undefined ? data.type_id : null,
+            type_label: data.type_label !== undefined ? data.type_label : null,
+            type_color: data.type_color !== undefined ? data.type_color : null,
+            options: data.options !== undefined ? data.options : null,
+            scale_range: data.scale_range !== undefined ? data.scale_range : null,
+            alert_enabled: data.alert_enabled !== undefined ? Boolean(data.alert_enabled) : false,
+            alert_config: data.alert_config !== undefined ? data.alert_config : null,
+            config_versions: [initialVersion],
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
@@ -226,6 +410,60 @@
         if (idx === -1) throw new Error("Tracker not found.");
 
         const existing = trackers[idx];
+        const todayDateStr = getTodayDateStr();
+        let configVersions = Array.isArray(existing.config_versions) ? [...existing.config_versions] : [];
+        if (configVersions.length === 0) {
+            configVersions.push({
+                version_id: 'cfg_init_' + existing.id,
+                effective_from: (existing.created_at ? existing.created_at.slice(0, 10) : todayDateStr),
+                effective_to: null,
+                check_method: existing.check_method || CHECK_METHODS.YES_NO,
+                options: existing.options !== undefined ? existing.options : null,
+                quantity_unit: existing.quantity_unit ? existing.quantity_unit : '',
+                scale_min: existing.scale_min !== undefined ? existing.scale_min : 1,
+                scale_max: existing.scale_max !== undefined ? existing.scale_max : 5,
+                scale_range: existing.scale_range !== undefined ? existing.scale_range : null,
+                type_id: existing.type_id !== undefined ? existing.type_id : null,
+                type_label: existing.type_label !== undefined ? existing.type_label : null,
+                type_color: existing.type_color !== undefined ? existing.type_color : null,
+                alert_enabled: existing.alert_enabled !== undefined ? Boolean(existing.alert_enabled) : false,
+                alert_config: existing.alert_config !== undefined ? existing.alert_config : null,
+                created_at: existing.created_at || new Date().toISOString()
+            });
+        }
+
+        const methodChanged = data.check_method && data.check_method !== existing.check_method;
+        const unitChanged = data.quantity_unit !== undefined && data.quantity_unit.trim() !== (existing.quantity_unit || '').trim();
+        const optionsChanged = data.options !== undefined && JSON.stringify(data.options) !== JSON.stringify(existing.options);
+        const scaleChanged = data.scale_range !== undefined && data.scale_range !== existing.scale_range;
+
+        if (methodChanged || unitChanged || optionsChanged || scaleChanged) {
+            // Close previous version effective_to as of todayDateStr
+            const currentActiveIdx = configVersions.findIndex(v => v.effective_to === null);
+            if (currentActiveIdx !== -1) {
+                configVersions[currentActiveIdx].effective_to = todayDateStr;
+            }
+            // Add new active version
+            const newVersion = {
+                version_id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                effective_from: todayDateStr,
+                effective_to: null,
+                check_method: data.check_method || existing.check_method,
+                options: data.options !== undefined ? data.options : existing.options,
+                quantity_unit: data.quantity_unit !== undefined ? data.quantity_unit.trim() : existing.quantity_unit,
+                scale_min: data.scale_min !== undefined ? Number(data.scale_min) : existing.scale_min,
+                scale_max: data.scale_max !== undefined ? Number(data.scale_max) : existing.scale_max,
+                scale_range: data.scale_range !== undefined ? data.scale_range : existing.scale_range,
+                type_id: data.type_id !== undefined ? data.type_id : existing.type_id,
+                type_label: data.type_label !== undefined ? data.type_label : existing.type_label,
+                type_color: data.type_color !== undefined ? data.type_color : existing.type_color,
+                alert_enabled: data.alert_enabled !== undefined ? Boolean(data.alert_enabled) : existing.alert_enabled,
+                alert_config: data.alert_config !== undefined ? data.alert_config : existing.alert_config,
+                created_at: new Date().toISOString()
+            };
+            configVersions.push(newVersion);
+        }
+
         const updated = {
             ...existing,
             name: data.name !== undefined ? data.name.trim() : existing.name,
@@ -240,6 +478,14 @@
             pattern_notices_enabled: data.pattern_notices_enabled !== undefined ? Boolean(data.pattern_notices_enabled) : existing.pattern_notices_enabled,
             linked_note_item_ids: data.linked_note_item_ids !== undefined ? (Array.isArray(data.linked_note_item_ids) ? data.linked_note_item_ids : []) : (existing.linked_note_item_ids || []),
             is_archived: data.is_archived !== undefined ? Boolean(data.is_archived) : existing.is_archived,
+            type_id: data.type_id !== undefined ? data.type_id : existing.type_id,
+            type_label: data.type_label !== undefined ? data.type_label : existing.type_label,
+            type_color: data.type_color !== undefined ? data.type_color : existing.type_color,
+            options: data.options !== undefined ? data.options : existing.options,
+            scale_range: data.scale_range !== undefined ? data.scale_range : existing.scale_range,
+            alert_enabled: data.alert_enabled !== undefined ? Boolean(data.alert_enabled) : existing.alert_enabled,
+            alert_config: data.alert_config !== undefined ? data.alert_config : existing.alert_config,
+            config_versions: configVersions,
             updated_at: new Date().toISOString()
         };
 
@@ -338,16 +584,23 @@
         const allObs = loadFromStorage('observations', []);
         const otherObs = allObs.filter(o => o.checkin_id !== checkinRecord.id);
 
-        const newObsList = (observations || []).map(obs => ({
-            id: obs.id || ('obs_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
-            checkin_id: checkinRecord.id,
-            tracker_id: obs.tracker_id,
-            status: obs.status || 'unanswered', // 'unanswered', 'skipped', 'answered'
-            value: obs.value !== undefined ? obs.value : null,
-            note: obs.note ? obs.note.trim() : '',
-            created_at: obs.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        }));
+        const newObsList = (observations || []).map(obs => {
+            const trk = getTrackerById(obs.tracker_id);
+            const cfg = trk ? getTrackerConfigForDate(trk, checkinRecord.checkin_date) : null;
+            return {
+                id: obs.id || ('obs_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+                checkin_id: checkinRecord.id,
+                tracker_id: obs.tracker_id,
+                status: obs.status || 'unanswered', // 'unanswered', 'skipped', 'answered'
+                value: obs.value !== undefined ? obs.value : null,
+                check_method: obs.check_method || (cfg ? cfg.check_method : (trk ? trk.check_method : 'yes_no')),
+                quantity_unit: obs.quantity_unit !== undefined ? obs.quantity_unit : (cfg ? cfg.quantity_unit : (trk ? trk.quantity_unit : '')),
+                config_version_id: obs.config_version_id || (cfg ? cfg.version_id : null),
+                note: obs.note ? obs.note.trim() : '',
+                created_at: obs.created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+        });
 
         saveToStorage('observations', [...otherObs, ...newObsList]);
 
@@ -380,30 +633,52 @@
     // STREAK & 7-DAY CALENDAR INDICATOR
     // =========================================================================
 
+    /**
+     * Determines if a calendar date has an actual, valid check-in record.
+     * Never counts future dates or dates without check-in records.
+     */
+    function hasValidCheckinForDate(dateStr) {
+        if (!dateStr) return false;
+        const todayStr = getTodayDateStr();
+        if (dateStr > todayStr) return false;
+
+        const checkins = getDailyCheckins();
+        const chk = checkins.find(c => c.checkin_date === dateStr);
+        if (!chk) return false;
+
+        const obs = getObservationsForCheckin(chk.id);
+        const hasAnsweredObs = obs.some(o => o.status === 'answered' && o.value !== null && o.value !== undefined);
+        if (hasAnsweredObs) return true;
+
+        if (chk.overall_note && chk.overall_note.trim().length > 0) return true;
+        if (chk.completed_at && obs.length > 0) return true;
+
+        return false;
+    }
+
     function calculateStreak() {
         const checkins = getDailyCheckins();
         if (!checkins || checkins.length === 0) return 0;
 
-        const checkinDates = new Set(checkins.map(c => c.checkin_date));
         const todayStr = getTodayDateStr();
         const yesterdayStr = shiftDateStr(todayStr, -1);
 
         let streak = 0;
         let startDate = null;
 
-        if (checkinDates.has(todayStr)) {
-            // Checked today -> streak starts today
+        if (hasValidCheckinForDate(todayStr)) {
+            // Checked in today -> streak starts today
             startDate = todayStr;
-        } else if (checkinDates.has(yesterdayStr)) {
-            // Not checked today yet, but checked yesterday -> streak intact until day ends!
+        } else if (hasValidCheckinForDate(yesterdayStr)) {
+            // Not checked today yet, but checked yesterday -> streak remains intact until today ends!
             startDate = yesterdayStr;
         } else {
-            // Missed yesterday and today
+            // Missed yesterday and today -> streak is broken
             return 0;
         }
 
         let currDate = startDate;
-        while (checkinDates.has(currDate)) {
+        while (hasValidCheckinForDate(currDate)) {
             streak++;
             currDate = shiftDateStr(currDate, -1);
         }
@@ -413,9 +688,6 @@
 
     function get7DayHistory() {
         const todayStr = getTodayDateStr();
-        const checkins = getDailyCheckins();
-        const checkinDates = new Set(checkins.map(c => c.checkin_date));
-
         const history = [];
         // Past 6 days + today = 7 days
         for (let i = 6; i >= 0; i--) {
@@ -423,7 +695,7 @@
             const [y, m, d] = dateStr.split('-').map(Number);
             const dt = new Date(y, m - 1, d);
             const dayLabel = dt.toLocaleDateString('en-US', { weekday: 'narrow' }) || 'D';
-            const isChecked = checkinDates.has(dateStr);
+            const isChecked = hasValidCheckinForDate(dateStr);
             const isToday = (dateStr === todayStr);
 
             let status = 'empty';
@@ -501,6 +773,12 @@
         } else if (window.TempoMode && typeof window.TempoMode.getMode === 'function') {
             if (window.TempoMode.getMode() === 'recovery') {
                 window.TempoMode.renderRmodeHome();
+            }
+        }
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
+            const scScreen = document.getElementById('screen-stress-check');
+            if (scScreen && !scScreen.classList.contains('hidden')) {
+                window.TempoSelfCheckWorkspace.render();
             }
         }
     }
@@ -702,39 +980,46 @@
                 </div>
             </div>
 
-            <!-- MODAL 3: DAILY SELF-CHECK FORM -->
-            <div id="modal-selfcheck-daily" class="fixed inset-0 z-[70] flex items-center justify-center modal-backdrop p-4 hidden" style="z-index: 70;" role="dialog" aria-modal="true">
-                <div class="tempo-card max-w-xl w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF] max-h-[92vh] overflow-y-auto">
-                    <button type="button" onclick="window.TempoRecoverySelfCheck.closeDailyCheckin()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
+            <!-- MODAL 3: DAILY SELF-CHECK / EDIT TRACKING FORM -->
+            <div id="modal-selfcheck-daily" 
+                 class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" 
+                 role="dialog" 
+                 aria-modal="true"
+                 onclick="if (event.target === this) window.TempoRecoverySelfCheck.closeDailyCheckin()">
+                <div class="tempo-card max-w-xl w-full p-6 sm:p-8 space-y-6 rounded-3xl shadow-2xl relative border border-[#EAE4DF]/80 max-h-[92vh] overflow-y-auto"
+                     style="background-color: #FEFAF4;">
+                    <button type="button" onclick="window.TempoRecoverySelfCheck.closeDailyCheckin()" 
+                            class="absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center text-[#8C8681] hover:text-[#37352F] hover:bg-stone-200/50 text-base transition cursor-pointer" 
+                            title="Close">✕</button>
 
                     <div class="space-y-1">
                         <div class="flex items-center space-x-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
-                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">SELF-CHECK</span>
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#4A6B5D] inline-block"></span>
+                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4A6B5D]">YOUR DAILY CHECK-IN</span>
                         </div>
-                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">How have things been today?</h3>
-                        <p class="text-xs text-[#6F6B68]">Check in with whatever feels useful. You don't have to answer everything.</p>
+                        <h3 id="selfcheck-daily-modal-title" class="font-heading text-2xl font-extrabold text-[#37352F] tracking-tight">How have things been today?</h3>
+                        <p id="selfcheck-daily-modal-subtitle" class="text-xs text-[#7B7672]">Check in with whatever feels useful. You don't have to answer everything.</p>
                     </div>
 
                     <!-- Daily Trackers List -->
                     <div id="selfcheck-daily-trackers-container" class="space-y-4"></div>
 
                     <!-- Overall Daily Note -->
-                    <div class="space-y-2 pt-2 border-t border-stone-100">
-                        <label for="selfcheck-overall-note" class="block text-xs font-bold text-[#202124]">
+                    <div class="space-y-2 pt-2 border-t border-stone-200/80">
+                        <label for="selfcheck-overall-note" class="block text-xs font-bold text-[#37352F]">
                             Anything else you want to remember about today? <span class="text-stone-400 font-normal">(Optional)</span>
                         </label>
                         <textarea id="selfcheck-overall-note" rows="2" placeholder="Add an optional note about today..."
-                                  class="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-[#166545] text-xs text-[#202124] resize-none"></textarea>
+                                  class="w-full px-4 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-[#4A6B5D] text-xs text-[#37352F] bg-white resize-none shadow-2xs"></textarea>
                     </div>
 
                     <!-- Finish CTA -->
-                    <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
-                        <button type="button" onclick="window.TempoRecoverySelfCheck.closeDailyCheckin()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
+                    <div class="pt-4 border-t border-stone-200/80 flex items-center justify-between">
+                        <button type="button" onclick="window.TempoRecoverySelfCheck.closeDailyCheckin()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#37352F] hover:bg-stone-200/50 transition cursor-pointer">
                             Close
                         </button>
                         <button type="button" id="btn-selfcheck-finish" onclick="window.TempoRecoverySelfCheck.finishDailyCheckin()"
-                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#166545] hover:bg-[#115237] text-white shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
+                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#7B9688] hover:bg-[#6D8475] text-white shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
                             <span id="btn-selfcheck-finish-text">Finish check-in</span>
                             <span>→</span>
                         </button>
@@ -743,7 +1028,11 @@
             </div>
 
             <!-- MODAL 4: VIEW TODAY'S CHECK-IN -->
-            <div id="modal-selfcheck-view" class="fixed inset-0 z-[70] flex items-center justify-center modal-backdrop p-4 hidden" style="z-index: 70;" role="dialog" aria-modal="true">
+            <div id="modal-selfcheck-view" 
+                 class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" 
+                 role="dialog" 
+                 aria-modal="true"
+                 onclick="if (event.target === this) window.TempoRecoverySelfCheck.closeViewToday()">
                 <div class="tempo-card max-w-lg w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF] max-h-[90vh] overflow-y-auto">
                     <button type="button" onclick="window.TempoRecoverySelfCheck.closeViewToday()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
 
@@ -770,7 +1059,7 @@
 
                     <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
                         <button type="button" onclick="window.TempoRecoverySelfCheck.openDailyCheckin(true)"
-                                class="text-xs font-bold text-[#166545] hover:text-[#0E4A32] transition cursor-pointer">
+                                class="text-xs font-bold text-[#4A6B5D] hover:text-[#3B5441] transition cursor-pointer">
                             Edit check-in
                         </button>
                         <button type="button" onclick="window.TempoRecoverySelfCheck.closeViewToday()"
@@ -913,6 +1202,10 @@
     // =========================================================================
 
     function openTrackerModal(trackerId = null, prefill = null) {
+        if (trackerId && window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAdjustTracker === 'function') {
+            window.TempoSelfCheckWorkspace.openAdjustTracker(trackerId);
+            return;
+        }
         ensureModalsMounted();
         const modal = document.getElementById('modal-selfcheck-tracker-edit');
         const form = document.getElementById('form-selfcheck-tracker');
@@ -1156,6 +1449,10 @@
             return;
         }
 
+        // Cleanly close View Today modal so it does not sit behind or cover the daily checkin modal
+        closeViewToday();
+        closeManage();
+
         const todayCheckin = getTodayCheckin();
         const existingObs = todayCheckin ? getObservationsForCheckin(todayCheckin.id) : [];
         const existingObsMap = new Map(existingObs.map(o => [o.tracker_id, o]));
@@ -1205,6 +1502,7 @@
         const modal = document.getElementById('modal-selfcheck-daily');
         if (modal) modal.classList.add('hidden');
         document.body.classList.remove('overflow-hidden');
+        activeDailyDraft = null;
     }
 
     function renderDailyForm() {
@@ -1212,6 +1510,17 @@
         const container = document.getElementById('selfcheck-daily-trackers-container');
         const overallInput = document.getElementById('selfcheck-overall-note');
         if (!container) return;
+
+        const titleEl = document.getElementById('selfcheck-daily-modal-title');
+        const subtitleEl = document.getElementById('selfcheck-daily-modal-subtitle');
+        if (titleEl) {
+            titleEl.textContent = activeDailyDraft.isEditMode ? "Edit today's check-in" : "How have things been today?";
+        }
+        if (subtitleEl) {
+            subtitleEl.textContent = activeDailyDraft.isEditMode 
+                ? "Update your entries for today. Changes will be saved to your tracking history."
+                : "Check in with whatever feels useful. You don't have to answer everything.";
+        }
 
         if (overallInput) {
             overallInput.value = activeDailyDraft.overallNote || '';
@@ -1231,7 +1540,7 @@
 
             html += `
                 <div class="space-y-3">
-                    <div class="flex items-center space-x-1.5 text-xs font-bold text-[#202124]">
+                    <div class="flex items-center space-x-1.5 text-xs font-bold text-[#484541] uppercase tracking-wide">
                         <span>${g.meta.icon}</span>
                         <span>${escapeHTML(g.meta.pluralLabel)}</span>
                     </div>
@@ -1251,33 +1560,42 @@
         const val = obsState.value;
         const note = obsState.note || '';
         const noteExpanded = obsState.noteExpanded || Boolean(note);
+        const dotColor = tracker.type_color || (tracker.category === 'stress_sign' ? '#D48366' : (tracker.category === 'supportive' ? '#166545' : '#1E40AF'));
 
         let controlsHtml = '';
 
-        if (tracker.check_method === CHECK_METHODS.YES_NO) {
-            const isYes = status === 'answered' && val === true;
-            const isNo = status === 'answered' && val === false;
+        if (tracker.check_method === CHECK_METHODS.YES_NO || tracker.check_method === 'options') {
+            let opts = tracker.options;
+            if (!opts || !Array.isArray(opts) || opts.length === 0) {
+                opts = tracker.check_method === 'options' ? ['Good', 'Not good'] : ['Yes', 'No'];
+            }
             const isSkip = status === 'skipped';
+            const optButtons = opts.map(opt => {
+                const isSelected = status === 'answered' && (
+                    val === opt || 
+                    (opt === 'Yes' && (val === true || val === 'yes' || val === 'Yes')) || 
+                    (opt === 'No' && (val === false || val === 'no' || val === 'No'))
+                );
+                return `
+                    <button type="button" onclick="window.TempoRecoverySelfCheck.setDailyOption('${tracker.id}', '${escapeHTML(opt)}')"
+                            class="px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border ${isSelected ? 'bg-[#7B9688] text-white border-[#7B9688] shadow-2xs' : 'bg-white text-[#37352F] border-stone-300/80 hover:border-[#7B9688] hover:bg-[#F4F7F5] shadow-2xs'}">
+                        ${escapeHTML(opt)}
+                    </button>
+                `;
+            }).join('');
 
             controlsHtml = `
-                <div class="flex items-center space-x-2">
-                    <button type="button" onclick="window.TempoRecoverySelfCheck.setDailyYesNo('${tracker.id}', true)"
-                            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${isYes ? 'bg-[#EDF7F1] text-[#166545] border-[#166545]' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-300'}">
-                        Yes
-                    </button>
-                    <button type="button" onclick="window.TempoRecoverySelfCheck.setDailyYesNo('${tracker.id}', false)"
-                            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border ${isNo ? 'bg-[#EDF7F1] text-[#166545] border-[#166545]' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-300'}">
-                        No
-                    </button>
+                <div class="flex items-center flex-wrap gap-2">
+                    ${optButtons}
                     <button type="button" onclick="window.TempoRecoverySelfCheck.setDailySkip('${tracker.id}')"
-                            class="px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
+                            class="px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
                         Skip
                     </button>
                 </div>
             `;
         } else if (tracker.check_method === CHECK_METHODS.SCALE) {
             const min = tracker.scale_min || 1;
-            const max = tracker.scale_max || 5;
+            const max = tracker.scale_max || (tracker.scale_range === '1-10' ? 10 : 5);
             const isSkip = status === 'skipped';
 
             const buttons = [];
@@ -1285,7 +1603,7 @@
                 const isSelected = status === 'answered' && Number(val) === i;
                 buttons.push(`
                     <button type="button" onclick="window.TempoRecoverySelfCheck.setDailyScale('${tracker.id}', ${i})"
-                            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs font-bold transition cursor-pointer border flex items-center justify-center ${isSelected ? 'bg-[#166545] text-white border-[#166545] shadow-xs' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-300'}">
+                            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-xs font-bold transition cursor-pointer border flex items-center justify-center shadow-2xs ${isSelected ? 'bg-[#7B9688] text-white border-[#7B9688]' : 'bg-white text-[#37352F] border-stone-300/80 hover:border-[#7B9688] hover:bg-[#F4F7F5]'}">
                         ${i}
                     </button>
                 `);
@@ -1293,14 +1611,14 @@
 
             controlsHtml = `
                 <div class="space-y-1.5">
-                    <div class="flex items-center space-x-2">
-                        <div class="flex items-center space-x-1.5">${buttons.join('')}</div>
+                    <div class="flex items-center flex-wrap gap-1.5">
+                        <div class="flex items-center space-x-1.5 overflow-x-auto pb-0.5">${buttons.join('')}</div>
                         <button type="button" onclick="window.TempoRecoverySelfCheck.setDailySkip('${tracker.id}')"
-                                class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
+                                class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
                             Skip
                         </button>
                     </div>
-                    <div class="flex justify-between text-[10px] text-stone-400 max-w-[200px] px-1">
+                    <div class="flex justify-between text-[10px] text-stone-400 max-w-[200px] px-1 font-medium">
                         <span>${escapeHTML(tracker.scale_min_label || 'Min')}</span>
                         <span>${escapeHTML(tracker.scale_max_label || 'Max')}</span>
                     </div>
@@ -1314,31 +1632,31 @@
             controlsHtml = `
                 <div class="space-y-1.5">
                     <div class="flex items-center space-x-3">
-                        <input type="range" min="0" max="100" step="5" value="${isAnswered ? val : 50}"
+                        <input type="range" min="0" max="100" step="1" value="${isAnswered ? val : 50}"
                                oninput="window.TempoRecoverySelfCheck.setDailyPercentage('${tracker.id}', this.value)"
-                               class="w-40 sm:w-48 accent-[#166545] cursor-pointer">
-                        <span class="text-xs font-bold text-[#202124] w-12 text-center py-1 px-1.5 rounded bg-stone-100">${displayVal}</span>
+                               class="w-40 sm:w-48 accent-[#4A6B5D] cursor-pointer">
+                        <span class="text-xs font-extrabold text-[#37352F] w-12 text-center py-1 px-1.5 rounded-lg bg-stone-100 border border-stone-200/80">${displayVal}</span>
                         <button type="button" onclick="window.TempoRecoverySelfCheck.setDailySkip('${tracker.id}')"
-                                class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
+                                class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
                             Skip
                         </button>
                     </div>
-                    ${!isAnswered && !isSkip ? '<p class="text-[10px] text-stone-400 italic">Drag slider to set percentage</p>' : ''}
+                    ${!isAnswered && !isSkip ? '<p class="text-[10px] text-stone-400 italic font-medium">Drag slider to set percentage</p>' : ''}
                 </div>
             `;
         } else if (tracker.check_method === CHECK_METHODS.QUANTITY) {
             const isSkip = status === 'skipped';
             const isAnswered = status === 'answered' && val !== null;
-            const unit = tracker.quantity_unit || 'units';
+            const unit = tracker.quantity_unit || 'min';
 
             controlsHtml = `
-                <div class="flex items-center space-x-2">
-                    <input type="number" min="0" step="any" placeholder="—" value="${isAnswered ? val : ''}"
+                <div class="flex items-center flex-wrap gap-2">
+                    <input type="number" min="0" step="any" placeholder="Enter quantity" value="${isAnswered ? val : ''}"
                            oninput="window.TempoRecoverySelfCheck.setDailyQuantity('${tracker.id}', this.value)"
-                           class="w-20 px-3 py-1.5 rounded-xl border border-stone-200 focus:outline-none focus:border-[#166545] text-xs font-bold text-[#202124]">
-                    <span class="text-xs text-stone-600 font-medium">${escapeHTML(unit)}</span>
+                           class="w-32 px-3 py-1.5 rounded-xl border border-stone-300 focus:outline-none focus:border-[#4A6B5D] text-xs font-semibold text-[#37352F] bg-white shadow-2xs">
+                    <span class="text-xs font-bold text-[#5B5550]">${escapeHTML(unit)}</span>
                     <button type="button" onclick="window.TempoRecoverySelfCheck.setDailySkip('${tracker.id}')"
-                            class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
+                            class="px-2.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${isSkip ? 'bg-stone-200 text-stone-800 border-stone-400 font-bold' : 'bg-transparent text-stone-400 hover:text-stone-700 border-transparent'}">
                         Skip
                     </button>
                 </div>
@@ -1349,26 +1667,29 @@
         let noteHtml = '';
         if (noteExpanded) {
             noteHtml = `
-                <div class="pt-2">
+                <div class="pt-1.5">
                     <input type="text" placeholder="Add a note for this..." value="${escapeHTML(note)}"
                            oninput="window.TempoRecoverySelfCheck.setDailyNote('${tracker.id}', this.value)"
-                           class="w-full px-3 py-1.5 rounded-lg border border-stone-200 focus:outline-none focus:border-[#166545] text-xs text-[#202124]">
+                           class="w-full px-3 py-1.5 rounded-xl border border-stone-300 focus:outline-none focus:border-[#4A6B5D] text-xs text-[#37352F] bg-white shadow-2xs">
                 </div>
             `;
         } else {
             noteHtml = `
                 <button type="button" onclick="window.TempoRecoverySelfCheck.toggleDailyNoteExpanded('${tracker.id}')"
-                        class="text-[11px] font-semibold text-stone-400 hover:text-[#166545] transition cursor-pointer">
+                        class="text-[11px] font-semibold text-stone-500 hover:text-[#4A6B5D] transition cursor-pointer">
                     + Add a note
                 </button>
             `;
         }
 
         return `
-            <div class="p-4 rounded-2xl border border-stone-200 bg-white space-y-3 shadow-2xs">
+            <div class="p-4 rounded-2xl border border-stone-200/80 bg-white space-y-3 shadow-2xs">
                 <div class="flex items-center justify-between">
-                    <span class="text-xs sm:text-sm font-bold text-[#202124]">${escapeHTML(tracker.name)}</span>
-                    ${status === 'answered' ? '<span class="text-[10px] font-bold text-[#166545] bg-[#EDF7F1] px-2 py-0.5 rounded-full border border-[#CDE9DA]">Answered</span>' : (status === 'skipped' ? '<span class="text-[10px] font-medium text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">Skipped</span>' : '<span class="text-[10px] text-stone-400">Unanswered</span>')}
+                    <div class="flex items-center space-x-2 text-sm font-bold text-[#37352F] truncate min-w-0">
+                        <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
+                        <span class="truncate">${escapeHTML(tracker.name)}</span>
+                    </div>
+                    ${status === 'answered' ? '<span class="text-[10px] font-bold text-[#166545] bg-[#EDF7F1] px-2.5 py-0.5 rounded-full border border-[#CDE9DA]">Answered</span>' : (status === 'skipped' ? '<span class="text-[10px] font-semibold text-[#8C8681] bg-stone-100 px-2.5 py-0.5 rounded-full">Skipped</span>' : '<span class="text-[10px] font-medium text-stone-400">Unanswered</span>')}
                 </div>
                 ${controlsHtml}
                 ${noteHtml}
@@ -1449,6 +1770,23 @@
         activeDailyDraft.observations[trackerId].note = text;
     }
 
+    function setDailyOption(trackerId, optionVal) {
+        if (!activeDailyDraft || !activeDailyDraft.observations[trackerId]) return;
+        const obs = activeDailyDraft.observations[trackerId];
+        const trk = getTrackerById(trackerId);
+        const isBool = trk && trk.check_method === CHECK_METHODS.YES_NO;
+        const targetVal = isBool ? (optionVal === 'Yes' || optionVal === true) : optionVal;
+
+        if (obs.status === 'answered' && (obs.value === targetVal || (isBool && Boolean(obs.value) === Boolean(targetVal)))) {
+            obs.status = 'unanswered';
+            obs.value = null;
+        } else {
+            obs.status = 'answered';
+            obs.value = targetVal;
+        }
+        renderDailyForm();
+    }
+
     function updateDailyFinishButton() {
         if (!activeDailyDraft) return;
         const btnTextEl = document.getElementById('btn-selfcheck-finish-text');
@@ -1457,11 +1795,12 @@
         const activeTrackers = getActiveTrackers();
         const obsList = Object.values(activeDailyDraft.observations);
         const answeredCount = obsList.filter(o => o.status === 'answered').length;
+        const actionWord = activeDailyDraft.isEditMode ? "Save changes" : "Finish check-in";
 
         if (answeredCount > 0) {
-            btnTextEl.textContent = `Finish check-in · ${answeredCount} of ${activeTrackers.length} answered`;
+            btnTextEl.textContent = `${actionWord} · ${answeredCount} of ${activeTrackers.length} answered`;
         } else {
-            btnTextEl.textContent = `Finish check-in`;
+            btnTextEl.textContent = actionWord;
         }
     }
 
@@ -1484,6 +1823,11 @@
             }
             if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.onDailyCheckinFinished === 'function') {
                 window.TempoRecoverySetup.onDailyCheckinFinished();
+            }
+
+            if (window.TempoAlertSystem && typeof window.TempoAlertSystem.evaluateAnsweredTrackers === 'function') {
+                const answeredTrackerIds = observationsToSave.filter(o => o.status === 'answered').map(o => o.tracker_id);
+                window.TempoAlertSystem.evaluateAnsweredTrackers(answeredTrackerIds);
             }
         } catch (e) {
             console.error("Failed to save check-in:", e);
@@ -1545,6 +1889,8 @@
                     valueDisplay = `<span class="font-bold text-[#166545]">${obs.value}%</span>`;
                 } else if (t.check_method === 'quantity') {
                     valueDisplay = `<span class="font-bold text-[#166545]">${obs.value} ${escapeHTML(t.quantity_unit || '')}</span>`;
+                } else {
+                    valueDisplay = `<span class="font-bold text-[#166545]">${escapeHTML(String(obs.value))}</span>`;
                 }
             } else if (status === 'skipped') {
                 valueDisplay = `<span class="text-stone-400 italic">Skipped today</span>`;
@@ -1650,7 +1996,11 @@
         getTodayCheckin,
         getObservationsForCheckin,
         saveTodayCheckin,
+        // Dates
+        getTodayDateStr,
+        shiftDateStr,
         // Streak & History
+        hasValidCheckinForDate,
         calculateStreak,
         get7DayHistory,
         // Recovery Home State Provider
@@ -1669,9 +2019,17 @@
         handleTrackerFormSubmit,
         handleArchiveTracker,
         useSuggestion,
+        // Setup Management & Configuration Versions
+        getSetups,
+        getActiveSetup,
+        archiveCurrentSetup,
+        createActiveSetup,
+        updateActiveSetup,
+        getTrackerConfigForDate,
         openDailyCheckin,
         closeDailyCheckin,
         setDailyYesNo,
+        setDailyOption,
         setDailyScale,
         setDailyPercentage,
         setDailyQuantity,

@@ -9,12 +9,18 @@
 window.TempoPlanWorkspace = (function() {
     let selectedTaskId = null;
     let isEditingDeadline = false;
-    let activeModal = null; // null | 'add-task' | 'fit-task-prompt' | 'adjust-availability' | 'reschedule'
+    let showAddSubtaskInput = false;
+    let activeModal = null; // null | 'add-task' | 'fit-task-prompt' | 'adjust-availability' | 'reschedule' | 'deadline-plan-reorder-confirm' | 'edit-task-note'
     let pendingAddedTask = null;
     let rescheduleTaskId = null;
     let rescheduleSelectedWindow = null;
     let rescheduleShowAddTime = false;
     let adjustAvailShowAdd = false;
+    let pendingClearTaskId = null;
+    let isActionProcessing = false;
+    let activeLabelMenuTaskId = null;
+    let pendingDeadlineEdit = null;
+    let pendingNoteTaskId = null;
 
     // Helper: Escape HTML
     function escapeHTML(str) {
@@ -52,6 +58,34 @@ window.TempoPlanWorkspace = (function() {
         return `${h}:${m} ${ampm}`;
     }
 
+    // Helper: Parse HH:MM to minutes
+    function parseTimeToMinutes(str) {
+        if (!str || typeof str !== 'string') return 0;
+        const parts = str.split(':');
+        return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+    }
+
+    // Helper: Format minutes to HH:MM (24-hour)
+    function formatMinutesToTimeString(min) {
+        const h = Math.floor(min / 60);
+        const m = min % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // Helper: Format Month Day (e.g. Oct 17)
+    function formatMonthDay(dateStr) {
+        if (!dateStr) return '';
+        try {
+            const clean = dateStr.split('T')[0];
+            const parts = clean.split('-');
+            if (parts.length === 3) {
+                const date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        } catch(e) {}
+        return dateStr;
+    }
+
     // Helper: Human deadline
     function formatDeadline(dateStr, timeStr) {
         if (window.TempoI18n && typeof window.TempoI18n.formatDeadline === 'function') {
@@ -81,28 +115,311 @@ window.TempoPlanWorkspace = (function() {
         return new Date().toISOString().split('T')[0];
     }
 
-    // Load active plan from TempoPlanStore or TempoEmergencyFlow
+        // Reference plan generator matching the UI specification
+    function getDefaultReferencePlan() {
+        const todayStr = getTodayISO();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const defaultPlan = {
+            id: 'plan_tempo_working_default',
+            planId: 'plan_tempo_working_default',
+            planType: 'emergency',
+            title: 'Tempo Working Plan',
+            plannedTasks: [
+                {
+                    dayDate: todayStr,
+                    dayLabel: 'Today, Month day',
+                    startTime: '3:00 PM',
+                    endTime: '5:30 PM',
+                    executionBadge: 'Now',
+                    task: {
+                        id: 'task-marketing-research',
+                        name: 'Marketing Research',
+                        hasDeadline: true,
+                        deadlineDate: '2026-10-17',
+                        deadlineTime: '21:00',
+                        deadline: '2026-10-17 21:00',
+                        durationMinutes: 150,
+                        durationLabel: '2h 30m',
+                        completed: false,
+                        isInProgress: true,
+                        description: 'Create a sheet to manage references',
+                        subtasks: [
+                            { id: 'sub-1', title: 'Subtask 1: Outline', completed: false, durationMinutes: 30 },
+                            { id: 'sub-2', title: 'Subtask 2: Literature Review', completed: false, durationMinutes: 45 },
+                            { id: 'sub-3', title: 'Subtask 3: Research Gap', completed: false, durationMinutes: 30 },
+                            { id: 'sub-4', title: 'Subtask 4: Methodology', completed: false, durationMinutes: 20 },
+                            { id: 'sub-5', title: 'Subtask 5: Data Analysis', completed: false, durationMinutes: 15 },
+                            { id: 'sub-6', title: 'Subtask 6: Summary Report', completed: false, durationMinutes: 10 }
+                        ]
+                    }
+                },
+                {
+                    dayDate: todayStr,
+                    dayLabel: 'Today, Month day',
+                    startTime: '3:00 PM',
+                    endTime: '5:30 PM',
+                    executionBadge: 'Later',
+                    task: {
+                        id: 'task-event-proposal',
+                        name: 'Event Proposal',
+                        hasDeadline: true,
+                        deadlineDate: '2026-10-18',
+                        deadlineTime: '22:00',
+                        deadline: '2026-10-18 22:00',
+                        durationMinutes: 150,
+                        durationLabel: '2h 30m',
+                        completed: false,
+                        isInProgress: false,
+                        description: 'Coordinate with design team for event collateral',
+                        subtasks: [
+                            { id: 'sub-ep-1', title: 'Subtask 1: Budget Draft', completed: false, durationMinutes: 45 },
+                            { id: 'sub-ep-2', title: 'Subtask 2: Venue Options', completed: false, durationMinutes: 60 },
+                            { id: 'sub-ep-3', title: 'Subtask 3: Guest List', completed: false, durationMinutes: 45 }
+                        ]
+                    }
+                },
+                {
+                    dayDate: tomorrowStr,
+                    dayLabel: 'Month Day',
+                    startTime: '9:00 AM',
+                    endTime: '11:30 AM',
+                    executionBadge: 'Later',
+                    task: {
+                        id: 'task-edit-video',
+                        name: 'Edit Video',
+                        hasDeadline: true,
+                        deadlineDate: '2026-10-20',
+                        deadlineTime: '22:00',
+                        deadline: '2026-10-20 22:00',
+                        durationMinutes: 150,
+                        durationLabel: '2h 30m',
+                        completed: false,
+                        isInProgress: false,
+                        description: 'Export in 1080p format for social channels',
+                        subtasks: []
+                    }
+                }
+            ],
+            unarrangedTasks: [
+                {
+                    id: 'task-client-sync',
+                    name: 'Client Follow-up',
+                    hasDeadline: false,
+                    durationMinutes: 60,
+                    durationLabel: '1h',
+                    completed: false,
+                    subtasks: []
+                },
+                {
+                    id: 'task-deck-review',
+                    name: 'Review Pitch Deck',
+                    hasDeadline: false,
+                    durationMinutes: 45,
+                    durationLabel: '45m',
+                    completed: false,
+                    subtasks: []
+                },
+                {
+                    id: 'task-team-catchup',
+                    name: 'Team Sync & Retrospective',
+                    hasDeadline: false,
+                    durationMinutes: 30,
+                    durationLabel: '30m',
+                    completed: false,
+                    subtasks: []
+                }
+            ],
+            tasks: []
+        };
+        defaultPlan.tasks = [
+            ...defaultPlan.plannedTasks.map(pt => pt.task),
+            ...defaultPlan.unarrangedTasks
+        ];
+        return defaultPlan;
+    }
+
+    // Load active plan from TempoPlanStore, TempoEmergencyFlow, or local storage
     function getActivePlan() {
         let plan = null;
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
             plan = window.TempoEmergencyFlow.getConfirmedPlan();
         }
         if (!plan && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
-            plan = window.TempoPlanStore.getActivePlan('emergency');
+            plan = window.TempoPlanStore.getActivePlan('emergency') || window.TempoPlanStore.getActivePlan('recovery') || window.TempoPlanStore.getActivePlan('default');
+        }
+        if (!plan) {
+            try {
+                const saved = localStorage.getItem('tempo_working_plan') || localStorage.getItem('tempo_store_active_emergency_guest');
+                if (saved) plan = JSON.parse(saved);
+            } catch(e) {}
         }
         if (plan) {
             if (!Array.isArray(plan.plannedTasks)) plan.plannedTasks = [];
             if (!Array.isArray(plan.unarrangedTasks)) plan.unarrangedTasks = [];
             if (!Array.isArray(plan.tasks)) plan.tasks = [];
         }
+        if (!plan || (plan.plannedTasks.length === 0 && plan.unarrangedTasks.length === 0 && plan.tasks.length === 0)) {
+            plan = getDefaultReferencePlan();
+        }
         return plan;
     }
 
-    // Save active plan to TempoPlanStore
+    // Save active plan to TempoPlanStore & localStorage
     function persistPlan(plan) {
         if (!plan) return;
         if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
             window.TempoPlanStore.saveActivePlan('emergency', plan);
+            window.TempoPlanStore.saveActivePlan('recovery', plan);
+        }
+        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+            window.TempoEmergencyFlow.setConfirmedPlan(plan);
+        }
+        try {
+            localStorage.setItem('tempo_working_plan', JSON.stringify(plan));
+        } catch(e) {}
+        if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+            window.TempoMode.renderActiveModeHome();
+        }
+    }
+
+    /**
+     * AI Planner: Reorganize and fit tasks into schedule based on priorities and deadlines
+     */
+    function reorganizePlanWithPlanner(plan) {
+        if (!plan || !Array.isArray(plan.plannedTasks)) return;
+
+        // Separate completed vs active planned tasks
+        const completedItems = plan.plannedTasks.filter(item => item.task && item.task.completed);
+        const activeItems = plan.plannedTasks.filter(item => !item.task || !item.task.completed);
+
+        // Sort active tasks:
+        // 1. Now tasks (rank 1) before Later tasks (rank 3)
+        // 2. Within same rank: sort by deadline urgency (earlier deadline first)
+        activeItems.sort((aItem, bItem) => {
+            const a = aItem.task || {};
+            const b = bItem.task || {};
+            const isNowA = a.userLabel === 'Now' || a.priorityCategory === 'DO_FIRST';
+            const isNowB = b.userLabel === 'Now' || b.priorityCategory === 'DO_FIRST';
+            const isLaterA = a.userLabel === 'Later' || a.priorityCategory === 'LATER';
+            const isLaterB = b.userLabel === 'Later' || b.priorityCategory === 'LATER';
+            const rankA = isNowA ? 1 : (isLaterA ? 3 : 2);
+            const rankB = isNowB ? 1 : (isLaterB ? 3 : 2);
+
+            if (rankA !== rankB) return rankA - rankB;
+
+            const hasDeadA = !!(a.hasDeadline && a.deadlineDate);
+            const hasDeadB = !!(b.hasDeadline && b.deadlineDate);
+            if (hasDeadA && hasDeadB) {
+                const cmp = (a.deadlineDate + (a.deadlineTime || '23:59')).localeCompare(b.deadlineDate + (b.deadlineTime || '23:59'));
+                if (cmp !== 0) return cmp;
+            } else if (hasDeadA && !hasDeadB) {
+                return -1;
+            } else if (!hasDeadA && hasDeadB) {
+                return 1;
+            }
+            return 0;
+        });
+
+        // Sequential slot allocation based on available days
+        let availabilityDays = null;
+        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getAvailabilityDays === 'function') {
+            availabilityDays = window.TempoEmergencyFlow.getAvailabilityDays();
+        }
+        const activeDays = (availabilityDays || []).filter(d => !d.isUnavailable && d.blocks && d.blocks.length > 0);
+
+        if (activeDays.length > 0) {
+            const slots = [];
+            activeDays.forEach(day => {
+                const intervals = (day.blocks || [])
+                    .map(b => ({
+                        start: parseTimeToMinutes(b.start),
+                        end: parseTimeToMinutes(b.end)
+                    }))
+                    .filter(intv => intv.end > intv.start)
+                    .sort((x, y) => x.start - y.start);
+
+                const merged = [];
+                let curr = intervals[0] ? { ...intervals[0] } : null;
+                for (let i = 1; i < intervals.length; i++) {
+                    const next = intervals[i];
+                    if (next.start < curr.end) {
+                        curr.end = Math.max(curr.end, next.end);
+                    } else {
+                        merged.push(curr);
+                        curr = { ...next };
+                    }
+                }
+                if (curr) merged.push(curr);
+
+                merged.forEach(slot => {
+                    slots.push({
+                        dayDate: day.date,
+                        dayLabel: day.label,
+                        startMin: slot.start,
+                        endMin: slot.end,
+                        remainingMin: slot.end - slot.start
+                    });
+                });
+            });
+
+            let currentSlotIdx = 0;
+            activeItems.forEach((item, idx) => {
+                const task = item.task || {};
+                const neededMin = task.durationMinutes || 60;
+                let allocated = false;
+
+                while (currentSlotIdx < slots.length) {
+                    const slot = slots[currentSlotIdx];
+                    if (slot.remainingMin >= 15) {
+                        const startMinutes = slot.endMin - slot.remainingMin;
+                        const durationToUse = Math.min(neededMin, slot.remainingMin);
+                        const endMinutes = startMinutes + durationToUse;
+                        slot.remainingMin -= durationToUse;
+
+                        item.dayDate = slot.dayDate;
+                        item.dayLabel = slot.dayLabel;
+                        item.startMin = startMinutes;
+                        item.endMin = endMinutes;
+                        item.startTime = formatMinutesToTimeString(startMinutes);
+                        item.endTime = formatMinutesToTimeString(endMinutes);
+                        item.isOverCapacity = false;
+                        item.executionBadge = (idx === 0 || task.userLabel === 'Now') ? 'Now' : 'Later';
+
+                        allocated = true;
+                        if (slot.remainingMin < 15) currentSlotIdx++;
+                        break;
+                    } else {
+                        currentSlotIdx++;
+                    }
+                }
+
+                if (!allocated) {
+                    const fallbackDay = activeDays[activeDays.length - 1] || activeDays[0];
+                    item.dayDate = fallbackDay ? fallbackDay.date : item.dayDate;
+                    item.dayLabel = fallbackDay ? fallbackDay.label : item.dayLabel;
+                    item.executionBadge = task.userLabel === 'Now' ? 'Now' : 'Later';
+                }
+            });
+        } else {
+            activeItems.forEach((item, idx) => {
+                const task = item.task || {};
+                item.executionBadge = (idx === 0 || task.userLabel === 'Now') ? 'Now' : 'Later';
+            });
+        }
+
+        plan.plannedTasks = [...activeItems, ...completedItems];
+
+        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+            window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+        }
+
+        persistPlan(plan);
+
+        if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+            window.TempoMode.renderActiveModeHome();
         }
     }
 
@@ -133,15 +450,87 @@ window.TempoPlanWorkspace = (function() {
         return null;
     }
 
-    /**
+        /**
      * Navigation: Return to Home
      */
     function navigateHome() {
-        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+        document.body.style.backgroundColor = '';
+        const mainEl = document.querySelector('main');
+        if (mainEl) mainEl.style.backgroundColor = '';
+        if (window.TempoMode && typeof window.TempoMode.syncModeDOM === 'function') {
+            window.TempoMode.syncModeDOM(window.TempoMode.getMode());
+        }
+        if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') {
+            window.TempoMode.navigateToActiveDashboard();
+        } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
             window.TempoApp.navigateTo('today');
         } else {
             window.location.hash = '#today';
         }
+    }
+
+    /**
+     * Start Adjust Plan flow
+     */
+    function startAdjustPlan() {
+        if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.startAdjustmentFlow === 'function') {
+            window.TempoUrmodeFlow.startAdjustmentFlow();
+        } else if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.openPlanReviewModal === 'function') {
+            window.TempoEmergencyFlow.openPlanReviewModal();
+        } else {
+            openAdjustAvailabilityModal();
+        }
+    }
+
+    /**
+     * Delete active plan
+     */
+    function promptDeletePlan() {
+        activeModal = 'delete-plan-confirm';
+        render();
+    }
+
+    function closeDeletePlanConfirm() {
+        if (isActionProcessing) return;
+        activeModal = null;
+        render();
+    }
+
+    function executeDeletePlan() {
+        if (isActionProcessing) return;
+        isActionProcessing = true;
+
+        try {
+            if (window.TempoPlanStore && typeof window.TempoPlanStore.archiveActivePlan === 'function') {
+                window.TempoPlanStore.archiveActivePlan('emergency');
+                window.TempoPlanStore.archiveActivePlan('recovery');
+                window.TempoPlanStore.archiveActivePlan('default');
+            }
+
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.resetFlowState === 'function') {
+                window.TempoEmergencyFlow.resetFlowState();
+            }
+
+            try {
+                localStorage.removeItem('tempo_working_plan');
+                localStorage.removeItem('tempo_active_plan');
+                localStorage.removeItem('tempo_store_active_emergency_guest');
+            } catch(e) {}
+
+            activeModal = null;
+
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Your Working Plan has been deleted.");
+            }
+
+            navigateHome();
+        } finally {
+            isActionProcessing = false;
+        }
+    }
+
+    function deletePlan() {
+        promptDeletePlan();
     }
 
     /**
@@ -180,19 +569,20 @@ window.TempoPlanWorkspace = (function() {
         }
     }
 
-    /**
+        /**
      * Toggle task completion on shared task
      */
     function toggleTaskComplete(taskId, e) {
-        if (e) e.stopPropagation();
+        if (e && e.stopPropagation) e.stopPropagation();
         const plan = getActivePlan();
         if (!plan) return;
 
         let task = null;
-        const pt = plan.plannedTasks.find(item => item.task && item.task.id === taskId);
+        let pt = plan.plannedTasks ? plan.plannedTasks.find(item => item.task && item.task.id === taskId) : null;
         if (pt) task = pt.task;
         if (!task && plan.unarrangedTasks) {
-            task = plan.unarrangedTasks.find(t => t.id === taskId);
+            task = plan.unarrangedTasks.find(t => (t.task ? t.task.id === taskId : t.id === taskId));
+            if (task && task.task) task = task.task;
         }
 
         if (task) {
@@ -200,8 +590,34 @@ window.TempoPlanWorkspace = (function() {
             if (task.completed) {
                 task.isInProgress = false;
                 task.executionStatus = 'completed';
+                task.completedAt = Date.now();
+
+                // If the selected task became completed, select the next appropriate active task
+                if (selectedTaskId === taskId) {
+                    const allActive = [];
+                    if (Array.isArray(plan.plannedTasks)) {
+                        plan.plannedTasks.forEach(item => {
+                            if (item.task && !item.task.completed && item.task.id !== taskId) {
+                                allActive.push(item.task);
+                            }
+                        });
+                    }
+                    if (Array.isArray(plan.unarrangedTasks)) {
+                        plan.unarrangedTasks.forEach(u => {
+                            const t = u.task ? u.task : u;
+                            if (t && !t.completed && t.id !== taskId) {
+                                allActive.push(t);
+                            }
+                        });
+                    }
+                    if (allActive.length > 0) {
+                        selectedTaskId = allActive[0].id;
+                    }
+                }
             } else {
                 task.executionStatus = 'pending';
+                delete task.completedAt;
+                selectedTaskId = taskId;
             }
 
             // Sync with TempoEmergencyFlow explicitly
@@ -225,8 +641,25 @@ window.TempoPlanWorkspace = (function() {
                 });
             }
 
+            // Sync mock state for Rmode if applicable
+            try {
+                let mockTasks = {};
+                try {
+                    mockTasks = JSON.parse(localStorage.getItem('tempo_rmode_mock_tasks') || '{}');
+                } catch(e) {}
+                if (taskId === 'task-marketing-research') mockTasks['rmode-mock-1'] = task.completed;
+                if (taskId === 'task-event-proposal') mockTasks['rmode-mock-2'] = task.completed;
+                if (taskId === 'task-edit-video') mockTasks['rmode-mock-3'] = task.completed;
+                mockTasks[taskId] = task.completed;
+                localStorage.setItem('tempo_rmode_mock_tasks', JSON.stringify(mockTasks));
+            } catch(e) {}
+
             persistPlan(plan);
             render();
+
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
         }
     }
 
@@ -253,7 +686,7 @@ window.TempoPlanWorkspace = (function() {
      */
     function toggleDeadlineEdit() {
         isEditingDeadline = !isEditingDeadline;
-        renderDrawer();
+        render();
     }
 
     /**
@@ -264,8 +697,9 @@ window.TempoPlanWorkspace = (function() {
         if (!plan) return;
 
         let task = null;
-        const pt = plan.plannedTasks.find(item => item.task && item.task.id === taskId);
-        if (pt) task = pt.task;
+        let ptItem = null;
+        ptItem = (plan.plannedTasks || []).find(item => item.task && item.task.id === taskId);
+        if (ptItem) task = ptItem.task;
         if (!task && plan.unarrangedTasks) {
             task = plan.unarrangedTasks.find(t => t.id === taskId);
         }
@@ -279,15 +713,114 @@ window.TempoPlanWorkspace = (function() {
         const dateVal = dateInput ? dateInput.value : '';
         const timeVal = timeInput ? timeInput.value : '';
 
-        if (hasNoFixed) {
-            task.hasDeadline = false;
-            task.deadlineDate = null;
-            task.deadlineTime = null;
-        } else {
-            task.hasDeadline = !!dateVal;
-            task.deadlineDate = dateVal || null;
-            task.deadlineTime = timeVal || '23:59';
+        const hasDeadline = !hasNoFixed && !!dateVal;
+        const newDate = hasNoFixed ? null : (dateVal || null);
+        const newTime = hasNoFixed ? null : (timeVal || '23:59');
+
+        const oldDate = task.deadlineDate;
+        const oldTime = task.deadlineTime || '23:59';
+        const oldHasDeadline = !!task.hasDeadline;
+
+        if (hasDeadline === oldHasDeadline && newDate === oldDate && newTime === oldTime) {
+            isEditingDeadline = false;
+            render();
+            return;
         }
+
+        // Check if new deadline creates a conflict or alters relative priority/urgency of tasks
+        let createsConflict = false;
+        if (ptItem && hasDeadline && newDate) {
+            if (ptItem.dayDate && ptItem.dayDate > newDate) {
+                createsConflict = true;
+            } else if (ptItem.dayDate && ptItem.dayDate === newDate && ptItem.endTime && ptItem.endTime > newTime) {
+                createsConflict = true;
+            }
+        }
+
+        let altersPriorityOrder = false;
+        const activeTasks = (plan.plannedTasks || [])
+            .filter(item => item.task && !item.task.completed)
+            .map(item => item.task);
+
+        const currentIdx = activeTasks.findIndex(t => t.id === taskId);
+        if (currentIdx !== -1 && hasDeadline && newDate) {
+            const newDeadlineStr = newDate + ' ' + newTime;
+            // Check if there is any task scheduled before current task that now has a later deadline
+            for (let i = 0; i < currentIdx; i++) {
+                const beforeTask = activeTasks[i];
+                if (beforeTask.hasDeadline && beforeTask.deadlineDate) {
+                    const beforeDeadlineStr = beforeTask.deadlineDate + ' ' + (beforeTask.deadlineTime || '23:59');
+                    if (newDeadlineStr < beforeDeadlineStr) {
+                        altersPriorityOrder = true;
+                        break;
+                    }
+                } else if (!beforeTask.hasDeadline) {
+                    altersPriorityOrder = true;
+                    break;
+                }
+            }
+            if (!altersPriorityOrder) {
+                for (let i = currentIdx + 1; i < activeTasks.length; i++) {
+                    const afterTask = activeTasks[i];
+                    if (afterTask.hasDeadline && afterTask.deadlineDate) {
+                        const afterDeadlineStr = afterTask.deadlineDate + ' ' + (afterTask.deadlineTime || '23:59');
+                        if (newDeadlineStr > afterDeadlineStr) {
+                            altersPriorityOrder = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (createsConflict || altersPriorityOrder) {
+            pendingDeadlineEdit = {
+                taskId: taskId,
+                hasDeadline: hasDeadline,
+                deadlineDate: newDate,
+                deadlineTime: newTime
+            };
+            activeModal = 'deadline-plan-reorder-confirm';
+            render();
+            return;
+        }
+
+        // Save directly if no material conflict
+        applyDeadlineChange(taskId, hasDeadline, newDate, newTime, false);
+    }
+
+    function confirmDeadlineWithReorder() {
+        if (!pendingDeadlineEdit) return;
+        applyDeadlineChange(pendingDeadlineEdit.taskId, pendingDeadlineEdit.hasDeadline, pendingDeadlineEdit.deadlineDate, pendingDeadlineEdit.deadlineTime, true);
+    }
+
+    function confirmDeadlineWithoutReorder() {
+        if (!pendingDeadlineEdit) return;
+        applyDeadlineChange(pendingDeadlineEdit.taskId, pendingDeadlineEdit.hasDeadline, pendingDeadlineEdit.deadlineDate, pendingDeadlineEdit.deadlineTime, false);
+    }
+
+    function cancelDeadlineConfirm() {
+        pendingDeadlineEdit = null;
+        activeModal = null;
+        render();
+    }
+
+    function applyDeadlineChange(taskId, hasDeadline, newDate, newTime, shouldReorder) {
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        let task = null;
+        const pt = (plan.plannedTasks || []).find(item => item.task && item.task.id === taskId);
+        if (pt) task = pt.task;
+        if (!task && plan.unarrangedTasks) {
+            task = plan.unarrangedTasks.find(t => t.id === taskId);
+        }
+        if (!task) return;
+
+        task.hasDeadline = hasDeadline;
+        task.deadlineDate = newDate;
+        task.deadlineTime = newTime;
+        task.deadline = hasDeadline ? `${newDate} ${newTime || '23:59'}` : null;
 
         // Update shared task in tasks array
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getTasks === 'function') {
@@ -297,16 +830,163 @@ window.TempoPlanWorkspace = (function() {
                 shared.hasDeadline = task.hasDeadline;
                 shared.deadlineDate = task.deadlineDate;
                 shared.deadlineTime = task.deadlineTime;
+                shared.deadline = task.deadline;
             }
         }
 
-        // Recheck deadline conflicts without reordering
-        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
-            window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+        if (shouldReorder) {
+            reorganizePlanWithPlanner(plan);
+        } else {
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+                window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+            }
+            persistPlan(plan);
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
+        }
+
+        isEditingDeadline = false;
+        pendingDeadlineEdit = null;
+        activeModal = null;
+        render();
+    }
+
+    /**
+     * Label (Now / Later) dropdown and AI replan
+     */
+    function toggleLabelMenu(taskId, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        activeLabelMenuTaskId = (activeLabelMenuTaskId === taskId ? null : taskId);
+        render();
+    }
+
+    function setTaskLabel(taskId, newLabel) {
+        activeLabelMenuTaskId = null;
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        let task = null;
+        const pt = (plan.plannedTasks || []).find(item => item.task && item.task.id === taskId);
+        if (pt) task = pt.task;
+        if (!task && plan.unarrangedTasks) {
+            task = plan.unarrangedTasks.find(t => t.id === taskId);
+        }
+        if (!task) return;
+
+        task.userLabel = newLabel;
+        task.priorityCategory = (newLabel === 'Now') ? 'DO_FIRST' : 'LATER';
+
+        // Update shared task
+        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getTasks === 'function') {
+            const raw = window.TempoEmergencyFlow.getTasks();
+            const shared = raw.find(t => t.id === taskId);
+            if (shared) {
+                shared.userLabel = newLabel;
+                shared.priorityCategory = task.priorityCategory;
+            }
+        }
+
+        reorganizePlanWithPlanner(plan);
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(`Priority updated to ${newLabel}. Plan reorganized.`);
+        }
+        render();
+    }
+
+    /**
+     * Open Break Task modal
+     */
+    function openBreakTaskModal(taskId) {
+        const targetId = taskId || selectedTaskId;
+        if (!targetId) return;
+        if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.renderBreakTaskPopup === 'function') {
+            window.TempoUrmodeFlow.renderBreakTaskPopup(targetId);
+        } else if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.startBreakTaskFlow === 'function') {
+            window.TempoUrmodeFlow.startBreakTaskFlow(targetId);
+        } else if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.reviewStepBreakdown === 'function') {
+            window.TempoEmergencyFlow.reviewStepBreakdown(targetId);
+        }
+    }
+
+    /**
+     * Task Notes management
+     */
+    function openNoteEditor(taskId) {
+        pendingNoteTaskId = taskId || selectedTaskId;
+        activeModal = 'edit-task-note';
+        render();
+    }
+
+    function saveNote(taskId) {
+        const targetId = taskId || pendingNoteTaskId || selectedTaskId;
+        if (!targetId) return;
+
+        const input = document.getElementById('pw-note-editor-text');
+        const text = input ? input.value : '';
+
+        const plan = getActivePlan();
+        let targetTask = null;
+        if (plan && plan.plannedTasks) {
+            const pt = plan.plannedTasks.find(item => item.task && item.task.id === targetId);
+            if (pt) targetTask = pt.task;
+        }
+        if (!targetTask && plan && plan.unarrangedTasks) {
+            targetTask = plan.unarrangedTasks.find(t => t.id === targetId);
+        }
+        const taskName = targetTask ? targetTask.name : 'Academic Task';
+
+        if (window.TempoToolNotes && typeof window.TempoToolNotes.saveTaskNote === 'function') {
+            window.TempoToolNotes.saveTaskNote(targetId, taskName, text);
+        }
+
+        if (targetTask) {
+            targetTask.note = text.trim();
+            targetTask.description = text.trim();
         }
 
         persistPlan(plan);
-        isEditingDeadline = false;
+        activeModal = null;
+        pendingNoteTaskId = null;
+        render();
+    }
+
+    function deleteNote(taskId) {
+        const targetId = taskId || pendingNoteTaskId || selectedTaskId;
+        if (!targetId) return;
+
+        if (window.TempoToolNotes && typeof window.TempoToolNotes.deleteTaskNote === 'function') {
+            window.TempoToolNotes.deleteTaskNote(targetId);
+        }
+
+        const plan = getActivePlan();
+        if (plan && plan.plannedTasks) {
+            const pt = plan.plannedTasks.find(item => item.task && item.task.id === targetId);
+            if (pt && pt.task) {
+                pt.task.note = '';
+                pt.task.description = '';
+            }
+        }
+        if (plan && plan.unarrangedTasks) {
+            const u = plan.unarrangedTasks.find(t => t.id === targetId);
+            if (u) {
+                u.note = '';
+                u.description = '';
+            }
+        }
+
+        persistPlan(plan);
+        activeModal = null;
+        pendingNoteTaskId = null;
+        render();
+    }
+
+    function closeModal() {
+        activeModal = null;
+        pendingDeadlineEdit = null;
+        pendingNoteTaskId = null;
         render();
     }
 
@@ -325,35 +1005,101 @@ window.TempoPlanWorkspace = (function() {
         }
     }
 
-    /**
+        /**
      * Remove task from plan
      */
-    function removeTask(taskId) {
-        if (!confirm("Are you sure you want to remove this task from your Urgent Plan?")) return;
+    function promptClearTask(taskId) {
+        pendingClearTaskId = taskId || selectedTaskId;
+        activeModal = 'clear-task-confirm';
+        render();
+    }
 
-        const plan = getActivePlan();
-        if (!plan) return;
+    function closeClearTaskConfirm() {
+        if (isActionProcessing) return;
+        activeModal = null;
+        pendingClearTaskId = null;
+        render();
+    }
 
-        // Check plannedTasks
-        const ptIdx = plan.plannedTasks.findIndex(pt => pt.task && pt.task.id === taskId);
-        if (ptIdx !== -1) {
-            plan.plannedTasks.splice(ptIdx, 1);
-            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
-                window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+    function executeClearTask() {
+        if (isActionProcessing) return;
+        isActionProcessing = true;
+
+        try {
+            const taskId = pendingClearTaskId || selectedTaskId;
+            if (!taskId) {
+                activeModal = null;
+                render();
+                return;
             }
-        }
 
-        // Check unarrangedTasks
-        const unIdx = plan.unarrangedTasks ? plan.unarrangedTasks.findIndex(t => t.id === taskId) : -1;
-        if (unIdx !== -1) {
-            plan.unarrangedTasks.splice(unIdx, 1);
-        }
+            const plan = getActivePlan();
+            if (!plan) {
+                activeModal = null;
+                render();
+                return;
+            }
 
-        if (selectedTaskId === taskId) {
-            selectedTaskId = null;
-        }
+            // Check plannedTasks
+            if (Array.isArray(plan.plannedTasks)) {
+                const ptIdx = plan.plannedTasks.findIndex(pt => pt.task && pt.task.id === taskId);
+                if (ptIdx !== -1) {
+                    plan.plannedTasks.splice(ptIdx, 1);
+                    if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+                        window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+                    }
+                }
+            }
 
-        persistPlan(plan);
+            // Check unarrangedTasks
+            if (Array.isArray(plan.unarrangedTasks)) {
+                const unIdx = plan.unarrangedTasks.findIndex(t => (t.task ? t.task.id === taskId : t.id === taskId));
+                if (unIdx !== -1) {
+                    plan.unarrangedTasks.splice(unIdx, 1);
+                }
+            }
+
+            // Check tasks
+            if (Array.isArray(plan.tasks)) {
+                const tIdx = plan.tasks.findIndex(t => t.id === taskId);
+                if (tIdx !== -1) {
+                    plan.tasks.splice(tIdx, 1);
+                }
+            }
+
+            // Auto-select next available task
+            if (selectedTaskId === taskId) {
+                const remaining = [];
+                if (Array.isArray(plan.plannedTasks)) {
+                    plan.plannedTasks.forEach(item => {
+                        if (item.task) remaining.push(item.task);
+                    });
+                }
+                if (Array.isArray(plan.unarrangedTasks)) {
+                    plan.unarrangedTasks.forEach(u => {
+                        const t = u.task ? u.task : u;
+                        if (t) remaining.push(t);
+                    });
+                }
+                const activeRemaining = remaining.find(t => !t.completed);
+                selectedTaskId = activeRemaining ? activeRemaining.id : (remaining.length > 0 ? remaining[0].id : null);
+            }
+
+            persistPlan(plan);
+            activeModal = null;
+            pendingClearTaskId = null;
+            render();
+        } finally {
+            isActionProcessing = false;
+        }
+    }
+
+    function removeTask(taskId) {
+        promptClearTask(taskId);
+    }
+
+    function toggleAddSubtaskInput() {
+        showAddSubtaskInput = !showAddSubtaskInput;
         render();
     }
 
@@ -909,87 +1655,86 @@ window.TempoPlanWorkspace = (function() {
     }
 
     /**
-     * MAIN RENDER FUNCTION
+     * MAIN RENDER FUNCTION: Tempo Working Plan (Two-column layout matching reference)
      */
     function render() {
         const root = document.getElementById('plan-workspace-root');
         if (!root) return;
 
+        // Ensure light blue background on body and main
+        document.body.style.backgroundColor = '#EFFAFF';
+        const mainEl = document.querySelector('main');
+        if (mainEl) mainEl.style.backgroundColor = '#EFFAFF';
+
         const plan = getActivePlan();
-        if (!plan || (!plan.plannedTasks && !plan.unarrangedTasks)) {
-            root.innerHTML = `
-                <div class="max-w-xl mx-auto py-16 text-center space-y-5">
-                    <div class="w-16 h-16 rounded-3xl bg-[#FFE9DC] text-[#FF6B2C] flex items-center justify-center text-3xl mx-auto shadow-sm">
-                        📋
-                    </div>
-                    <div class="space-y-1.5">
-                        <h2 class="font-heading text-2xl font-bold text-[#202124]">${window.t ? window.t('workspace.noPlanTitle', {}, 'No active Urgent Plan found') : 'No active Urgent Plan found'}</h2>
-                        <p class="text-xs sm:text-sm text-[#6F6B68]">
-                            ${window.t ? window.t('workspace.noPlanDesc', {}, "You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance.") : "You don't have an active Urgent Plan right now. Create one to get clear, realistic guidance."}
-                        </p>
-                    </div>
-                    <div class="pt-2 flex items-center justify-center gap-3">
-                        <button onclick="window.TempoPlanWorkspace.navigateHome()" class="px-5 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                            ← ${window.t ? window.t('workspace.home', {}, 'Home') : 'Home'}
-                        </button>
-                        <button onclick="window.TempoApp.navigateTo('emergency'); window.TempoEmergencyFlow.goToStage('entry');" class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs shadow-md transition">
-                            ${window.t ? window.t('workspace.createUrgentPlan', {}, 'Create an Urgent Plan →') : 'Create an Urgent Plan →'}
-                        </button>
-                    </div>
-                </div>
-            `;
-            return;
-        }
+        if (!plan) return;
 
         const plannedTasks = plan.plannedTasks || [];
         const unarrangedTasks = (plan.unarrangedTasks || []).map(u => (u && u.task ? u.task : u));
 
-        // Real Summary Metrics
+        // Group tasks into active vs completed
+        const activePlanned = plannedTasks.filter(pt => pt.task && !pt.task.completed);
+        const activeUnarranged = unarrangedTasks.filter(t => !t.completed);
+
+        const completedPlanned = plannedTasks.filter(pt => pt.task && pt.task.completed).map(pt => ({
+            task: pt.task,
+            startTime: pt.startTime || pt.scheduledStartTime,
+            endTime: pt.endTime || pt.scheduledEndTime,
+            dayLabel: pt.dayLabel,
+            dayDate: pt.dayDate
+        }));
+        const completedUnarranged = unarrangedTasks.filter(t => t.completed).map(t => ({
+            task: t,
+            startTime: null,
+            endTime: null,
+            dayLabel: null,
+            dayDate: null
+        }));
+
+        const allCompleted = [...completedPlanned, ...completedUnarranged];
+        allCompleted.sort((a, b) => (b.task.completedAt || 0) - (a.task.completedAt || 0));
+
+        // Total count and completed count
         const totalTasksCount = plannedTasks.length + unarrangedTasks.length;
-        const completedTasksCount = plannedTasks.filter(pt => pt.task && pt.task.completed).length +
-                                    unarrangedTasks.filter(t => t.completed).length;
+        const completedTasksCount = allCompleted.length;
+        const progressPercent = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
 
-        let totalFocusedMinutes = 0;
-        let unestimatedTasksCount = 0;
+        // Auto-select active task if selectedTaskId is unset or missing
+        const allTasksFlat = [];
+        plannedTasks.forEach(pt => { if (pt.task) allTasksFlat.push(pt.task); });
+        unarrangedTasks.forEach(t => { if (t) allTasksFlat.push(t); });
 
-        plannedTasks.forEach(pt => {
-            if (pt.task) {
-                if (pt.task.durationMinutes && pt.task.durationMinutes > 0) {
-                    totalFocusedMinutes += pt.task.durationMinutes;
-                } else {
-                    unestimatedTasksCount++;
-                }
+        if (!selectedTaskId || !allTasksFlat.some(t => t.id === selectedTaskId)) {
+            const firstActive = activePlanned.length > 0 ? activePlanned[0].task : (activeUnarranged.length > 0 ? activeUnarranged[0] : null);
+            if (firstActive) {
+                selectedTaskId = firstActive.id;
+            } else if (allCompleted.length > 0) {
+                selectedTaskId = allCompleted[0].task.id;
+            } else if (allTasksFlat.length > 0) {
+                selectedTaskId = allTasksFlat[0].id;
             }
-        });
-        unarrangedTasks.forEach(t => {
-            if (t.durationMinutes && t.durationMinutes > 0) {
-                totalFocusedMinutes += t.durationMinutes;
-            } else {
-                unestimatedTasksCount++;
-            }
-        });
+        }
 
-        const unestimatedText = unestimatedTasksCount > 0 ? (window.t ? window.t('workspace.unestimatedCount', { count: unestimatedTasksCount }, ` (+${unestimatedTasksCount} unestimated)`) : ` (+${unestimatedTasksCount} unestimated)`) : '';
-        const durationSummary = window.t
-            ? window.t('workspace.durationSummary', {
-                duration: formatDuration(totalFocusedMinutes),
-                unestimated: unestimatedText
-              }, `~${formatDuration(totalFocusedMinutes)} focused work${unestimatedText}`)
-            : `~${formatDuration(totalFocusedMinutes)} focused work${unestimatedText}`;
+        // Find currently selected task and its scheduled metadata
+        let selectedTask = allTasksFlat.find(t => t.id === selectedTaskId);
+        let selectedPlanItem = plannedTasks.find(pt => pt.task && pt.task.id === selectedTaskId);
 
-        // Group arranged tasks by date
+        // Group active planned tasks by dayDate
         const todayStr = getTodayISO();
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
         const daysMap = {};
-        plannedTasks.forEach((item, globalIdx) => {
+        activePlanned.forEach((item, globalIdx) => {
             item.globalIndex = globalIdx;
             const dDate = item.dayDate || 'unscheduled';
-            let dLabel = item.dayLabel || dDate;
-            if (dDate === todayStr) dLabel = window.t ? window.t('common.today', {}, 'TODAY').toUpperCase() : 'TODAY';
-            else if (dDate === tomorrowStr) dLabel = window.t ? window.t('common.tomorrow', {}, 'TOMORROW').toUpperCase() : 'TOMORROW';
+            let dLabel = item.dayLabel;
+            if (!dLabel) {
+                if (dDate === todayStr) dLabel = 'Today, Month day';
+                else if (dDate === tomorrowStr) dLabel = 'Tomorrow, Month day';
+                else dLabel = formatMonthDay(dDate);
+            }
 
             if (!daysMap[dDate]) {
                 daysMap[dDate] = { label: dLabel, date: dDate, items: [] };
@@ -997,489 +1742,504 @@ window.TempoPlanWorkspace = (function() {
             daysMap[dDate].items.push(item);
         });
 
-        // Separate active vs completed
-        const completedArranged = plannedTasks.filter(pt => pt.task && pt.task.completed);
-        const completedUnarranged = unarrangedTasks.filter(t => t.completed);
-        const allCompleted = [...completedArranged.map(pt => pt.task), ...completedUnarranged];
+        // Determine badge for selected task
+        const isSelectedNow = selectedTask && (
+            selectedTask.userLabel === 'Now' ||
+            selectedTask.priorityCategory === 'DO_FIRST' ||
+            (selectedPlanItem && (selectedPlanItem.executionBadge === 'Now' || selectedPlanItem.planPositionBadge === 'DO THIS' || selectedPlanItem.globalIndex === 0))
+        );
+        const selectedBadgeLabel = selectedTask ? (selectedTask.completed ? 'Done' : (isSelectedNow ? 'Now' : 'Later')) : '';
 
-        // Is drawer active?
-        const isDrawerOpen = !!selectedTaskId;
-        let selectedTask = null;
-        let selectedPlanItem = null;
-
-        if (selectedTaskId) {
-            selectedPlanItem = plannedTasks.find(pt => pt.task && pt.task.id === selectedTaskId);
-            if (selectedPlanItem) selectedTask = selectedPlanItem.task;
-            if (!selectedTask) {
-                selectedTask = unarrangedTasks.find(t => t.id === selectedTaskId);
-            }
+        // Schedule string for detail header
+        let detailScheduleStr = 'Today, Month day 3:00 PM to 5:30 PM';
+        if (selectedPlanItem && (selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime) && (selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime)) {
+            const sStart = formatTime12H(selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime);
+            const sEnd = formatTime12H(selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime);
+            const dLabel = selectedPlanItem.dayLabel || (selectedPlanItem.dayDate === todayStr ? 'Today, Month day' : formatMonthDay(selectedPlanItem.dayDate));
+            detailScheduleStr = `${dLabel} ${sStart} to ${sEnd}`;
+        } else if (selectedTask) {
+            detailScheduleStr = `Flexible schedule · ~${selectedTask.durationLabel || '1h'}`;
         }
 
+        const selectedSubtaskCount = selectedTask && Array.isArray(selectedTask.subtasks) ? selectedTask.subtasks.length : 0;
+        const selectedCompletedSubtasks = selectedTask && Array.isArray(selectedTask.subtasks) ? selectedTask.subtasks.filter(s => s.completed).length : 0;
+        const savedNoteObj = selectedTask && window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(selectedTask.id) : null;
+        const selectedNoteText = savedNoteObj ? savedNoteObj.text : (selectedTask && selectedTask.note && selectedTask.note !== 'Create a sheet to manage references' ? selectedTask.note : '');
+
         root.innerHTML = `
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" data-tempo-ui="plan-workspace">
-                <!-- TOP HEADER -->
-                <div class="space-y-4 pb-4 border-b border-[#EAE4DF]">
-                    <div class="flex items-center justify-between">
-                        <!-- Navigation: Strictly "← Home" -->
-                        <button id="plan-workspace-back-home"
-                                onclick="window.TempoPlanWorkspace.navigateHome()" 
-                                class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] flex items-center space-x-1.5 transition py-1 group"
-                                title="${window.t ? window.t('workspace.returnToHome', {}, 'Return to Home Dashboard') : 'Return to Home Dashboard'}">
-                            <span class="group-hover:-translate-x-0.5 transition-transform">←</span>
-                            <span>${window.t ? window.t('workspace.home', {}, 'Home') : 'Home'}</span>
-                        </button>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-5 space-y-6" data-tempo-ui="tempo-working-plan">
+                <!-- Top-Left Navigation Control -->
+                <div class="flex items-center justify-between">
+                    <button id="plan-workspace-back-home"
+                            type="button"
+                            onclick="window.TempoPlanWorkspace.navigateHome()" 
+                            class="text-xs sm:text-sm font-semibold text-[#6F6B68] hover:text-[#202124] flex items-center space-x-1.5 transition py-1 cursor-pointer group"
+                            title="Return to Home">
+                        <span class="group-hover:-translate-x-0.5 transition-transform">←</span>
+                        <span>Return Home</span>
+                    </button>
+                </div>
+
+                <!-- Centered Page Title -->
+                <div class="text-center">
+                    <h1 class="font-heading text-3xl sm:text-4xl md:text-[42px] font-extrabold text-[#DBA590] tracking-tight">
+                        Tempo Working Plan
+                    </h1>
+                </div>
+
+                <!-- Progress Bar and Action Buttons Row -->
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4 pt-1 pb-2">
+                    <!-- Progress Bar & Count -->
+                    <div class="flex items-center space-x-3 w-full md:w-auto">
+                        <div class="w-48 sm:w-64 md:w-72 h-3.5 bg-[#CCD3D5] rounded-full overflow-hidden flex items-center p-0.5">
+                            <div class="bg-[#D99E87] h-full rounded-full transition-all duration-300"
+                                 style="width: ${progressPercent}%; min-width: ${progressPercent > 0 ? '12px' : '8px'};"></div>
+                        </div>
+                        <span class="text-xs sm:text-sm font-medium text-[#6F6B68] shrink-0">
+                            ${completedTasksCount}/${totalTasksCount} Tasks
+                        </span>
                     </div>
 
-                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div class="space-y-1">
-                            <span class="text-[11px] font-extrabold uppercase tracking-widest text-[#FF6B2C] block">${window.t ? window.t('modes.urgent.planForTodayUpper', {}, 'YOUR URGENT PLAN') : 'YOUR URGENT PLAN'}</span>
-                            <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                                ${window.t ? window.t('workspace.headerSubtitle', {}, "Here's what you're working through right now.") : "Here's what you're working through right now."}
-                            </h1>
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6F6B68] font-medium pt-1">
-                                <span>${totalTasksCount} ${window.t ? window.t('workspace.tasksCount', { count: totalTasksCount }, totalTasksCount === 1 ? 'task' : 'tasks') : (totalTasksCount === 1 ? '1 task' : totalTasksCount + ' tasks')}</span>
-                                <span>•</span>
-                                <span>${durationSummary}</span>
-                                <span>•</span>
-                                <span>${completedTasksCount} ${window.t ? window.t('workspace.completedCount', { count: completedTasksCount }, 'completed') : 'completed'}</span>
-                            </div>
-                        </div>
-
-                        <!-- Header Action CTAs -->
-                        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
-                            <!-- Primary: Start Focus Now -->
-                            <button id="plan-workspace-start-focus"
-                                    onclick="window.TempoPlanWorkspace.startGlobalFocus()"
-                                    class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md inline-flex items-center space-x-2 transition">
-                                <span>▶ ${window.t ? window.t('workspace.startFocusNow', {}, 'Start Focus Now') : 'Start Focus Now'}</span>
-                            </button>
-                            <!-- Secondary: Add Task -->
-                            <button onclick="window.TempoPlanWorkspace.openAddTaskModal()"
-                                    class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                                ${window.t ? window.t('workspace.addTask', {}, '+ Add task') : '+ Add task'}
-                            </button>
-                            <!-- Secondary: Adjust Availability -->
-                            <button onclick="window.TempoPlanWorkspace.openAdjustAvailabilityModal()"
-                                    class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-white hover:bg-stone-50 transition">
-                                ${window.t ? window.t('workspace.adjustAvailability', {}, 'Adjust availability') : 'Adjust availability'}
-                            </button>
-                        </div>
+                    <!-- Header Plan Action CTAs -->
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 justify-center">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.openAddTaskModal()"
+                                class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#92A491] hover:bg-[#829381] shadow-2xs transition cursor-pointer">
+                            Add task
+                        </button>
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.openAdjustAvailabilityModal()"
+                                class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#8AA8B7] hover:bg-[#7A98A7] shadow-2xs transition cursor-pointer">
+                            Add availability
+                        </button>
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.startAdjustPlan()"
+                                class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D99E87] hover:bg-[#C98E77] shadow-2xs transition cursor-pointer">
+                            Adjust Plan
+                        </button>
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.promptDeletePlan()"
+                                class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#C53B27] hover:bg-[#B03422] shadow-2xs transition cursor-pointer">
+                            Delete my plan
+                        </button>
                     </div>
                 </div>
 
-                <!-- MAIN WORKSPACE LAYOUT (Timeline | Drawer) -->
-                <div class="grid grid-cols-1 ${isDrawerOpen ? 'lg:grid-cols-12' : ''} gap-8 items-start">
-                    <!-- TIMELINE COLUMN -->
-                    <div class="${isDrawerOpen ? 'lg:col-span-7' : 'max-w-4xl mx-auto w-full'} space-y-8">
-                        ${Object.keys(daysMap).map(dDate => {
-                            const group = daysMap[dDate];
-                            const activeItems = group.items.filter(pt => pt.task && !pt.task.completed);
-
-                            if (activeItems.length === 0 && group.items.length > 0) {
-                                // All items in this day completed
+                <!-- Main Two-Column Layout -->
+                <div class="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
+                    <!-- LEFT COLUMN: Scrollable Task List -->
+                    <div class="w-full lg:w-[48%] flex flex-col">
+                        <div id="plan-workspace-task-list"
+                             class="max-h-[calc(100vh-230px)] min-h-[460px] overflow-y-auto overflow-x-hidden pr-2 sm:pr-3 space-y-6 plan-custom-scroll">
+                            ${Object.keys(daysMap).map((dDate, gIdx) => {
+                                const group = daysMap[dDate];
                                 return `
-                                    <div class="space-y-3">
-                                        <div class="flex items-center justify-between pb-1 border-b border-gray-200/80">
-                                            <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-[#6F6B68]">
-                                                ${escapeHTML(group.label)} · ${escapeHTML(group.date)}
-                                            </h3>
-                                            <span class="text-[11px] font-semibold text-emerald-700">${window.t ? window.t('workspace.allPlannedWorkDone', {}, 'All planned work done ✓') : 'All planned work done ✓'}</span>
-                                        </div>
-                                    </div>
-                                `;
-                            }
+                                    <div class="space-y-3.5">
+                                        <!-- Date Heading -->
+                                        <h3 class="font-heading font-extrabold text-base sm:text-lg text-[#D9A18B]">
+                                            ${escapeHTML(group.label)}
+                                        </h3>
 
-                            return `
-                                <div class="space-y-4">
-                                    <!-- Day Header -->
-                                    <div class="flex items-center justify-between pb-1 border-b border-gray-200/80">
-                                        <div class="flex items-center space-x-2">
-                                            <span class="w-2.5 h-2.5 rounded-full bg-[#FF6B2C]"></span>
-                                            <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-[#202124]">
-                                                ${escapeHTML(group.label)} · ${escapeHTML(group.date)}
-                                            </h3>
-                                        </div>
-                                        <span class="text-[11px] font-medium text-[#6F6B68]">
-                                            ${activeItems.length} ${window.t ? window.t('workspace.activeTasksCount', { count: activeItems.length }, activeItems.length === 1 ? 'active task' : 'active tasks') : (activeItems.length === 1 ? '1 active task' : activeItems.length + ' active tasks')}
-                                        </span>
-                                    </div>
+                                        <!-- Tasks in this Day -->
+                                        <div class="space-y-3">
+                                            ${group.items.map(item => {
+                                                const task = item.task;
+                                                const isSelected = selectedTaskId === task.id;
+                                                const isNow = item.executionBadge === 'Now' || item.planPositionBadge === 'DO THIS' || item.globalIndex === 0;
+                                                const badgeClass = isNow ? 'bg-[#D99E87] text-white' : 'bg-[#E8ECF1] text-[#7B96A6]';
+                                                const badgeText = isNow ? 'Now' : 'Later';
 
-                                    <!-- Tasks in Day -->
-                                    <div class="space-y-3">
-                                        ${activeItems.map((item, idx) => {
-                                            const task = item.task;
-                                            const isSelected = selectedTaskId === task.id;
-                                            const rawBadge = item.planPositionBadge || (item.globalIndex === 0 ? 'DO THIS' : (item.globalIndex === 1 ? 'THEN' : 'LATER'));
-                                            let badgeLabel = rawBadge;
-                                            if (window.t) {
-                                                if (rawBadge === 'DO THIS') badgeLabel = window.t('workspace.doThis', {}, 'DO THIS');
-                                                else if (rawBadge === 'THEN') badgeLabel = window.t('workspace.then', {}, 'THEN');
-                                                else if (rawBadge === 'LATER') badgeLabel = window.t('workspace.later', {}, 'LATER');
-                                            }
-                                            const badgeClass = rawBadge === 'DO THIS' ? 'bg-[#FFE9DC] text-[#B83D08]' : (rawBadge === 'THEN' ? 'bg-orange-100 text-[#B83D08]' : 'bg-stone-100 text-stone-700');
-                                            const subtaskCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
-                                            const completedSubtasks = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
+                                                const startTime = item.startTime || item.scheduledStartTime;
+                                                const endTime = item.endTime || item.scheduledEndTime;
+                                                const subCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
+                                                const compSubCount = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
 
-                                            return `
-                                                <div class="workspace-task-card group relative p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer ${isSelected ? 'border-2 border-[#FF6B2C] bg-[#FFFBF8] shadow-sm' : 'border-[#EAE4DF] bg-white hover:border-stone-400 hover:shadow-md shadow-xs'}"
-                                                     data-task-id="${task.id}"
-                                                     data-global-index="${item.globalIndex}"
-                                                     draggable="true"
-                                                     ondragstart="window.TempoPlanWorkspace.handleDragStart(event, ${item.globalIndex})"
-                                                     ondragover="window.TempoPlanWorkspace.handleDragOver(event)"
-                                                     ondragenter="window.TempoPlanWorkspace.handleDragEnter(event)"
-                                                     ondragleave="window.TempoPlanWorkspace.handleDragLeave(event)"
-                                                     ondrop="window.TempoPlanWorkspace.handleDrop(event, ${item.globalIndex})"
-                                                     ondragend="window.TempoPlanWorkspace.handleDragEnd(event)"
-                                                     onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
-                                                    <!-- Top Card Meta Row -->
-                                                    <div class="flex items-center justify-between gap-2 pb-2">
-                                                        <div class="flex items-center space-x-2 min-w-0">
-                                                            <!-- Drag Handle -->
-                                                            <div class="workspace-drag-handle em-drag-handle flex items-center justify-center text-stone-400 group-hover:text-stone-700 hover:text-[#B83D08] hover:bg-[#FFE9DC] px-1.5 py-1 rounded-md text-xs select-none transition-colors"
-                                                                 title="${window.t ? window.t('workspace.dragToReorder', {}, 'Drag to reorder') : 'Drag to reorder'}"
-                                                                 aria-label="${window.t ? window.t('workspace.dragToReorder', {}, 'Drag to reorder') : 'Drag to reorder'}"
-                                                                 tabindex="0"
-                                                                 data-drag-handle="true"
-                                                                 onclick="event.stopPropagation()">
-                                                                <span class="text-xs font-bold tracking-widest leading-none select-none pointer-events-none">⋮⋮</span>
-                                                            </div>
-                                                            <!-- Checkbox -->
-                                                            <button type="button" 
-                                                                    onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
-                                                                    class="w-5 h-5 rounded-lg border flex items-center justify-center text-xs font-bold transition shrink-0 ${task.completed ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300 hover:border-[#FF6B2C] bg-white text-transparent'}"
-                                                                    title="Mark complete">
-                                                                ✓
-                                                            </button>
-                                                            <!-- Plan Position Badge -->
-                                                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${badgeClass} shrink-0">
-                                                                ${badgeLabel}
-                                                            </span>
-                                                        </div>
-
-                                                        <!-- Scheduled Time -->
-                                                        <div class="text-right shrink-0">
-                                                            ${(item.startTime || item.scheduledStartTime) && (item.endTime || item.scheduledEndTime) ? `
-                                                                <span class="text-xs font-bold text-[#202124]">
-                                                                    ${item.startTime || item.scheduledStartTime} – ${item.endTime || item.scheduledEndTime}
-                                                                </span>
+                                                return `
+                                                    <div class="flex items-center gap-3 sm:gap-4" data-task-row="${task.id}">
+                                                        <!-- Time Slot on Left -->
+                                                        <div class="w-16 sm:w-20 text-center shrink-0 flex flex-col items-center justify-center text-xs font-bold text-[#D9A18B] leading-tight">
+                                                            ${startTime && endTime ? `
+                                                                <span>${formatTime12H(startTime)}</span>
+                                                                <span class="my-0.5">|</span>
+                                                                <span>${formatTime12H(endTime)}</span>
                                                             ` : `
-                                                                <span class="text-xs font-medium text-[#6F6B68]">
-                                                                    ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}
-                                                                </span>
+                                                                <span>Flexible</span>
                                                             `}
                                                         </div>
+
+                                                        <!-- Task Card on Right -->
+                                                        <div class="flex-1 min-w-0 bg-[#FDFBF6] hover:bg-white border ${isSelected ? 'border-2 border-[#D99E87]' : 'border-[#E3C7A5]'} rounded-2xl p-4 sm:p-5 transition shadow-2xs cursor-pointer"
+                                                             onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
+                                                            <div class="flex items-center justify-between gap-2 pb-1.5">
+                                                                <div class="flex items-center space-x-2.5 min-w-0">
+                                                                    <!-- Checkbox -->
+                                                                    <button type="button"
+                                                                            onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
+                                                                            class="w-5 h-5 rounded-lg border flex items-center justify-center text-xs font-bold transition shrink-0 ${task.completed ? 'bg-[#92A491] border-[#92A491] text-white' : 'border-[#E3C7A5] bg-white text-transparent hover:border-[#D99E87]'}"
+                                                                            title="Mark complete">
+                                                                        ✓
+                                                                    </button>
+                                                                    <!-- Title -->
+                                                                    <h4 class="font-heading text-base font-bold text-[#202124] truncate ${task.completed ? 'line-through text-stone-400' : ''}">
+                                                                        ${escapeHTML(task.name)}
+                                                                    </h4>
+                                                                </div>
+                                                                <!-- Status Badge with Interactive Dropdown -->
+                                                                <div class="relative inline-block" data-label-menu-container>
+                                                                    <button type="button"
+                                                                            onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${task.id}', event);"
+                                                                            class="px-3 py-0.5 rounded-full text-xs font-bold ${badgeClass} shrink-0 cursor-pointer hover:opacity-90 transition flex items-center space-x-1"
+                                                                            title="Change priority: Now or Later">
+                                                                        <span>${badgeText}</span>
+                                                                        <span class="text-[9px] opacity-75">▾</span>
+                                                                    </button>
+                                                                    ${activeLabelMenuTaskId === task.id ? `
+                                                                        <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-[#E3C7A5] rounded-xl shadow-lg py-1 w-28 text-xs font-semibold overflow-hidden"
+                                                                             onclick="event.stopPropagation();">
+                                                                            <button type="button"
+                                                                                    onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Now');"
+                                                                                    class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${isNow ? 'font-bold text-[#D99E87]' : ''}">
+                                                                                <span>Now</span>
+                                                                                ${isNow ? '<span>✓</span>' : ''}
+                                                                            </button>
+                                                                            <button type="button"
+                                                                                    onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Later');"
+                                                                                    class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${!isNow ? 'font-bold text-[#7B96A6]' : ''}">
+                                                                                <span>Later</span>
+                                                                                ${!isNow ? '<span>✓</span>' : ''}
+                                                                            </button>
+                                                                        </div>
+                                                                    ` : ''}
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Due date and subtasks -->
+                                                            <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
+                                                                <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
+                                                                <div>${compSubCount}/${subCount} subtasks</div>
+                                                            </div>
+                                                        </div>
                                                     </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
 
-                                                    <!-- Task Title & Badges -->
-                                                    <div class="space-y-1 pt-1">
-                                                        <div class="flex items-baseline justify-between gap-3">
-                                                            <h4 class="font-heading text-base font-bold text-[#202124] ${task.completed ? 'line-through text-gray-400' : ''}">
-                                                                ${escapeHTML(task.name)}
-                                                            </h4>
-                                                        </div>
+                                        ${gIdx < Object.keys(daysMap).length - 1 ? `
+                                            <hr class="border-[#EEE9E7] my-3" />
+                                        ` : ''}
+                                    </div>
+                                `;
+                            }).join('')}
 
-                                                        <!-- Meta Info Line -->
-                                                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6F6B68]">
-                                                            <span>${window.t ? window.t('workspace.estimate', {}, 'Estimate:') : 'Estimate:'} ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}</span>
-                                                            <span>•</span>
-                                                            <span>${window.t ? window.t('workspace.due', {}, 'Due:') : 'Due:'} ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
-                                                            ${subtaskCount > 0 ? `
-                                                                <span>•</span>
-                                                                <span>${completedSubtasks}/${subtaskCount} ${window.t ? window.t('modes.urgent.actionSteps', {}, 'action steps') : 'action steps'}</span>
-                                                            ` : ''}
-                                                        </div>
+                            <!-- Unarranged Active Tasks if any -->
+                            ${activeUnarranged.length > 0 ? `
+                                <div class="space-y-3.5 pt-2">
+                                    <h3 class="font-heading font-extrabold text-base sm:text-lg text-[#D9A18B]">
+                                        Flexible / Unscheduled
+                                    </h3>
+                                    <div class="space-y-3">
+                                        ${activeUnarranged.map(task => {
+                                            const isSelected = selectedTaskId === task.id;
+                                            const subCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
+                                            const compSubCount = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
+
+                                            return `
+                                                <div class="flex items-center gap-3 sm:gap-4" data-task-row="${task.id}">
+                                                    <div class="w-16 sm:w-20 text-center shrink-0 flex flex-col items-center justify-center text-xs font-bold text-[#D9A18B] leading-tight">
+                                                        <span>~${task.durationLabel || '1h'}</span>
                                                     </div>
-
-                                                    <!-- Deadline Warning if flagged -->
-                                                    ${item.hasDeadlineConflict ? `
-                                                        <div class="mt-2.5 p-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center space-x-1.5">
-                                                            <span>⚠️</span>
-                                                            <span><strong>${window.t ? window.t('workspace.mayFinishAfterDeadline', {}, 'May finish after deadline') : 'May finish after deadline'}</strong></span>
+                                                    <div class="flex-1 min-w-0 bg-[#FDFBF6] hover:bg-white border ${isSelected ? 'border-2 border-[#D99E87]' : 'border-[#E3C7A5]'} rounded-2xl p-4 sm:p-5 transition shadow-2xs cursor-pointer"
+                                                         onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
+                                                        <div class="flex items-center justify-between gap-2 pb-1.5">
+                                                            <div class="flex items-center space-x-2.5 min-w-0">
+                                                                <button type="button"
+                                                                        onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
+                                                                        class="w-5 h-5 rounded-lg border flex items-center justify-center text-xs font-bold transition shrink-0 ${task.completed ? 'bg-[#92A491] border-[#92A491] text-white' : 'border-[#E3C7A5] bg-white text-transparent hover:border-[#D99E87]'}"
+                                                                        title="Mark complete">
+                                                                    ✓
+                                                                </button>
+                                                                <h4 class="font-heading text-base font-bold text-[#202124] truncate ${task.completed ? 'line-through text-stone-400' : ''}">
+                                                                    ${escapeHTML(task.name)}
+                                                                </h4>
+                                                            </div>
+                                                            <!-- Status Badge with Interactive Dropdown -->
+                                                            <div class="relative inline-block" data-label-menu-container>
+                                                                <button type="button"
+                                                                        onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${task.id}', event);"
+                                                                        class="px-3 py-0.5 rounded-full text-xs font-bold bg-[#E8ECF1] text-[#7B96A6] shrink-0 cursor-pointer hover:opacity-90 transition flex items-center space-x-1"
+                                                                        title="Change priority: Now or Later">
+                                                                    <span>Later</span>
+                                                                    <span class="text-[9px] opacity-75">▾</span>
+                                                                </button>
+                                                                ${activeLabelMenuTaskId === task.id ? `
+                                                                    <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-[#E3C7A5] rounded-xl shadow-lg py-1 w-28 text-xs font-semibold overflow-hidden"
+                                                                         onclick="event.stopPropagation();">
+                                                                        <button type="button"
+                                                                                onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Now');"
+                                                                                class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124]">
+                                                                            <span>Now</span>
+                                                                        </button>
+                                                                        <button type="button"
+                                                                                onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Later');"
+                                                                                class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] font-bold text-[#7B96A6]">
+                                                                            <span>Later</span>
+                                                                            <span>✓</span>
+                                                                        </button>
+                                                                    </div>
+                                                                ` : ''}
+                                                            </div>
                                                         </div>
-                                                    ` : ''}
-
-                                                    <!-- Bottom Action Row -->
-                                                    <div class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-                                                        <div class="flex items-center space-x-2">
-                                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${task.completed ? 'bg-emerald-100 text-emerald-800' : (task.isInProgress ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-600')}">
-                                                                ${task.completed ? ('✓ ' + (window.t ? window.t('workspace.completed', {}, 'Completed') : 'Completed')) : (task.isInProgress ? ('● ' + (window.t ? window.t('workspace.inProgress', {}, 'In progress') : 'In progress')) : (window.t ? window.t('workspace.notStarted', {}, 'Not started') : 'Not started'))}
-                                                            </span>
-                                                        </div>
-
-                                                        <div class="flex items-center space-x-2">
-                                                            <button type="button" 
-                                                                    onclick="event.stopPropagation(); window.TempoPlanWorkspace.startTaskFocus('${task.id}')"
-                                                                    class="btn-primary px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-xs inline-flex items-center space-x-1 transition">
-                                                                <span>${task.isInProgress ? (window.t ? window.t('workspace.continueFocus', {}, 'Continue Focus') : 'Continue Focus') : (window.t ? window.t('workspace.start', {}, 'Start') : 'Start')}</span>
-                                                                <span>→</span>
-                                                            </button>
+                                                        <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
+                                                            <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
+                                                            <div>${compSubCount}/${subCount} subtasks</div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             `;
                                         }).join('')}
                                     </div>
+                                </div>
+                            ` : ''}
 
-                                    <!-- Add another task button -->
-                                    <button onclick="window.TempoPlanWorkspace.openAddTaskModal()"
-                                            class="w-full py-2.5 rounded-xl border border-dashed border-stone-300 hover:border-[#FF6B2C] text-xs font-semibold text-stone-600 hover:text-[#FF6B2C] bg-[#FFFDFB] hover:bg-white transition flex items-center justify-center space-x-1">
-                                        <span>${window.t ? window.t('workspace.addAnotherTask', {}, '+ Add another task to this plan') : '+ Add another task to this plan'}</span>
+                            <!-- DONE SECTION: Only rendered when tasks are completed -->
+                            ${allCompleted.length > 0 ? `
+                                <div class="pt-4 border-t border-[#EEE9E7] space-y-3.5" data-tempo-ui="done-section">
+                                    <h3 class="font-heading font-extrabold text-base sm:text-lg text-[#92A491] flex items-center space-x-2">
+                                        <span>Done</span>
+                                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E8EFE8] text-[#556B54]">(${allCompleted.length})</span>
+                                    </h3>
+                                    <div class="space-y-3">
+                                        ${allCompleted.map(item => {
+                                            const task = item.task;
+                                            const isSelected = selectedTaskId === task.id;
+                                            const subCount = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
+                                            const compSubCount = Array.isArray(task.subtasks) ? task.subtasks.filter(s => s.completed).length : 0;
+                                            const startTime = item.startTime;
+                                            const endTime = item.endTime;
+
+                                            return `
+                                                <div class="flex items-center gap-3 sm:gap-4 opacity-80 hover:opacity-100 transition" data-task-row="${task.id}">
+                                                    <div class="w-16 sm:w-20 text-center shrink-0 flex flex-col items-center justify-center text-xs font-bold text-[#92A491] leading-tight">
+                                                        ${startTime && endTime ? `
+                                                            <span>${formatTime12H(startTime)}</span>
+                                                            <span class="my-0.5">|</span>
+                                                            <span>${formatTime12H(endTime)}</span>
+                                                        ` : `
+                                                            <span>--</span>
+                                                        `}
+                                                    </div>
+                                                    <div class="flex-1 min-w-0 bg-[#FDFBF6] hover:bg-white border ${isSelected ? 'border-2 border-[#92A491]' : 'border-[#E3C7A5]'} rounded-2xl p-4 sm:p-5 transition shadow-2xs cursor-pointer"
+                                                         onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
+                                                        <div class="flex items-center justify-between gap-2 pb-1.5">
+                                                            <div class="flex items-center space-x-2.5 min-w-0">
+                                                                <button type="button"
+                                                                        onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
+                                                                        class="w-5 h-5 rounded-lg border bg-[#92A491] border-[#92A491] text-white flex items-center justify-center text-xs font-bold transition shrink-0"
+                                                                        title="Mark incomplete">
+                                                                    ✓
+                                                                </button>
+                                                                <h4 class="font-heading text-base font-bold text-stone-400 line-through truncate">
+                                                                    ${escapeHTML(task.name)}
+                                                                </h4>
+                                                            </div>
+                                                            <span class="px-3 py-0.5 rounded-full text-xs font-bold bg-[#E8EFE8] text-[#556B54] shrink-0">
+                                                                Done
+                                                            </span>
+                                                        </div>
+                                                        <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
+                                                            <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
+                                                            <div>${compSubCount}/${subCount} subtasks</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Vertical Column Divider -->
+                    <div class="hidden lg:block w-px bg-[#EFF3F6] self-stretch my-2"></div>
+
+                    <!-- RIGHT COLUMN: Selected Task Details -->
+                    <div class="w-full lg:w-[48%] lg:sticky lg:top-20">
+                        ${selectedTask ? `
+                            <div class="bg-[#FDFBF6] border border-[#E3C7A5] rounded-3xl p-6 sm:p-7 space-y-4 shadow-sm" data-tempo-ui="selected-task-card">
+                                <!-- Schedule Header -->
+                                <div class="text-xs sm:text-sm font-bold text-[#D9A18B] tracking-wide">
+                                    ${escapeHTML(detailScheduleStr)}
+                                </div>
+
+                                <!-- Title and Badge -->
+                                <div class="flex items-center justify-between gap-3 pb-1">
+                                    <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] ${selectedTask.completed ? 'line-through text-stone-400' : ''}">
+                                        ${escapeHTML(selectedTask.name)}
+                                    </h2>
+                                    <!-- Status Badge with Interactive Dropdown -->
+                                    <div class="relative inline-block" data-label-menu-container>
+                                        <button type="button"
+                                                ${selectedBadgeLabel === 'Done' ? '' : `onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${selectedTask.id}', event);"`}
+                                                class="px-3 py-0.5 rounded-full text-xs font-bold ${selectedBadgeLabel === 'Now' ? 'bg-[#D99E87] text-white' : (selectedBadgeLabel === 'Done' ? 'bg-[#92A491] text-white' : 'bg-[#E8ECF1] text-[#7B96A6]')} shrink-0 ${selectedBadgeLabel !== 'Done' ? 'cursor-pointer hover:opacity-90 transition flex items-center space-x-1' : ''}"
+                                                title="${selectedBadgeLabel === 'Done' ? 'Completed task' : 'Change priority: Now or Later'}">
+                                            <span>${selectedBadgeLabel}</span>
+                                            ${selectedBadgeLabel !== 'Done' ? '<span class="text-[9px] opacity-75">▾</span>' : ''}
+                                        </button>
+                                        ${activeLabelMenuTaskId === selectedTask.id && selectedBadgeLabel !== 'Done' ? `
+                                            <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-[#E3C7A5] rounded-xl shadow-lg py-1 w-28 text-xs font-semibold overflow-hidden"
+                                                 onclick="event.stopPropagation();">
+                                                <button type="button"
+                                                        onclick="window.TempoPlanWorkspace.setTaskLabel('${selectedTask.id}', 'Now');"
+                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${selectedBadgeLabel === 'Now' ? 'font-bold text-[#D99E87]' : ''}">
+                                                    <span>Now</span>
+                                                    ${selectedBadgeLabel === 'Now' ? '<span>✓</span>' : ''}
+                                                </button>
+                                                <button type="button"
+                                                        onclick="window.TempoPlanWorkspace.setTaskLabel('${selectedTask.id}', 'Later');"
+                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${selectedBadgeLabel === 'Later' ? 'font-bold text-[#7B96A6]' : ''}">
+                                                    <span>Later</span>
+                                                    ${selectedBadgeLabel === 'Later' ? '<span>✓</span>' : ''}
+                                                </button>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+
+                                <!-- Due Date Row -->
+                                <div class="flex items-center space-x-2 text-xs sm:text-sm text-[#6F6B68]">
+                                    <span>Due: ${formatDeadline(selectedTask.deadlineDate || selectedTask.deadline, selectedTask.deadlineTime)}</span>
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.toggleDeadlineEdit()"
+                                            class="text-[#D99E87] font-semibold hover:underline cursor-pointer">
+                                        ${isEditingDeadline ? 'Cancel' : 'Edit due day'}
                                     </button>
                                 </div>
-                            `;
-                        }).join('')}
 
-                        <!-- NOT SCHEDULED YET (UNARRANGED SECTION) -->
-                        <div class="space-y-4 pt-4 border-t border-gray-200">
-                            <div class="flex items-center justify-between pb-1">
-                                <h3 class="font-heading text-xs font-bold uppercase tracking-wider text-[#6F6B68]">
-                                    ${window.t ? window.t('workspace.notScheduledYet', {}, 'NOT SCHEDULED YET') : 'NOT SCHEDULED YET'}
-                                </h3>
-                                <span class="text-[11px] font-medium text-[#6F6B68]">
-                                    ${unarrangedTasks.filter(t => !t.completed).length} ${window.t ? window.t('workspace.unscheduled', {}, 'unscheduled') : 'unscheduled'}
-                                </span>
-                            </div>
-
-                            ${unarrangedTasks.filter(t => !t.completed).length === 0 ? `
-                                <div class="p-4 bg-stone-50 border border-dashed border-[#EAE4DF] rounded-2xl text-center text-xs text-[#8E8A85]">
-                                    ${window.t ? window.t('workspace.allActiveScheduled', {}, 'All active tasks have been placed into your schedule.') : 'All active tasks have been placed into your schedule.'}
-                                </div>
-                            ` : `
-                                <div class="space-y-3">
-                                    ${unarrangedTasks.filter(t => !t.completed).map(task => `
-                                        <div class="p-4 rounded-2xl border border-stone-200 bg-white hover:border-[#FF6B2C]/50 transition flex items-center justify-between gap-3 shadow-xs cursor-pointer"
-                                             onclick="window.TempoPlanWorkspace.selectTask('${task.id}')">
-                                            <div class="min-w-0 pr-2">
-                                                <h4 class="font-bold text-sm text-[#202124] truncate">${escapeHTML(task.name)}</h4>
-                                                <div class="flex items-center space-x-2 text-[11px] text-[#6F6B68] pt-0.5">
-                                                    <span>${window.t ? window.t('workspace.estimate', {}, 'Estimate:') : 'Estimate:'} ~${task.durationLabel || (window.t ? window.t('modes.default.flexible', {}, 'Flexible') : 'Flexible')}</span>
-                                                    <span>•</span>
-                                                    <span>${window.t ? window.t('workspace.due', {}, 'Due:') : 'Due:'} ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
-                                                </div>
+                                <!-- Inline Deadline Editor -->
+                                ${isEditingDeadline ? `
+                                    <div class="p-3 bg-white border border-[#E3C7A5] rounded-xl space-y-2 text-xs">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Date</label>
+                                                <input id="pw-edit-deadline-date" type="date" value="${selectedTask.deadlineDate || (selectedTask.deadline ? selectedTask.deadline.split(' ')[0] : '')}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                             </div>
-                                            <button type="button" 
-                                                    onclick="event.stopPropagation(); window.TempoPlanWorkspace.openRescheduleModal('${task.id}')"
-                                                    class="btn-primary px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-xs shrink-0 transition">
-                                                ${window.t ? window.t('workspace.scheduleTask', {}, 'Schedule task →') : 'Schedule task →'}
+                                            <div>
+                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Time</label>
+                                                <input id="pw-edit-deadline-time" type="time" value="${selectedTask.deadlineTime || (selectedTask.deadline ? selectedTask.deadline.split(' ')[1] : '23:59')}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <input id="pw-edit-no-deadline" type="checkbox" ${!selectedTask.hasDeadline ? 'checked' : ''} class="rounded text-[#D99E87]">
+                                            <label for="pw-edit-no-deadline" class="text-xs text-stone-700">No fixed deadline</label>
+                                        </div>
+                                        <div class="flex justify-end pt-1">
+                                            <button type="button"
+                                                    onclick="window.TempoPlanWorkspace.saveDeadlineEdit('${selectedTask.id}')"
+                                                    class="px-3 py-1 bg-[#D99E87] text-white rounded-lg text-xs font-bold hover:bg-[#C98E77]">
+                                                Save deadline
                                             </button>
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                <!-- Subtasks Count Row -->
+                                <div class="flex items-center space-x-2 text-xs sm:text-sm text-[#6F6B68]">
+                                    <span>${selectedCompletedSubtasks}/${selectedSubtaskCount} subtasks</span>
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.openBreakTaskModal('${selectedTask.id}')"
+                                            class="text-[#D99E87] font-semibold hover:underline cursor-pointer">
+                                        Edit subtask
+                                    </button>
+                                </div>
+
+                                <!-- Subtask List with Custom Scrollbar -->
+                                <div class="max-h-40 overflow-y-auto space-y-2 pr-2 plan-custom-scroll">
+                                    ${(selectedTask.subtasks || []).map(step => `
+                                        <div class="flex items-center space-x-2.5 text-xs sm:text-sm text-[#4A4540]">
+                                            <button type="button"
+                                                    onclick="window.TempoPlanWorkspace.toggleSubtask('${selectedTask.id}', '${step.id}')"
+                                                    class="w-4 h-4 rounded border border-[#E3C7A5] flex items-center justify-center text-[10px] font-bold transition shrink-0 ${step.completed ? 'bg-[#92A491] border-[#92A491] text-white' : 'bg-white border-[#E3C7A5] text-transparent hover:border-[#D99E87]'}"
+                                                    title="Toggle subtask">
+                                                ✓
+                                            </button>
+                                            <span class="${step.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(step.title)}</span>
                                         </div>
                                     `).join('')}
                                 </div>
-                            `}
-                        </div>
 
-                        <!-- COMPLETED TASKS COLLAPSIBLE SECTION -->
-                        ${allCompleted.length > 0 ? `
-                            <div class="pt-4 border-t border-gray-200">
-                                <details class="group bg-white border border-[#EAE4DF] rounded-2xl p-4 transition-all">
-                                    <summary class="flex items-center justify-between cursor-pointer font-heading text-xs font-bold text-[#6F6B68] uppercase tracking-wider select-none">
-                                        <span class="flex items-center space-x-2">
-                                            <span>✓</span>
-                                            <span>${window.t ? window.t('common.done', {}, 'COMPLETED') : 'COMPLETED'} (${allCompleted.length})</span>
-                                        </span>
-                                        <span class="text-xs group-open:rotate-180 transition-transform">▼</span>
-                                    </summary>
-                                    <div class="pt-3 space-y-2">
-                                        ${allCompleted.map(task => `
-                                            <div class="p-2.5 bg-stone-50 rounded-xl border border-stone-200 flex items-center justify-between text-xs opacity-75">
-                                                <div class="flex items-center space-x-2 min-w-0">
-                                                    <span class="text-emerald-600 font-bold">✓</span>
-                                                    <span class="line-through text-stone-500 font-medium truncate">${escapeHTML(task.name)}</span>
-                                                </div>
-                                                <button type="button" 
-                                                        onclick="window.TempoPlanWorkspace.toggleTaskComplete('${task.id}', event)"
-                                                        class="text-[11px] text-stone-500 hover:text-[#202124] underline">
-                                                    ${window.t ? window.t('workspace.undo', {}, 'Undo') : 'Undo'}
-                                                </button>
-                                            </div>
-                                        `).join('')}
+                                <!-- Note Row -->
+                                ${selectedNoteText ? `
+                                    <div class="text-xs sm:text-sm text-[#4A4540] pt-1 flex items-start justify-between gap-2 bg-[#F6F4EE]/60 border border-[#EAE4DF] rounded-xl p-2.5">
+                                        <div class="min-w-0 flex-1">
+                                            <strong class="text-[#D9A18B]">Note:</strong> <span class="whitespace-pre-line text-[#4A4540]">${escapeHTML(selectedNoteText)}</span>
+                                        </div>
+                                        <button type="button"
+                                                onclick="window.TempoPlanWorkspace.openNoteEditor('${selectedTask.id}')"
+                                                class="text-[#D99E87] hover:text-[#C98E77] text-xs font-semibold shrink-0 cursor-pointer flex items-center space-x-1"
+                                                title="Edit note">
+                                            <span>Edit note</span>
+                                            <span>✎</span>
+                                        </button>
                                     </div>
-                                </details>
+                                ` : `
+                                    <div class="pt-1">
+                                        <button type="button"
+                                                onclick="window.TempoPlanWorkspace.openNoteEditor('${selectedTask.id}')"
+                                                class="text-xs font-bold text-[#D9A18B] hover:underline cursor-pointer flex items-center space-x-1">
+                                            <span>+ Create a note</span>
+                                        </button>
+                                    </div>
+                                `}
+
+                                <!-- Action Buttons (2x2 grid) -->
+                                <div class="grid grid-cols-2 gap-3 pt-3">
+                                    <!-- 1. Mark as done -->
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.toggleTaskComplete('${selectedTask.id}')"
+                                            class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#92A491] hover:bg-[#829381] shadow-2xs transition text-center cursor-pointer">
+                                        ${selectedTask.completed ? 'Mark as active' : 'Mark as done'}
+                                    </button>
+
+                                    <!-- 2. Focus now -->
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.startTaskFocus('${selectedTask.id}')"
+                                            class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D7A690] hover:bg-[#C98E77] shadow-2xs transition flex items-center justify-center space-x-1.5 cursor-pointer">
+                                        <span>▶ Focus now</span>
+                                    </button>
+
+                                    <!-- 3. Reschedule -->
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.openRescheduleModal('${selectedTask.id}')"
+                                            class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-[#3A4B3D] bg-white border border-[#8D9B8A] hover:bg-stone-50 transition text-center cursor-pointer">
+                                        Reschedule
+                                    </button>
+
+                                    <!-- 4. Clear this task -->
+                                    <button type="button"
+                                            onclick="window.TempoPlanWorkspace.promptClearTask('${selectedTask.id}')"
+                                            class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-[#C53B27] bg-white border border-[#D99E87] hover:bg-rose-50/40 transition text-center cursor-pointer">
+                                        Clear this task
+                                    </button>
+                                </div>
                             </div>
-                        ` : ''}
+                        ` : `
+                            <div class="bg-[#FDFBF6] border border-[#E3C7A5] rounded-3xl p-8 text-center text-xs text-[#6F6B68] space-y-2">
+                                <div class="font-bold text-[#202124] text-sm">No task selected</div>
+                                <p>Select a task on the left or click "Add task" above.</p>
+                            </div>
+                        `}
                     </div>
-
-                    <!-- TASK DETAIL DRAWER COLUMN (Desktop side drawer / Mobile modal) -->
-                    ${isDrawerOpen && selectedTask ? `
-                        <div id="plan-workspace-drawer" data-tempo-ui="plan-drawer" class="lg:col-span-5 fixed inset-0 z-50 bg-black/40 lg:bg-transparent lg:static lg:z-auto flex justify-end">
-                            <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 space-y-5 shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto lg:sticky lg:top-24">
-                                <!-- Drawer Header -->
-                                <div class="flex items-center justify-between pb-3 border-b border-gray-100">
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-sm font-bold tracking-widest text-gray-400">⋮⋮</span>
-                                        <h3 class="font-heading text-base font-bold text-[#202124]">${window.t ? window.t('workspace.editTask', {}, 'Edit Task') : 'Edit Task'}</h3>
-                                    </div>
-                                    <button onclick="window.TempoPlanWorkspace.closeDrawer()" 
-                                            class="text-gray-400 hover:text-gray-600 p-1 text-sm font-bold"
-                                            title="Close drawer">✕</button>
-                                </div>
-
-                                <!-- Task Title & Completion -->
-                                <div class="space-y-2">
-                                    <div class="flex items-start space-x-3">
-                                        <button type="button" 
-                                                onclick="window.TempoPlanWorkspace.toggleTaskComplete('${selectedTask.id}', event)"
-                                                class="w-6 h-6 rounded-lg border mt-0.5 flex items-center justify-center text-xs font-bold transition shrink-0 ${selectedTask.completed ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300 hover:border-[#FF6B2C] bg-white text-transparent'}">
-                                            ✓
-                                        </button>
-                                        <div class="flex-1">
-                                            <input id="pw-drawer-task-name" 
-                                                   type="text" 
-                                                   value="${escapeHTML(selectedTask.name)}"
-                                                   onblur="window.TempoPlanWorkspace.updateTaskName('${selectedTask.id}', this.value)"
-                                                   class="font-heading text-lg font-bold text-[#202124] w-full px-2 py-1 border border-transparent hover:border-gray-200 focus:border-[#FF6B2C] rounded-lg focus:outline-none">
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center space-x-2 pl-9 text-xs">
-                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${selectedTask.completed ? 'bg-emerald-100 text-emerald-800' : (selectedTask.isInProgress ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-700')}">
-                                            ${selectedTask.completed ? (window.t ? window.t('workspace.completed', {}, 'COMPLETED') : 'COMPLETED') : (selectedTask.isInProgress ? (window.t ? window.t('workspace.inProgress', {}, 'IN PROGRESS') : 'IN PROGRESS') : (window.t ? window.t('workspace.notStarted', {}, 'NOT STARTED') : 'NOT STARTED'))}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- SCHEDULED TIME -->
-                                <div class="p-3.5 bg-stone-50 rounded-2xl space-y-1.5 border border-stone-100 text-xs">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.scheduledUpper', {}, 'SCHEDULED') : 'SCHEDULED'}</span>
-                                        <button onclick="window.TempoPlanWorkspace.openRescheduleModal('${selectedTask.id}')"
-                                                class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            ${window.t ? window.t('workspace.reschedule', {}, 'Reschedule') : 'Reschedule'}
-                                        </button>
-                                    </div>
-                                    <p class="font-bold text-stone-800">
-                                        ${selectedPlanItem && (selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime) && (selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime) ? 
-                                            `${selectedPlanItem.dayLabel || selectedPlanItem.dayDate} · ${selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime} – ${selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime}` : 
-                                            (window.t ? window.t('workspace.notScheduledYetDesc', {}, 'Not scheduled yet') : 'Not scheduled yet')}
-                                    </p>
-                                </div>
-
-                                <!-- DEADLINE (INLINE EDIT) -->
-                                <div class="p-3.5 bg-stone-50 rounded-2xl space-y-2 border border-stone-100 text-xs">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.deadlineUpper', {}, 'DEADLINE') : 'DEADLINE'}</span>
-                                        <button onclick="window.TempoPlanWorkspace.toggleDeadlineEdit()"
-                                                class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            ${isEditingDeadline ? (window.t ? window.t('common.cancel', {}, 'Cancel') : 'Cancel') : (window.t ? window.t('common.edit', {}, 'Edit') : 'Edit')}
-                                        </button>
-                                    </div>
-
-                                    ${!isEditingDeadline ? `
-                                        <p class="font-bold text-stone-800">
-                                            ${formatDeadline(selectedTask.deadlineDate || selectedTask.deadline, selectedTask.deadlineTime)}
-                                        </p>
-                                    ` : `
-                                        <div class="space-y-2 pt-1">
-                                            <div class="grid grid-cols-2 gap-2">
-                                                <div>
-                                                    <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Date</label>
-                                                    <input id="pw-edit-deadline-date" type="date" value="${selectedTask.deadlineDate || (selectedTask.deadline ? selectedTask.deadline.split(' ')[0] : '')}"
-                                                           class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
-                                                </div>
-                                                <div>
-                                                    <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Time</label>
-                                                    <input id="pw-edit-deadline-time" type="time" value="${selectedTask.deadlineTime || (selectedTask.deadline ? selectedTask.deadline.split(' ')[1] : '23:59')}"
-                                                           class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center space-x-2">
-                                                <input id="pw-edit-no-deadline" type="checkbox" ${!selectedTask.hasDeadline ? 'checked' : ''}
-                                                       class="rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                                                <label for="pw-edit-no-deadline" class="text-xs text-stone-700">${window.t ? window.t('workspace.noFixedDeadline', {}, 'No fixed deadline') : 'No fixed deadline'}</label>
-                                            </div>
-                                            <div class="flex justify-end space-x-2 pt-1">
-                                                <button onclick="window.TempoPlanWorkspace.saveDeadlineEdit('${selectedTask.id}')"
-                                                        class="btn-primary px-3 py-1 rounded-lg text-xs font-bold">
-                                                    ${window.t ? window.t('workspace.saveDeadline', {}, 'Save deadline') : 'Save deadline'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    `}
-                                </div>
-
-                                <!-- ESTIMATE -->
-                                <div class="p-3.5 bg-stone-50 rounded-2xl space-y-1.5 border border-stone-100 text-xs">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400">${window.t ? window.t('workspace.estimateUpper', {}, 'ESTIMATE') : 'ESTIMATE'}</span>
-                                        <button onclick="window.TempoPlanWorkspace.openEstimateEdit('${selectedTask.id}')"
-                                                class="text-xs font-semibold text-[#FF6B2C] hover:underline">
-                                            ${window.t ? window.t('common.edit', {}, 'Edit') : 'Edit'}
-                                        </button>
-                                    </div>
-                                    <p class="font-bold text-stone-800">
-                                        ~${selectedTask.durationLabel || (window.t ? window.t('workspace.flexibleFocusedWork', {}, 'Flexible focused work') : 'Flexible focused work')}
-                                    </p>
-                                </div>
-
-                                <!-- ACTION STEPS (SUBTASKS) -->
-                                <div class="space-y-2 pt-2">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-xs font-bold text-[#202124] uppercase tracking-wider">
-                                            ${window.t ? window.t('workspace.actionStepsUpper', {}, 'ACTION STEPS') : 'ACTION STEPS'} (${selectedTask.subtasks ? selectedTask.subtasks.length : 0})
-                                        </span>
-                                    </div>
-
-                                    <div class="space-y-2">
-                                        ${(selectedTask.subtasks || []).map((step, sIdx) => `
-                                            <div class="p-2.5 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl flex items-center justify-between gap-2 text-xs">
-                                                <div class="flex items-center space-x-2 min-w-0">
-                                                    <span class="text-gray-300 font-bold text-xs select-none">⋮⋮</span>
-                                                    <button type="button" 
-                                                            onclick="window.TempoPlanWorkspace.toggleSubtask('${selectedTask.id}', '${step.id}')"
-                                                            class="w-4 h-4 rounded border flex items-center justify-center text-[10px] font-bold transition shrink-0 ${step.completed ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300 text-transparent'}">
-                                                        ✓
-                                                    </button>
-                                                    <span class="font-medium text-[#202124] truncate ${step.completed ? 'line-through text-stone-400' : ''}">
-                                                        ${escapeHTML(step.title)}
-                                                    </span>
-                                                </div>
-                                                <div class="flex items-center space-x-1.5 shrink-0">
-                                                    <span class="text-[10px] font-semibold text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
-                                                        ${step.durationMinutes || 15}m
-                                                    </span>
-                                                    <button onclick="window.TempoPlanWorkspace.removeSubtask('${selectedTask.id}', '${step.id}')"
-                                                            class="text-stone-400 hover:text-rose-600 px-1 text-xs">✕</button>
-                                                </div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-
-                                    <!-- Add Step Input -->
-                                    <div class="flex items-center gap-2 pt-1">
-                                        <input id="pw-new-subtask-title" type="text" placeholder="${window.t ? window.t('workspace.addNextStep', {}, 'Add next step...') : 'Add next step...'}"
-                                               onkeydown="if(event.key === 'Enter') window.TempoPlanWorkspace.addSubtask('${selectedTask.id}')"
-                                               class="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
-                                        <button onclick="window.TempoPlanWorkspace.addSubtask('${selectedTask.id}')"
-                                                class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold shrink-0">
-                                            ${window.t ? window.t('workspace.add', {}, '+ Add') : '+ Add'}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- DRAWER ACTIONS FOOTER -->
-                                <div class="pt-4 border-t border-gray-100 flex flex-col gap-2.5">
-                                    <button onclick="window.TempoPlanWorkspace.startTaskFocus('${selectedTask.id}')"
-                                            class="btn-primary w-full py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-1.5">
-                                        <span>▶ ${window.t ? window.t('workspace.startFocusOnTask', {}, 'Start Focus on this task') : 'Start Focus on this task'}</span>
-                                    </button>
-
-                                    <button onclick="window.TempoPlanWorkspace.removeTask('${selectedTask.id}')"
-                                            class="w-full py-2 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition">
-                                        ${window.t ? window.t('workspace.removeFromPlan', {}, 'Remove from plan') : 'Remove from plan'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
                 </div>
             </div>
 
-            <!-- MODALS -->
+            <!-- Modals Container -->
             ${renderModalsHTML(plan)}
         `;
     }
 
-    /**
+
+        /**
      * Render Modals (Add Task, Prompt, Reschedule, Adjust Availability)
      */
     function renderModalsHTML(plan) {
@@ -1718,6 +2478,191 @@ window.TempoPlanWorkspace = (function() {
             `;
         }
 
+        if (activeModal === 'clear-task-confirm') {
+            return `
+                <div id="modal-clear-task-confirm"
+                     onclick="if (event.target === this) window.TempoPlanWorkspace.closeClearTaskConfirm();"
+                     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="clear-task-title">
+                    <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full relative">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.closeClearTaskConfirm()"
+                                class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                                title="Close"
+                                aria-label="Close">✕</button>
+                        <div class="space-y-2 pr-6">
+                            <h3 id="clear-task-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Clear this task?</h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                                This task will be removed from your Working Plan. This action cannot be undone.
+                            </p>
+                        </div>
+                        <div class="flex items-center justify-end space-x-3 pt-2">
+                            <button type="button"
+                                    onclick="window.TempoPlanWorkspace.closeClearTaskConfirm()"
+                                    class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
+                                Cancel
+                            </button>
+                            <button type="button"
+                                    id="btn-confirm-clear-task"
+                                    ${isActionProcessing ? 'disabled' : ''}
+                                    onclick="window.TempoPlanWorkspace.executeClearTask()"
+                                    class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#C53B27] hover:bg-[#B03422] text-white shadow-sm transition cursor-pointer inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                Clear task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (activeModal === 'delete-plan-confirm') {
+            return `
+                <div id="modal-delete-plan-confirm"
+                     onclick="if (event.target === this) window.TempoPlanWorkspace.closeDeletePlanConfirm();"
+                     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="delete-plan-title">
+                    <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full relative">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.closeDeletePlanConfirm()"
+                                class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                                title="Close"
+                                aria-label="Close">✕</button>
+                        <div class="space-y-2 pr-6">
+                            <h3 id="delete-plan-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Delete your plan?</h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                                This will permanently delete your Working Plan and its scheduled tasks. This action cannot be undone.
+                            </p>
+                        </div>
+                        <div class="flex items-center justify-end space-x-3 pt-2">
+                            <button type="button"
+                                    onclick="window.TempoPlanWorkspace.closeDeletePlanConfirm()"
+                                    class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
+                                Cancel
+                            </button>
+                            <button type="button"
+                                    id="btn-confirm-delete-plan"
+                                    ${isActionProcessing ? 'disabled' : ''}
+                                    onclick="window.TempoPlanWorkspace.executeDeletePlan()"
+                                    class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#C53B27] hover:bg-[#B03422] text-white shadow-sm transition cursor-pointer inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                Delete my plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (activeModal === 'deadline-plan-reorder-confirm') {
+            return `
+                <div id="modal-deadline-reorder-confirm"
+                     onclick="if (event.target === this) window.TempoPlanWorkspace.cancelDeadlineConfirm();"
+                     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="deadline-reorder-title">
+                    <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full relative">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.cancelDeadlineConfirm()"
+                                class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                                title="Close"
+                                aria-label="Close">✕</button>
+                        <div class="space-y-2 pr-6">
+                            <h3 id="deadline-reorder-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Update your plan?</h3>
+                            <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                                Changing this deadline may affect the order of your tasks. Would you like Tempo to adjust your task priorities and reorganize your plan?
+                            </p>
+                        </div>
+                        <div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 sm:space-x-3 pt-2">
+                            <button type="button"
+                                    id="btn-keep-current-priorities"
+                                    onclick="window.TempoPlanWorkspace.confirmDeadlineWithoutReorder()"
+                                    class="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition cursor-pointer text-center">
+                                Keep current priorities
+                            </button>
+                            <button type="button"
+                                    id="btn-confirm-update-plan"
+                                    onclick="window.TempoPlanWorkspace.confirmDeadlineWithReorder()"
+                                    class="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D99E87] hover:bg-[#C98E77] text-white shadow-sm transition cursor-pointer text-center">
+                                Yes, update my plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (activeModal === 'edit-task-note') {
+            const noteTaskId = pendingNoteTaskId || selectedTaskId;
+            const currentPlan = getActivePlan();
+            let targetTask = null;
+            if (currentPlan && currentPlan.plannedTasks) {
+                const pt = currentPlan.plannedTasks.find(item => item.task && item.task.id === noteTaskId);
+                if (pt) targetTask = pt.task;
+            }
+            if (!targetTask && currentPlan && currentPlan.unarrangedTasks) {
+                targetTask = currentPlan.unarrangedTasks.find(t => t.id === noteTaskId);
+            }
+            const savedNoteObj = window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(noteTaskId) : null;
+            const existingNoteText = savedNoteObj ? savedNoteObj.text : (targetTask && targetTask.note && targetTask.note !== 'Create a sheet to manage references' ? targetTask.note : '');
+
+            return `
+                <div id="modal-edit-task-note"
+                     onclick="if (event.target === this) window.TempoPlanWorkspace.closeModal();"
+                     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="note-editor-title">
+                    <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-2xl max-w-md w-full relative">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.closeModal()"
+                                class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                                title="Close"
+                                aria-label="Close">✕</button>
+                        <div class="space-y-1 pr-6">
+                            <h3 id="note-editor-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
+                                ${existingNoteText ? 'Edit Task Note' : 'Create Task Note'}
+                            </h3>
+                            <p class="text-xs text-[#6F6B68]">
+                                Note for <strong class="text-[#202124]">${escapeHTML(targetTask ? targetTask.name : 'Task')}</strong>
+                            </p>
+                        </div>
+                        <div class="space-y-2">
+                            <textarea id="pw-note-editor-text"
+                                      rows="4"
+                                      placeholder="Add notes, links, or context for this task..."
+                                      class="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#D99E87] focus:border-transparent text-[#202124] resize-y">${escapeHTML(existingNoteText)}</textarea>
+                        </div>
+                        <div class="flex items-center justify-between pt-2">
+                            ${existingNoteText ? `
+                                <button type="button"
+                                        onclick="window.TempoPlanWorkspace.deleteNote('${noteTaskId}')"
+                                        class="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline cursor-pointer">
+                                    Delete note
+                                </button>
+                            ` : '<div></div>'}
+                            <div class="flex items-center space-x-2">
+                                <button type="button"
+                                        onclick="window.TempoPlanWorkspace.closeModal()"
+                                        class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:bg-stone-100 transition cursor-pointer">
+                                    Cancel
+                                </button>
+                                <button type="button"
+                                        id="btn-save-task-note"
+                                        onclick="window.TempoPlanWorkspace.saveNote('${noteTaskId}')"
+                                        class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D99E87] hover:bg-[#C98E77] text-white shadow-sm transition cursor-pointer">
+                                    Save note
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         return '';
     }
 
@@ -1845,7 +2790,37 @@ window.TempoPlanWorkspace = (function() {
         });
     }
 
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            if (activeModal === 'clear-task-confirm') {
+                closeClearTaskConfirm();
+            } else if (activeModal === 'delete-plan-confirm') {
+                closeDeletePlanConfirm();
+            } else if (activeModal === 'deadline-plan-reorder-confirm') {
+                cancelDeadlineConfirm();
+            } else if (activeModal === 'edit-task-note') {
+                closeModal();
+            }
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (activeLabelMenuTaskId) {
+            const insideMenu = e.target && e.target.closest && e.target.closest('[data-label-menu-container]');
+            if (!insideMenu) {
+                activeLabelMenuTaskId = null;
+                render();
+            }
+        }
+    });
+
     return {
+        startAdjustPlan,
+        promptDeletePlan,
+        closeDeletePlanConfirm,
+        executeDeletePlan,
+        deletePlan,
+        toggleAddSubtaskInput,
         getActivePlan,
         open,
         render,
@@ -1859,6 +2834,9 @@ window.TempoPlanWorkspace = (function() {
         saveDeadlineEdit,
         saveTaskDeadline,
         openEstimateEdit,
+        promptClearTask,
+        closeClearTaskConfirm,
+        executeClearTask,
         removeTask,
         addSubtask,
         removeSubtask,
@@ -1890,6 +2868,20 @@ window.TempoPlanWorkspace = (function() {
         closeAdjustAvailabilityModal,
         addAvailabilityBlockInline,
         removeAvailabilityBlock,
-        updateTaskName
+        updateTaskName,
+        // Label & AI Replan
+        toggleLabelMenu,
+        setTaskLabel,
+        // Deadline Confirmation Modal
+        confirmDeadlineWithReorder,
+        confirmDeadlineWithoutReorder,
+        cancelDeadlineConfirm,
+        // Break Task
+        openBreakTaskModal,
+        // Task Notes
+        openNoteEditor,
+        saveNote,
+        deleteNote,
+        closeModal
     };
 })();

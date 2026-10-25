@@ -58,24 +58,43 @@ window.TempoMode = (function() {
     // Expanded task cards on Default Home
     let dmodeExpandedTaskIds = new Set();
 
-    function hasEstablishedContext() {
+    /**
+     * Resolves the user's persisted active context from localStorage.
+     * Checks account-isolated storage first, then global fallback.
+     */
+    function getUserPersistedActiveContext(specificUid) {
         try {
-            const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+            const uid = specificUid || (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null);
             if (uid) {
                 const userSaved = localStorage.getItem('tempo_user_established_context_' + uid);
-                if (userSaved === MODES.EMERGENCY || userSaved === MODES.RECOVERY) return true;
-                if (userSaved === MODES.DEFAULT) return false;
+                if (userSaved === MODES.EMERGENCY || userSaved === MODES.RECOVERY || userSaved === MODES.UNCLEAR) {
+                    return userSaved;
+                }
+                if (userSaved === MODES.DEFAULT) {
+                    return MODES.DEFAULT;
+                }
             }
 
             const savedEstablished = localStorage.getItem('tempo_established_context');
-            if (savedEstablished === MODES.EMERGENCY || savedEstablished === MODES.RECOVERY) return true;
-            if (savedEstablished === MODES.DEFAULT) return false;
+            if (savedEstablished === MODES.EMERGENCY || savedEstablished === MODES.RECOVERY || savedEstablished === MODES.UNCLEAR) {
+                return savedEstablished;
+            }
+            if (savedEstablished === MODES.DEFAULT) {
+                return MODES.DEFAULT;
+            }
 
             const savedMode = localStorage.getItem('tempo_current_mode');
-            if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY) return true;
+            if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY || savedMode === MODES.UNCLEAR) {
+                return savedMode;
+            }
         } catch (e) {}
 
-        return false;
+        return null;
+    }
+
+    function hasEstablishedContext() {
+        const ctx = getUserPersistedActiveContext();
+        return ctx === MODES.EMERGENCY || ctx === MODES.RECOVERY;
     }
 
     function init() {
@@ -97,6 +116,9 @@ window.TempoMode = (function() {
                 if (savedMode === MODES.EMERGENCY || savedMode === MODES.RECOVERY) {
                     activeContext = savedMode;
                     sourceContext = savedMode;
+                } else if (savedMode === MODES.UNCLEAR) {
+                    activeContext = MODES.UNCLEAR;
+                    sourceContext = getOriginatingMode() || 'entry';
                 } else {
                     activeContext = null;
                     sourceContext = 'entry';
@@ -108,19 +130,27 @@ window.TempoMode = (function() {
                 localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
             } else {
                 // Authenticated user: restore their established context or default to Entry Home
-                const established = userEstablished;
+                const established = getUserPersistedActiveContext(uid);
                 if (established === MODES.EMERGENCY) {
                     activeContext = MODES.EMERGENCY;
                     sourceContext = 'emergency';
                 } else if (established === MODES.RECOVERY) {
                     activeContext = MODES.RECOVERY;
                     sourceContext = 'recovery';
+                } else if (established === MODES.UNCLEAR || savedMode === MODES.UNCLEAR) {
+                    activeContext = MODES.UNCLEAR;
+                    sourceContext = getOriginatingMode() || 'entry';
                 } else {
                     // Authenticated user with no established active context -> Entry Home
                     activeContext = null;
                     sourceContext = 'entry';
                     localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
                 }
+            }
+
+            const savedOrigin = getOriginatingMode();
+            if (savedOrigin && (activeContext === MODES.UNCLEAR || activeSharedTool === 'ucheck')) {
+                sourceContext = savedOrigin;
             }
 
             const savedPendingIntent = localStorage.getItem('tempo_pending_intent');
@@ -142,6 +172,14 @@ window.TempoMode = (function() {
 
         // Synchronize active mode dashboard with strict mutual exclusivity
         renderActiveModeHome();
+
+        if (activeContext === MODES.RECOVERY) {
+            if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.shouldShowFirstTimeWelcome === 'function') {
+                if (window.TempoRecoverySetup.shouldShowFirstTimeWelcome()) {
+                    window.TempoRecoverySetup.open(1);
+                }
+            }
+        }
     }
 
     function bindEvents() {
@@ -181,6 +219,47 @@ window.TempoMode = (function() {
         return activeContext !== null;
     }
 
+    const UCHECK_ORIGIN_STORAGE_KEY = 'tempo_ucheck_originating_mode';
+
+    function setOriginatingMode(originMode) {
+        let normalized = null;
+        if (originMode === MODES.RECOVERY || originMode === 'recovery') {
+            normalized = 'recovery';
+        } else if (originMode === MODES.EMERGENCY || originMode === 'emergency' || originMode === 'urgent') {
+            normalized = 'emergency';
+        } else if (originMode === 'entry' || originMode === 'default' || originMode === MODES.DEFAULT) {
+            normalized = 'entry';
+        }
+        if (normalized) {
+            sourceContext = normalized;
+            try {
+                sessionStorage.setItem(UCHECK_ORIGIN_STORAGE_KEY, normalized);
+                localStorage.setItem(UCHECK_ORIGIN_STORAGE_KEY, normalized);
+            } catch (e) {}
+        }
+    }
+
+    function getOriginatingMode() {
+        let origin = null;
+        try {
+            origin = sessionStorage.getItem(UCHECK_ORIGIN_STORAGE_KEY) || localStorage.getItem(UCHECK_ORIGIN_STORAGE_KEY);
+        } catch (e) {}
+        if (!origin || origin === 'unclear') {
+            if (sourceContext && sourceContext !== 'unclear') {
+                origin = sourceContext;
+            }
+        }
+        if (origin === 'urgent') origin = 'emergency';
+        return (origin === 'recovery' || origin === 'emergency' || origin === 'entry') ? origin : null;
+    }
+
+    function clearOriginatingMode() {
+        try {
+            sessionStorage.removeItem(UCHECK_ORIGIN_STORAGE_KEY);
+            localStorage.removeItem(UCHECK_ORIGIN_STORAGE_KEY);
+        } catch (e) {}
+    }
+
     function getSourceContext() {
         return sourceContext;
     }
@@ -188,6 +267,7 @@ window.TempoMode = (function() {
     function setSourceContext(ctx) {
         if (ctx === 'emergency' || ctx === 'recovery' || ctx === 'entry') {
             sourceContext = ctx;
+            setOriginatingMode(ctx);
         } else {
             sourceContext = 'entry';
         }
@@ -279,6 +359,7 @@ window.TempoMode = (function() {
         if (activeSharedTool === 'ucheck') return MODES.UNCLEAR;
         if (activeContext === MODES.EMERGENCY) return MODES.EMERGENCY;
         if (activeContext === MODES.RECOVERY) return MODES.RECOVERY;
+        if (activeContext === MODES.UNCLEAR) return MODES.UNCLEAR;
         return MODES.DEFAULT;
     }
 
@@ -321,7 +402,7 @@ window.TempoMode = (function() {
     function transitionContext(targetContext, options = {}) {
         if (targetContext === 'urgent') targetContext = MODES.EMERGENCY;
         if (targetContext === 'default') targetContext = null;
-        if (targetContext !== MODES.EMERGENCY && targetContext !== MODES.RECOVERY) {
+        if (targetContext !== MODES.EMERGENCY && targetContext !== MODES.RECOVERY && targetContext !== MODES.UNCLEAR) {
             targetContext = null;
         }
 
@@ -330,7 +411,14 @@ window.TempoMode = (function() {
         activeSharedTool = null;
 
         // Establish sourceContext according to new activeContext
-        sourceContext = targetContext === MODES.EMERGENCY ? 'emergency' : (targetContext === MODES.RECOVERY ? 'recovery' : 'entry');
+        if (targetContext === MODES.UNCLEAR) {
+            const origin = options.sourceContext || (prevContext === MODES.EMERGENCY ? 'emergency' : (prevContext === MODES.RECOVERY ? 'recovery' : (getOriginatingMode() || 'entry')));
+            setOriginatingMode(origin);
+            sourceContext = origin;
+        } else {
+            sourceContext = targetContext === MODES.EMERGENCY ? 'emergency' : (targetContext === MODES.RECOVERY ? 'recovery' : 'entry');
+            clearOriginatingMode();
+        }
 
         clearPendingIntent();
 
@@ -345,7 +433,7 @@ window.TempoMode = (function() {
             } else {
                 localStorage.setItem('tempo_established_context', MODES.DEFAULT);
                 localStorage.setItem('tempo_current_mode', MODES.DEFAULT);
-                if (uid) {
+                if (uid && !options.preserveUserEstablishedContext) {
                     localStorage.setItem('tempo_user_established_context_' + uid, MODES.DEFAULT);
                 }
             }
@@ -360,6 +448,8 @@ window.TempoMode = (function() {
                 window.TempoApp.showToast("⚡ Urgent Mode active");
             } else if (targetContext === MODES.RECOVERY) {
                 window.TempoApp.showToast("🌱 Switched to Recovery Mode");
+            } else if (targetContext === MODES.UNCLEAR) {
+                window.TempoApp.showToast("🧭 Switched to Unclear Mode");
             } else {
                 window.TempoApp.showToast("Returned to Entry Home. All tasks remain saved.");
             }
@@ -436,8 +526,9 @@ window.TempoMode = (function() {
      * Enforces authentication boundary for guest users.
      */
     function openUcheck(options = {}) {
-        const src = options.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
+        const src = options.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : (getOriginatingMode() || 'entry')));
         sourceContext = src;
+        setOriginatingMode(src);
 
         const isAuthenticated = window.TempoAuth && !!window.TempoAuth.getCurrentUser();
 
@@ -493,6 +584,16 @@ window.TempoMode = (function() {
         }
     }
 
+    function isUserAuthenticated() {
+        return Boolean(
+            window.TempoAuth && 
+            typeof window.TempoAuth.getCurrentUser === 'function' && 
+            window.TempoAuth.getCurrentUser() &&
+            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
+            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
+        );
+    }
+
     /**
      * Opens Strack (UI display label: "Self-check") shared recovery tracking tool.
      * Enforces authentication boundary for guest users.
@@ -505,32 +606,33 @@ window.TempoMode = (function() {
             action = options.action || 'open';
         }
 
+        const isAuthenticated = isUserAuthenticated();
+        const persistedCtx = isAuthenticated ? getUserPersistedActiveContext() : null;
+
         let src;
-        if (options && options.sourceContext) {
+        if (options && options.sourceContext && options.sourceContext !== 'entry') {
             src = options.sourceContext;
-        } else if (activeContext === MODES.RECOVERY) {
+        } else if (persistedCtx === MODES.RECOVERY || activeContext === MODES.RECOVERY) {
             src = 'recovery';
-        } else if (activeContext === MODES.EMERGENCY) {
+        } else if (persistedCtx === MODES.EMERGENCY || activeContext === MODES.EMERGENCY) {
             src = 'emergency';
+        } else if (persistedCtx === MODES.UNCLEAR || activeContext === MODES.UNCLEAR) {
+            src = 'unclear';
+        } else if (options && options.sourceContext) {
+            src = options.sourceContext;
         } else {
-            src = sourceContext || 'entry';
+            src = 'entry';
         }
         sourceContext = src;
+        setOriginatingMode(src);
 
         const returnLabelEl = document.getElementById('stress-check-return-text');
         if (returnLabelEl) {
             if (src === 'recovery') returnLabelEl.textContent = 'Return to Recovery Mode';
             else if (src === 'emergency') returnLabelEl.textContent = 'Return to Urgent Mode';
-            else returnLabelEl.textContent = 'Return';
+            else if (src === 'unclear') returnLabelEl.textContent = 'Return to Unclear Mode';
+            else returnLabelEl.textContent = 'Return Home';
         }
-
-        const isAuthenticated = Boolean(
-            window.TempoAuth && 
-            typeof window.TempoAuth.getCurrentUser === 'function' && 
-            window.TempoAuth.getCurrentUser() &&
-            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
-            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
-        );
 
         if (!isAuthenticated) {
             // Guest user: save pending intent for Strack, show auth gate, do NOT open Strack yet
@@ -546,6 +648,16 @@ window.TempoMode = (function() {
 
             closeChangeModeModal();
             closeAllModeDropdowns();
+
+            if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.close === 'function') {
+                window.TempoRecoverySetup.close();
+            }
+            if (window.TempoRecoverySelfCheck) {
+                if (typeof window.TempoRecoverySelfCheck.closeManage === 'function') window.TempoRecoverySelfCheck.closeManage();
+                if (typeof window.TempoRecoverySelfCheck.closeDailyCheckin === 'function') window.TempoRecoverySelfCheck.closeDailyCheckin();
+                if (typeof window.TempoRecoverySelfCheck.closeTrackerModal === 'function') window.TempoRecoverySelfCheck.closeTrackerModal();
+                if (typeof window.TempoRecoverySelfCheck.closeViewToday === 'function') window.TempoRecoverySelfCheck.closeViewToday();
+            }
 
             if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
                 window.TempoAuth.openSignInModal();
@@ -563,18 +675,36 @@ window.TempoMode = (function() {
     }
 
     function showStressCheckScreen() {
-        const isAuthenticated = Boolean(
-            window.TempoAuth && 
-            typeof window.TempoAuth.getCurrentUser === 'function' && 
-            window.TempoAuth.getCurrentUser() &&
-            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
-            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
-        );
-
+        const isAuthenticated = isUserAuthenticated();
         if (!isAuthenticated) {
             console.warn("[TempoMode] Protected route access blocked: Strack requires authentication.");
-            openStrack('open');
+            openStrack('tool', { view: 'page' });
             return;
+        }
+
+        activeSharedTool = 'strack';
+        const persisted = getUserPersistedActiveContext();
+        if (persisted === MODES.RECOVERY || activeContext === MODES.RECOVERY) {
+            sourceContext = 'recovery';
+        } else if (persisted === MODES.EMERGENCY || activeContext === MODES.EMERGENCY) {
+            sourceContext = 'emergency';
+        } else if (persisted === MODES.UNCLEAR || activeContext === MODES.UNCLEAR) {
+            sourceContext = 'unclear';
+        } else if (!sourceContext || sourceContext === 'entry') {
+            sourceContext = getOriginatingMode() || 'entry';
+        }
+        setOriginatingMode(sourceContext);
+
+        const scReturnLabel = document.getElementById('stress-check-return-text');
+        if (scReturnLabel) {
+            if (sourceContext === 'recovery') scReturnLabel.textContent = 'Return to Recovery Mode';
+            else if (sourceContext === 'emergency') scReturnLabel.textContent = 'Return to Urgent Mode';
+            else if (sourceContext === 'unclear') scReturnLabel.textContent = 'Return to Unclear Mode';
+            else scReturnLabel.textContent = 'Return Home';
+        }
+
+        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.close === 'function') {
+            window.TempoRecoverySetup.close();
         }
 
         document.querySelectorAll('.screen-container').forEach(screen => {
@@ -584,26 +714,27 @@ window.TempoMode = (function() {
         if (target) {
             target.classList.remove('hidden');
         }
-        window.location.hash = '#stress-check';
+        if (window.location.hash !== '#stress-check') {
+            window.location.hash = '#stress-check';
+        }
         if (window.TempoApp && typeof window.TempoApp.updateNavActiveState === 'function') {
             window.TempoApp.updateNavActiveState('stress-check');
+        }
+        const modalAdjust = document.getElementById('modal-selfcheck-adjust');
+        const isAdjustModalOpen = modalAdjust && !modalAdjust.classList.contains('hidden');
+        if (!isAdjustModalOpen && window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
+            window.TempoSelfCheckWorkspace.render();
         }
     }
 
     function executeStrackAction(action = 'open', options = {}) {
-        const isAuthenticated = Boolean(
-            window.TempoAuth && 
-            typeof window.TempoAuth.getCurrentUser === 'function' && 
-            window.TempoAuth.getCurrentUser() &&
-            (typeof window.TempoAuth.getAuthState !== 'function' || window.TempoAuth.getAuthState() === 'authenticated') &&
-            !(typeof window.TempoAuth.isRegistrationInProgress === 'function' && window.TempoAuth.isRegistrationInProgress())
-        );
-
+        const isAuthenticated = isUserAuthenticated();
         if (!isAuthenticated) {
             console.warn("[TempoMode] Protected route action blocked: Strack requires authentication.");
             openStrack(action, options);
             return;
         }
+
         if (action === 'setup') {
             if (activeContext === MODES.RECOVERY && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
                 window.TempoRecoverySetup.open(options.stage || 1);
@@ -618,11 +749,10 @@ window.TempoMode = (function() {
             } else {
                 showStressCheckScreen();
             }
-        } else if (action === 'manage') {
-            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openManage === 'function') {
-                window.TempoRecoverySelfCheck.openManage();
-            } else {
-                showStressCheckScreen();
+        } else if (action === 'manage' || action === 'adjust' || action === 'add') {
+            showStressCheckScreen();
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') {
+                window.TempoSelfCheckWorkspace.openAddTracking();
             }
         } else if (action === 'history') {
             if (window.TempoSelfCheckHistory && typeof window.TempoSelfCheckHistory.open === 'function') {
@@ -649,27 +779,15 @@ window.TempoMode = (function() {
                 showStressCheckScreen();
             }
         } else {
-            // General open action
-            if (activeContext === MODES.RECOVERY) {
-                const scState = getSelfCheckState();
-                if (scState && scState.type === 'STATE_A') {
-                    if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.open === 'function') {
-                        window.TempoRecoverySetup.open(1);
-                    } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openSetup === 'function') {
-                        window.TempoRecoverySelfCheck.openSetup();
-                    } else {
-                        showStressCheckScreen();
-                    }
-                } else {
-                    if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openDailyCheckin === 'function') {
-                        window.TempoRecoverySelfCheck.openDailyCheckin(false);
-                    } else {
-                        showStressCheckScreen();
-                    }
+            // General open action: opens Tempo Self-check tool page
+            showStressCheckScreen();
+            if (options && options.openAdjust) {
+                const active = window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function'
+                    ? window.TempoRecoverySelfCheck.getActiveTrackers()
+                    : [];
+                if (active.length === 0 && window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') {
+                    window.TempoSelfCheckWorkspace.openAddTracking();
                 }
-            } else {
-                // Outside Recovery Mode (Entry Home or Urgent Mode)
-                showStressCheckScreen();
             }
         }
     }
@@ -694,6 +812,13 @@ window.TempoMode = (function() {
     function returnToSourceContext() {
         activeSharedTool = null;
 
+        document.body.style.backgroundColor = '';
+        const mainEl = document.querySelector('main');
+        if (mainEl) mainEl.style.backgroundColor = '';
+
+        const scScreen = document.getElementById('screen-stress-check');
+        if (scScreen) scScreen.classList.add('hidden');
+
         // Close any open Strack modals
         if (window.TempoRecoverySelfCheck) {
             if (typeof window.TempoRecoverySelfCheck.closeManage === 'function') window.TempoRecoverySelfCheck.closeManage();
@@ -707,29 +832,152 @@ window.TempoMode = (function() {
 
         const isAuthenticated = window.TempoAuth && typeof window.TempoAuth.getCurrentUser === 'function' && !!window.TempoAuth.getCurrentUser();
         if (!isAuthenticated) {
-            activeContext = null;
-            sourceContext = 'entry';
-            renderShellIndicator();
-            renderActiveModeHome();
-            if (window.TempoApp) window.TempoApp.navigateTo('today');
+            clearOriginatingMode();
+            transitionContext(null, { silent: true });
+            if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                window.TempoApp.navigateTo('today');
+            }
             return;
         }
 
-        const src = sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
+        // Authenticated user resolution:
+        // Priority order:
+        // 1. sourceContext or getOriginatingMode() if it points to an active context (recovery/emergency/unclear)
+        // 2. activeContext if it points to an active context
+        // 3. Persisted user active context (from getUserPersistedActiveContext())
+        // 4. Default / Entry Home only if user has no saved active context
+        const origin = sourceContext || getOriginatingMode();
+        clearOriginatingMode();
+        sourceContext = null;
 
-        if (src === 'emergency') {
-            activeContext = MODES.EMERGENCY;
-            sourceContext = 'emergency';
-        } else if (src === 'recovery') {
-            activeContext = MODES.RECOVERY;
-            sourceContext = 'recovery';
+        let target = null;
+        if (origin === 'emergency' || origin === 'recovery' || origin === 'unclear') {
+            target = origin;
+        } else if (activeContext === MODES.EMERGENCY || activeContext === MODES.RECOVERY || activeContext === MODES.UNCLEAR) {
+            target = activeContext;
         } else {
-            activeContext = null;
-            sourceContext = 'entry';
+            const persisted = getUserPersistedActiveContext();
+            if (persisted === MODES.EMERGENCY || persisted === MODES.RECOVERY || persisted === MODES.UNCLEAR) {
+                target = persisted;
+            } else {
+                target = null;
+            }
         }
-        renderShellIndicator();
-        renderActiveModeHome();
-        if (window.TempoApp) window.TempoApp.navigateTo('today');
+
+        if (target === MODES.EMERGENCY || target === 'emergency') {
+            transitionContext(MODES.EMERGENCY, { silent: true });
+        } else if (target === MODES.RECOVERY || target === 'recovery') {
+            transitionContext(MODES.RECOVERY, { silent: true });
+        } else if (target === MODES.UNCLEAR || target === 'unclear') {
+            transitionContext(MODES.UNCLEAR, { silent: true });
+        } else {
+            transitionContext(null, { silent: true });
+        }
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('today');
+        }
+        if (typeof renderShellIndicator === 'function') {
+            renderShellIndicator();
+        }
+    }
+
+    /**
+     * Resolves the canonical dashboard context associated with the user's active context.
+     * Preserves originating mode when inside a shared assessment/tool flow like Ucheck.
+     */
+    function resolveActiveDashboardContext() {
+        // 1. If currently in Ucheck or shared tool, resolve originating mode first
+        const origin = getOriginatingMode();
+        if (origin === 'recovery') return MODES.RECOVERY;
+        if (origin === 'emergency') return MODES.EMERGENCY;
+        if (origin === 'unclear') return MODES.UNCLEAR;
+
+        if (activeSharedTool === 'strack' || activeSharedTool === 'wplan') {
+            if (sourceContext === 'recovery') return MODES.RECOVERY;
+            if (sourceContext === 'emergency') return MODES.EMERGENCY;
+            if (sourceContext === 'unclear') return MODES.UNCLEAR;
+        }
+
+        // 2. Check activeContext in memory
+        if (activeContext === MODES.EMERGENCY) return MODES.EMERGENCY;
+        if (activeContext === MODES.RECOVERY) return MODES.RECOVERY;
+        if (activeContext === MODES.UNCLEAR) return MODES.UNCLEAR;
+
+        // 3. Check established context in localStorage for authenticated user
+        const persisted = getUserPersistedActiveContext();
+        if (persisted === MODES.EMERGENCY) return MODES.EMERGENCY;
+        if (persisted === MODES.RECOVERY) return MODES.RECOVERY;
+        if (persisted === MODES.UNCLEAR) return MODES.UNCLEAR;
+
+        // 4. Fallback to origin or sourceContext if entry
+        if (origin === 'entry' || sourceContext === 'entry') return MODES.DEFAULT;
+
+        // 5. Safe fallback to default Entry Home
+        return MODES.DEFAULT;
+    }
+
+    /**
+     * Navigates directly to the dashboard associated with the user's active context.
+     * Cleans up shared tool sessions, resets nested flow views, and closes open modals.
+     */
+    function navigateToActiveDashboard() {
+        const dest = resolveActiveDashboardContext();
+
+        // Clear active shared tool session
+        activeSharedTool = null;
+
+        // Reset any in-flight Ucheck flow state back to clean home view
+        if (window.TempoUnclearMode && typeof window.TempoUnclearMode.resetFlowState === 'function') {
+            window.TempoUnclearMode.resetFlowState();
+        } else {
+            try {
+                const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
+                if (uid) sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
+            } catch (e) {}
+        }
+
+        // Close any open modals
+        if (window.TempoRecoverySelfCheck) {
+            if (typeof window.TempoRecoverySelfCheck.closeManage === 'function') window.TempoRecoverySelfCheck.closeManage();
+            if (typeof window.TempoRecoverySelfCheck.closeDailyCheckin === 'function') window.TempoRecoverySelfCheck.closeDailyCheckin();
+            if (typeof window.TempoRecoverySelfCheck.closeTrackerModal === 'function') window.TempoRecoverySelfCheck.closeTrackerModal();
+            if (typeof window.TempoRecoverySelfCheck.closeViewToday === 'function') window.TempoRecoverySelfCheck.closeViewToday();
+        }
+        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.close === 'function') {
+            window.TempoRecoverySetup.close();
+        }
+        if (window.TempoCommunity && typeof window.TempoCommunity.closeCommunityModal === 'function') {
+            window.TempoCommunity.closeCommunityModal();
+        }
+        closeChangeModeModal();
+        closeAllModeDropdowns();
+        closeHelpSelectionModal();
+
+        // Clear temporary Ucheck originating mode upon returning to the dashboard
+        clearOriginatingMode();
+
+        if (dest === MODES.EMERGENCY) {
+            transitionContext(MODES.EMERGENCY, { silent: true });
+        } else if (dest === MODES.RECOVERY) {
+            transitionContext(MODES.RECOVERY, { silent: true });
+        } else if (dest === MODES.UNCLEAR) {
+            transitionContext(MODES.UNCLEAR, { silent: true });
+            if (window.TempoUnclearMode && typeof window.TempoUnclearMode.renderHome === 'function') {
+                window.TempoUnclearMode.renderHome();
+            }
+        } else {
+            transitionContext(null, { silent: true });
+        }
+
+        if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('today');
+        }
+
+        try {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (e) {
+            window.scrollTo(0, 0);
+        }
     }
 
     /**
@@ -737,7 +985,13 @@ window.TempoMode = (function() {
      */
     function requestMode(targetMode) {
         if (targetMode === MODES.UNCLEAR) {
-            openUcheck({ sourceContext: activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry') });
+            const origin = (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : (getOriginatingMode() || 'entry')));
+            setOriginatingMode(origin);
+            transitionContext(MODES.UNCLEAR, { sourceContext: origin });
+            if (window.TempoUnclearMode && typeof window.TempoUnclearMode.renderHome === 'function') {
+                window.TempoUnclearMode.renderHome();
+            }
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
             return;
         }
         if (targetMode === MODES.EMERGENCY || targetMode === 'urgent') {
@@ -772,13 +1026,25 @@ window.TempoMode = (function() {
                 return;
             }
 
-            if (origin === 'emergency') {
+            let target = origin;
+            if (target !== 'emergency' && target !== 'recovery' && target !== 'unclear') {
+                const persisted = getUserPersistedActiveContext();
+                if (persisted === MODES.EMERGENCY || persisted === MODES.RECOVERY || persisted === MODES.UNCLEAR) {
+                    target = persisted;
+                }
+            }
+
+            if (target === 'emergency' || target === MODES.EMERGENCY) {
                 activeContext = MODES.EMERGENCY;
                 sourceContext = 'emergency';
                 renderActiveModeHome();
-            } else if (origin === 'recovery') {
+            } else if (target === 'recovery' || target === MODES.RECOVERY) {
                 activeContext = MODES.RECOVERY;
                 sourceContext = 'recovery';
+                renderActiveModeHome();
+            } else if (target === 'unclear' || target === MODES.UNCLEAR) {
+                activeContext = MODES.UNCLEAR;
+                sourceContext = 'unclear';
                 renderActiveModeHome();
             } else {
                 activeContext = null;
@@ -833,12 +1099,7 @@ window.TempoMode = (function() {
         // Parallel restoration: resolve user's established context in background/state
         // Invariant 18F: Account isolation (only this uid's established context)
         const uid = window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function' ? window.TempoAuth.getCurrentUserId() : null;
-        let established = null;
-        try {
-            if (uid) {
-                established = localStorage.getItem('tempo_user_established_context_' + uid);
-            }
-        } catch (e) {}
+        let established = getUserPersistedActiveContext(uid);
 
         const currentActive = activeContext;
         const intentSource = intent ? (intent.source || intent.sourceContext) : null;
@@ -850,8 +1111,10 @@ window.TempoMode = (function() {
         );
 
         let resolvedContext = null;
-        if (established === MODES.EMERGENCY || established === MODES.RECOVERY) {
+        if (established === MODES.EMERGENCY || established === MODES.RECOVERY || established === MODES.UNCLEAR) {
             resolvedContext = established;
+        } else if (established === MODES.DEFAULT) {
+            resolvedContext = null;
         } else if (intentSource === 'emergency' || currentActive === MODES.EMERGENCY) {
             resolvedContext = MODES.EMERGENCY;
         } else if (intentSource === 'recovery' || currentActive === MODES.RECOVERY) {
@@ -873,6 +1136,14 @@ window.TempoMode = (function() {
                 localStorage.setItem('tempo_current_mode', MODES.RECOVERY);
                 localStorage.setItem('tempo_established_context', MODES.RECOVERY);
                 if (uid) localStorage.setItem('tempo_user_established_context_' + uid, MODES.RECOVERY);
+            } catch (e) {}
+        } else if (resolvedContext === MODES.UNCLEAR) {
+            activeContext = MODES.UNCLEAR;
+            sourceContext = 'unclear';
+            try {
+                localStorage.setItem('tempo_current_mode', MODES.UNCLEAR);
+                localStorage.setItem('tempo_established_context', MODES.UNCLEAR);
+                if (uid) localStorage.setItem('tempo_user_established_context_' + uid, MODES.UNCLEAR);
             } catch (e) {}
         } else {
             activeContext = null;
@@ -912,18 +1183,21 @@ window.TempoMode = (function() {
                 return true;
             } else if (isUcheck) {
                 // Resume Ucheck without changing activeContext
-                const savedSource = intent.source || intent.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry'));
+                const savedSource = (resolvedContext === MODES.EMERGENCY ? 'emergency' : (resolvedContext === MODES.RECOVERY ? 'recovery' : (resolvedContext === MODES.UNCLEAR ? 'unclear' : (intent.source || intent.sourceContext || 'entry'))));
                 sourceContext = savedSource;
+                setOriginatingMode(savedSource);
                 openUcheck(Object.assign({}, intent.requiredParams || intent.options || {}, { sourceContext: savedSource }));
                 if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
                     window.TempoApp.showToast("Signed in. Resuming Unclear Mode assessment.");
                 }
                 return true;
             } else if (isStrack) {
-                // Resume Strack (Self-check) without changing activeContext
-                const savedSource = intent.source || intent.sourceContext || (activeContext === MODES.RECOVERY ? 'recovery' : (activeContext === MODES.EMERGENCY ? 'emergency' : 'entry'));
+                // Resume Strack (Self-check) preserving user's established activeContext
+                const savedSource = (resolvedContext === MODES.RECOVERY ? 'recovery' : (resolvedContext === MODES.EMERGENCY ? 'emergency' : (resolvedContext === MODES.UNCLEAR ? 'unclear' : (intent.source || intent.sourceContext || 'entry'))));
                 sourceContext = savedSource;
-                openStrack(intent.action || 'open', intent.requiredParams || intent.options || {});
+                setOriginatingMode(savedSource);
+                const strackParams = Object.assign({}, intent.requiredParams || intent.options || {}, { sourceContext: savedSource });
+                openStrack(intent.action || 'open', strackParams);
                 if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
                     window.TempoApp.showToast("Signed in. Resuming Self-check.");
                 }
@@ -967,6 +1241,15 @@ window.TempoMode = (function() {
         renderShellIndicator();
         closeChangeModeModal();
         closeAllModeDropdowns();
+        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.close === 'function') {
+            window.TempoRecoverySetup.close();
+        }
+        if (window.TempoRecoverySelfCheck) {
+            if (typeof window.TempoRecoverySelfCheck.closeManage === 'function') window.TempoRecoverySelfCheck.closeManage();
+            if (typeof window.TempoRecoverySelfCheck.closeDailyCheckin === 'function') window.TempoRecoverySelfCheck.closeDailyCheckin();
+            if (typeof window.TempoRecoverySelfCheck.closeTrackerModal === 'function') window.TempoRecoverySelfCheck.closeTrackerModal();
+            if (typeof window.TempoRecoverySelfCheck.closeViewToday === 'function') window.TempoRecoverySelfCheck.closeViewToday();
+        }
         renderActiveModeHome();
     }
 
@@ -978,7 +1261,13 @@ window.TempoMode = (function() {
             newMode = MODES.EMERGENCY;
         }
         if (newMode === MODES.UNCLEAR) {
-            openUcheck({ sourceContext: activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry') });
+            const origin = options.sourceContext || (activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : (getOriginatingMode() || 'entry')));
+            setOriginatingMode(origin);
+            transitionContext(MODES.UNCLEAR, Object.assign({}, options, { sourceContext: origin }));
+            if (window.TempoUnclearMode && typeof window.TempoUnclearMode.renderHome === 'function') {
+                window.TempoUnclearMode.renderHome();
+            }
+            if (window.TempoApp) window.TempoApp.navigateTo('today');
             return;
         }
         if (newMode === MODES.EMERGENCY) {
@@ -997,36 +1286,23 @@ window.TempoMode = (function() {
     // =========================================================================
 
     function renderShellIndicator() {
-        const shell = document.getElementById('mode-indicator-shell');
-        const badge = document.getElementById('mode-badge') || document.getElementById('btn-mode-indicator-trigger');
-        const icon = document.getElementById('mode-badge-icon');
-        const label = document.getElementById('mode-badge-label');
-
-        if (!shell || !badge || !icon || !label) return;
-
         const curMode = getMode();
-        if (curMode === MODES.DEFAULT || curMode === MODES.EMERGENCY) {
-            shell.classList.add('hidden');
-            shell.classList.remove('flex');
-            if (curMode === MODES.EMERGENCY) {
-                icon.textContent = '⚡';
-                label.textContent = window.t ? window.t('modes.urgent.name', {}, 'Urgent Mode') : 'Urgent Mode';
-            }
-            return;
-        }
+        updateNavbarForMode(curMode);
 
-        shell.classList.remove('hidden');
-        shell.classList.add('flex');
+        const shell = document.getElementById('mode-indicator-shell');
+        if (!shell) return;
 
-        if (curMode === MODES.RECOVERY) {
-            badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#EDF7F1] text-[#166545] flex items-center space-x-1.5 shadow-sm';
-            icon.textContent = '🌱';
-            label.textContent = window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode';
-        } else if (curMode === MODES.UNCLEAR) {
-            badge.className = 'px-2.5 py-1 rounded-full text-xs font-bold bg-[#FEF7EC] text-[#9A5B13] flex items-center space-x-1.5 shadow-sm';
-            icon.textContent = '🧭';
-            label.textContent = window.t ? window.t('modes.unclear.name', {}, 'Unclear Mode') : 'Unclear Mode';
-        }
+        // Explicit rendering condition:
+        // In Recovery Mode, Urmode, Entry Home, and Unclear Mode,
+        // the navbar mode dropdown/pill is hidden.
+        // Mode switching is handled via in-dashboard card selectors (#btn-home-mode-selector).
+        shell.classList.add('hidden');
+        shell.classList.remove('flex');
+
+        const dropdown = document.getElementById('navbar-mode-dropdown');
+        if (dropdown) dropdown.classList.add('hidden');
+        const trigger = document.getElementById('btn-mode-indicator-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
     }
 
     function renderModeDropdownHTML(origin = 'home') {
@@ -1216,6 +1492,10 @@ window.TempoMode = (function() {
     function selectModeFromDropdown(targetMode, origin = 'home') {
         closeAllModeDropdowns();
         if (targetMode === getMode()) return;
+        if (targetMode === MODES.UNCLEAR) {
+            const curMode = activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry');
+            setOriginatingMode(curMode);
+        }
         if (targetMode === MODES.EMERGENCY || targetMode === 'emergency' || targetMode === 'urgent') {
             if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.queueResetPopup === 'function') {
                 window.TempoUrmodeFlow.queueResetPopup();
@@ -1279,6 +1559,10 @@ window.TempoMode = (function() {
     function selectModeOption(targetMode) {
         closeChangeModeModal();
         if (targetMode === getMode()) return;
+        if (targetMode === MODES.UNCLEAR) {
+            const curMode = activeContext === MODES.EMERGENCY ? 'emergency' : (activeContext === MODES.RECOVERY ? 'recovery' : 'entry');
+            setOriginatingMode(curMode);
+        }
         if (targetMode === MODES.EMERGENCY || targetMode === 'emergency' || targetMode === 'urgent') {
             if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.queueResetPopup === 'function') {
                 window.TempoUrmodeFlow.queueResetPopup();
@@ -1307,6 +1591,90 @@ window.TempoMode = (function() {
         });
     }
 
+    /**
+     * Updates the main navigation bar according to the active mode/context:
+     * - Entry Home: About · Check · Plan · Learn · Post
+     * - Urmode:     About · Check · Tool · Learn · Post
+     * - Rmode:      About · Plan · Tool · Learn · Post
+     */
+    function updateNavbarForMode(activeMode) {
+        const mode = activeMode !== undefined ? activeMode : getMode();
+        const checkLink = document.getElementById('nav-link-check');
+        const planLink = document.getElementById('nav-link-plan');
+
+        // Link 2: Check (Entry Home & Urmode) vs Plan (Recovery Mode)
+        if (checkLink) {
+            if (mode === MODES.RECOVERY) {
+                checkLink.textContent = 'Plan';
+                checkLink.setAttribute('href', '#recovery-working-plan');
+                checkLink.setAttribute('title', 'Plan');
+                checkLink.onclick = function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    if (window.TempoApp && typeof window.TempoApp.scrollToRecoveryPlan === 'function') {
+                        window.TempoApp.scrollToRecoveryPlan();
+                    } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                        window.TempoApp.navigateTo('plan');
+                    }
+                    return false;
+                };
+            } else {
+                checkLink.textContent = 'Check';
+                checkLink.setAttribute('href', '#stress-check');
+                checkLink.setAttribute('title', 'Check');
+                checkLink.onclick = function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                        window.TempoMode.openStrack('open', { sourceContext: mode === MODES.EMERGENCY ? 'emergency' : (mode === MODES.RECOVERY ? 'recovery' : 'entry') });
+                    } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                        window.TempoApp.navigateTo('stress-check');
+                    }
+                    return false;
+                };
+            }
+        }
+
+        // Link 3: Plan (Entry Home) vs Tool (Urmode & Recovery Mode)
+        if (planLink) {
+            if (mode === MODES.DEFAULT || !mode || mode === 'default') {
+                planLink.textContent = 'Plan';
+                planLink.setAttribute('href', '#plan-workspace');
+                planLink.setAttribute('title', 'Plan');
+                planLink.onclick = function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    if (window.TempoMode && typeof window.TempoMode.openPlanWorkspace === 'function') {
+                        window.TempoMode.openPlanWorkspace();
+                    } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+                        window.TempoApp.navigateTo('plan-workspace');
+                    }
+                    return false;
+                };
+            } else {
+                planLink.textContent = 'Tool';
+                planLink.setAttribute('href', '#enjoy-tempo-tools');
+                planLink.setAttribute('title', 'Tool');
+                planLink.onclick = function(e) {
+                    if (e && e.preventDefault) e.preventDefault();
+                    if (window.TempoApp && typeof window.TempoApp.scrollToEnjoyTempoTools === 'function') {
+                        window.TempoApp.scrollToEnjoyTempoTools();
+                    }
+                    return false;
+                };
+            }
+        }
+
+        // Shared navigation rendering condition:
+        // Hide the navbar mode dropdown/pill across all modes (Recovery, Urgent, Entry, Unclear)
+        const shell = document.getElementById('mode-indicator-shell');
+        if (shell) {
+            shell.classList.add('hidden');
+            shell.classList.remove('flex');
+        }
+        const dropdown = document.getElementById('navbar-mode-dropdown');
+        if (dropdown) dropdown.classList.add('hidden');
+        const trigger = document.getElementById('btn-mode-indicator-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    }
+
     // =========================================================================
     // CENTRALIZED MODE DASHBOARD VISIBILITY CONTROLLER
     // Strict mutual exclusivity: exactly one mode dashboard is visible on Home.
@@ -1328,12 +1696,19 @@ window.TempoMode = (function() {
         if (mode === MODES.EMERGENCY) {
             document.body.style.backgroundColor = '#e6ede7';
             if (mainEl) mainEl.style.backgroundColor = '#e6ede7';
+        } else if (mode === MODES.RECOVERY) {
+            document.body.style.backgroundColor = '#E8ECF1';
+            if (mainEl) mainEl.style.backgroundColor = '#E8ECF1';
+        } else if (mode === MODES.UNCLEAR) {
+            document.body.style.backgroundColor = '#FEEAE0';
+            if (mainEl) mainEl.style.backgroundColor = '#FEEAE0';
         } else {
             document.body.style.backgroundColor = '';
             if (mainEl) mainEl.style.backgroundColor = '';
         }
 
         syncModeSelectorDOM(mode);
+        updateNavbarForMode(mode);
     }
 
     // =========================================================================
@@ -1998,6 +2373,27 @@ window.TempoMode = (function() {
         `;
     }
 
+    function renderLearnSolveCardHTML(extraClass = '') {
+        const widthClass = extraClass ? ` ${extraClass}` : '';
+        return `
+            <div onclick="if (window.TempoApp) { window.TempoApp.navigateTo('learn'); } else { window.location.hash = '#learn'; }"
+                 class="bg-[#FBEDD9] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px]${widthClass} shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative"
+                 title="Learn & Solve">
+                <div class="relative z-10 flex-1 min-w-0 pr-1">
+                    <h3 class="text-[22px] sm:text-[25px] font-bold text-[#736F68] mb-1 group-hover:text-[#5B5751] transition leading-tight whitespace-nowrap">
+                        Learn &amp; Solve
+                    </h3>
+                    <p class="text-[14px] sm:text-[16px] text-[#736F68] leading-[1.35] max-w-[155px]">
+                        Tips and tools to help you cope.
+                    </p>
+                </div>
+                <img src="assets/learn-solve-mascot.png"
+                     alt="Learn & Solve Mascot"
+                     class="h-[105px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1 sm:-mr-2 translate-y-1" />
+            </div>
+        `;
+    }
+
     function renderEntryHomeHTML() {
         let posts = (window.TempoCommunity && typeof window.TempoCommunity.getAllPosts === 'function')
             ? window.TempoCommunity.getAllPosts()
@@ -2145,7 +2541,7 @@ window.TempoMode = (function() {
                      ============================================================== -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2" data-tempo-ui="entry-lower-section">
                     <!-- Lower Card 1: Self-check -->
-                    <div onclick="window.TempoMode.openStrack('setup', { sourceContext: 'entry' });"
+                    <div onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open', { sourceContext: 'entry' }); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; }"
                          class="bg-[#e6ede7] border border-[#D2E7DF] rounded-3xl sm:rounded-[28px] p-6 flex flex-col justify-start items-center text-center shadow-xs relative min-h-[220px] md:h-[230px] overflow-hidden cursor-pointer group"
                          title="Self-check">
                         <div class="w-full text-center">
@@ -2867,7 +3263,7 @@ window.TempoMode = (function() {
 
                 <!-- Action Buttons Row (Clear task, Mark as done, Edit task) -->
                 <div class="relative z-10 pt-4 border-t border-[#E8D9C5] flex flex-wrap items-center gap-3">
-                    <button type="button" onclick="window.TempoMode.clearOverdueTask('${overdueTask?.id}')"
+                    <button type="button" onclick="window.TempoMode.promptClearOverdueTask('${overdueTask?.id}')"
                             class="px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs inline-flex items-center transition cursor-pointer">
                         Clear task
                     </button>
@@ -3724,82 +4120,106 @@ window.TempoMode = (function() {
 
                 <!-- Dedicated Scrollable Task List -->
                 <div class="urgent-working-plan-tasks-scroll flex-1 overflow-y-auto overflow-x-hidden min-h-0 space-y-2.5 pr-1">
-                    ${planTasks.map((item, idx) => {
-                        const isDone = item.task && item.task.completed === true;
-                        const isUnscheduled = !!item.isUnscheduled;
-                        const isNow = !isDone && !isUnscheduled && nowItem && item.task && item.task.id === nowItem.task.id;
-                        const isLast = idx === planTasks.length - 1;
+                    ${(() => {
+                        const incompletePlanTasks = planTasks.filter(pt => !(pt.task && pt.task.completed === true));
+                        const completedPlanTasks = planTasks.filter(pt => pt.task && pt.task.completed === true);
 
-                        let bulletHTML = '';
-                        if (isDone) {
-                            bulletHTML = `
-                                <div class="w-4 h-4 rounded border-2 border-emerald-600 bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 shadow-2xs">
-                                    ✓
-                                </div>
-                            `;
-                        } else if (isNow) {
-                            bulletHTML = `
-                                <div class="w-4 h-4 rounded border-2 border-[#D79277] bg-transparent flex items-center justify-center shrink-0"></div>
-                            `;
-                        } else {
-                            bulletHTML = `
-                                <div class="w-4 h-4 rounded border-2 border-[#D1C7BD] bg-transparent flex items-center justify-center shrink-0"></div>
-                            `;
-                        }
-
-                        let badgeHTML = '';
-                        if (isDone) {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${window.t ? window.t('modes.urgent.completedBadge', {}, 'Completed') : 'Completed'}</span>`;
-                        } else if (isNow) {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D79277] text-white">${window.t ? window.t('common.now', {}, 'NOW') : 'NOW'}</span>`;
-                        } else if (isUnscheduled) {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-[#78716C] border border-stone-200">${window.t ? window.t('workspace.unscheduled', {}, (window.TempoI18n?.getCurrentLanguage?.() === 'vi' ? 'Chưa lên lịch' : 'Not scheduled')) : 'Not scheduled'}</span>`;
-                        } else {
-                            badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D3DFE4] text-[#5A6B73]">${window.t ? window.t('common.upNext', {}, 'UP NEXT') : 'UP NEXT'}</span>`;
-                        }
-
-                        const subtaskCount = (item.task && item.task.subtasks && item.task.subtasks.length > 0)
-                            ? `${item.task.subtasks.filter(s => s.completed).length}/${item.task.subtasks.length} subtasks`
-                            : '';
-
-                        let metaText = '';
-                        if (item.task && item.task.hasDeadline && item.task.deadlineDate) {
-                            metaText = `Due: ${window.TempoI18n ? window.TempoI18n.formatDeadline(item.task.deadlineDate, item.task.deadlineTime) : formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime)}`;
-                        } else if (item.task && item.task.durationLabel) {
-                            metaText = `~${item.task.durationLabel}`;
-                        } else if (item.task && item.task.isUnknownDuration) {
-                            metaText = 'Time not estimated';
-                        } else if (isUnscheduled) {
-                            metaText = (window.TempoI18n?.getCurrentLanguage?.() === 'vi' ? 'Chưa lên lịch' : 'Not scheduled');
-                        }
-
-                        return `
-                            <div class="urgent-timeline-item py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl border border-[#E8E2DD] bg-[#FFFFFF] ${isNow ? 'hover:border-[#D79277]/40' : 'hover:border-stone-300'} transition space-y-1 relative">
-                                ${!isLast ? '<div class="urgent-timeline-line hidden"></div>' : ''}
-                                
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2 cursor-pointer" onclick="window.TempoMode.toggleTaskCompletion('${item.task.id}')">
-                                        ${bulletHTML}
-                                        <h4 class="font-bold text-sm sm:text-base truncate ${isDone ? 'line-through text-stone-400' : 'text-[#484541]'}">
-                                            ${escapeHTML(item.task.name)}
-                                        </h4>
+                        function renderEmodeTimelineItem(item, isDone, isNow, isUnscheduled, isLast) {
+                            let bulletHTML = '';
+                            if (isDone) {
+                                bulletHTML = `
+                                    <div class="w-4 h-4 rounded border-2 border-emerald-600 bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 shadow-2xs">
+                                        ✓
                                     </div>
-                                    <div class="flex items-center space-x-1.5 shrink-0">
-                                        ${badgeHTML}
-                                        <button type="button" onclick="window.TempoMode.toggleTaskCompletion('${item.task.id}')"
-                                                title="${isDone ? 'Mark as incomplete' : 'Mark as completed'}"
-                                                class="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition text-xs cursor-pointer">
-                                            •••
-                                        </button>
+                                `;
+                            } else if (isNow) {
+                                bulletHTML = `
+                                    <div class="w-4 h-4 rounded border-2 border-[#D79277] bg-transparent flex items-center justify-center shrink-0"></div>
+                                `;
+                            } else {
+                                bulletHTML = `
+                                    <div class="w-4 h-4 rounded border-2 border-[#D1C7BD] bg-transparent flex items-center justify-center shrink-0"></div>
+                                `;
+                            }
+
+                            let badgeHTML = '';
+                            if (isDone) {
+                                badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">${window.t ? window.t('modes.urgent.completedBadge', {}, 'Completed') : 'Completed'}</span>`;
+                            } else if (isNow) {
+                                badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D79277] text-white">${window.t ? window.t('common.now', {}, 'NOW') : 'NOW'}</span>`;
+                            } else if (isUnscheduled) {
+                                badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-[#78716C] border border-stone-200">${window.t ? window.t('workspace.unscheduled', {}, (window.TempoI18n?.getCurrentLanguage?.() === 'vi' ? 'Chưa lên lịch' : 'Not scheduled')) : 'Not scheduled'}</span>`;
+                            } else {
+                                badgeHTML = `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D3DFE4] text-[#5A6B73]">${window.t ? window.t('common.upNext', {}, 'UP NEXT') : 'UP NEXT'}</span>`;
+                            }
+
+                            const subtaskCount = (item.task && item.task.subtasks && item.task.subtasks.length > 0)
+                                ? `${item.task.subtasks.filter(s => s.completed).length}/${item.task.subtasks.length} subtasks`
+                                : '';
+
+                            let metaText = '';
+                            if (item.task && item.task.hasDeadline && item.task.deadlineDate) {
+                                metaText = `Due: ${window.TempoI18n ? window.TempoI18n.formatDeadline(item.task.deadlineDate, item.task.deadlineTime) : formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime)}`;
+                            } else if (item.task && item.task.durationLabel) {
+                                metaText = `~${item.task.durationLabel}`;
+                            } else if (item.task && item.task.isUnknownDuration) {
+                                metaText = 'Time not estimated';
+                            } else if (isUnscheduled) {
+                                metaText = (window.TempoI18n?.getCurrentLanguage?.() === 'vi' ? 'Chưa lên lịch' : 'Not scheduled');
+                            }
+
+                            return `
+                                <div class="urgent-timeline-item py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl border border-[#E8E2DD] bg-[#FFFFFF] ${isNow ? 'hover:border-[#D79277]/40' : 'hover:border-stone-300'} transition space-y-1 relative" data-task-id="${item.task ? item.task.id : ''}">
+                                    ${!isLast ? '<div class="urgent-timeline-line hidden"></div>' : ''}
+                                    
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2 cursor-pointer" onclick="window.TempoMode.toggleTaskCompletion('${item.task ? item.task.id : ''}')">
+                                            ${bulletHTML}
+                                            <h4 class="font-bold text-sm sm:text-base truncate ${isDone ? 'line-through text-stone-400' : 'text-[#484541]'}">
+                                                ${escapeHTML(item.task ? item.task.name : '')}
+                                            </h4>
+                                        </div>
+                                        <div class="flex items-center space-x-1.5 shrink-0">
+                                            ${badgeHTML}
+                                            <button type="button" onclick="window.TempoMode.toggleTaskCompletion('${item.task ? item.task.id : ''}')"
+                                                    title="${isDone ? 'Mark as incomplete' : 'Mark as completed'}"
+                                                    class="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition text-xs cursor-pointer">
+                                                •••
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="pl-6.5 text-[11px] sm:text-xs text-[#8C8782] flex items-center space-x-3">
+                                        ${metaText ? `<span>${escapeHTML(metaText)}</span>` : ''}
+                                        ${subtaskCount ? `${metaText ? '<span>•</span>' : ''}<span>${escapeHTML(subtaskCount)}</span>` : ''}
                                     </div>
                                 </div>
-                                <div class="pl-6.5 text-[11px] sm:text-xs text-[#8C8782] flex items-center space-x-3">
-                                    ${metaText ? `<span>${escapeHTML(metaText)}</span>` : ''}
-                                    ${subtaskCount ? `${metaText ? '<span>•</span>' : ''}<span>${escapeHTML(subtaskCount)}</span>` : ''}
-                                </div>
+                            `;
+                        }
+
+                        const incompleteHTML = incompletePlanTasks.map((item, idx) => {
+                            const isDone = false;
+                            const isUnscheduled = !!item.isUnscheduled;
+                            const isNow = !isUnscheduled && nowItem && item.task && item.task.id === nowItem.task.id;
+                            const isLast = (completedPlanTasks.length === 0) && (idx === incompletePlanTasks.length - 1);
+                            return renderEmodeTimelineItem(item, isDone, isNow, isUnscheduled, isLast);
+                        }).join('');
+
+                        const completedHTML = completedPlanTasks.length > 0 ? `
+                            <div class="pt-2 pb-1 border-t border-[#EAE4DF] flex items-center space-x-2 text-xs font-bold text-[#7B9688]" data-tempo-ui="urmode-done-section">
+                                <span>Done</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-[#EBF1ED] text-[#4A6B5D]">(${completedPlanTasks.length})</span>
                             </div>
-                        `;
-                    }).join('')}
+                            ${completedPlanTasks.map((item, idx) => {
+                                const isDone = true;
+                                const isUnscheduled = !!item.isUnscheduled;
+                                const isNow = false;
+                                const isLast = idx === completedPlanTasks.length - 1;
+                                return renderEmodeTimelineItem(item, isDone, isNow, isUnscheduled, isLast);
+                            }).join('')}
+                        ` : '';
+
+                        return incompleteHTML + completedHTML;
+                    })()}
                 </div>
             </div>
             ${changeModePromptHTML}
@@ -4011,7 +4431,7 @@ window.TempoMode = (function() {
         try {
             localStorage.setItem('tempo_recovery_selfcheck_config', JSON.stringify(state));
         } catch (e) {}
-        if (currentMode === MODES.RECOVERY) renderRmodeHome();
+        if (activeContext === MODES.RECOVERY) renderRmodeHome();
     }
 
     function handleSelfCheckSetupClick() {
@@ -4044,7 +4464,7 @@ window.TempoMode = (function() {
         try {
             localStorage.setItem('tempo_recovery_recently_state', JSON.stringify(state));
         } catch (e) {}
-        if (currentMode === MODES.RECOVERY) renderRmodeHome();
+        if (activeContext === MODES.RECOVERY) renderRmodeHome();
     }
 
     function checkIsWeeklyReviewReady() {
@@ -4061,7 +4481,7 @@ window.TempoMode = (function() {
     function setWeeklyReviewReady(isReady) {
         weeklyReviewOverrideReady = !!isReady;
         weeklyReviewDismissed = false;
-        if (currentMode === MODES.RECOVERY) renderRmodeHome();
+        if (activeContext === MODES.RECOVERY) renderRmodeHome();
     }
 
     function dismissWeeklyReviewNotice() {
@@ -4070,7 +4490,7 @@ window.TempoMode = (function() {
             const wk = window.TempoWeeklyReview.getLatestEligibleWeek();
             if (wk) window.TempoWeeklyReview.snoozeOrDismissNotice(wk.start);
         }
-        if (currentMode === MODES.RECOVERY) renderRmodeHome();
+        if (activeContext === MODES.RECOVERY) renderRmodeHome();
     }
 
     function dismissRecoveryIntro() {
@@ -4089,46 +4509,97 @@ window.TempoMode = (function() {
         const rmodeBox = document.getElementById('rmode-home-content');
         if (!rmodeBox) return;
 
-        // Shared emergency state: Prefer active plan from TempoPlanStore, fallback to TempoEmergencyFlow
-        const activeStorePlan = window.TempoPlanStore && window.TempoPlanStore.getActivePlan
-            ? window.TempoPlanStore.getActivePlan('emergency')
-            : null;
-        const confirmedPlan = (activeStorePlan && activeStorePlan.plannedTasks && activeStorePlan.plannedTasks.length > 0)
-            ? activeStorePlan
-            : ((window.TempoEmergencyFlow && window.TempoEmergencyFlow.getConfirmedPlan) ? window.TempoEmergencyFlow.getConfirmedPlan() : null);
+        // Shared emergency/recovery state: Prefer active plan from TempoPlanWorkspace / TempoPlanStore / TempoEmergencyFlow
+        let confirmedPlan = null;
+        if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getActivePlan === 'function') {
+            confirmedPlan = window.TempoPlanWorkspace.getActivePlan();
+        }
+        if (!confirmedPlan && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            confirmedPlan = window.TempoPlanStore.getActivePlan('recovery') || window.TempoPlanStore.getActivePlan('emergency') || window.TempoPlanStore.getActivePlan('default');
+        }
+        if (!confirmedPlan && window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
+            confirmedPlan = window.TempoEmergencyFlow.getConfirmedPlan();
+        }
+        if (!confirmedPlan || (!confirmedPlan.plannedTasks && !confirmedPlan.tasks)) {
+            try {
+                const savedPlan = localStorage.getItem('tempo_working_plan') || localStorage.getItem('tempo_store_active_emergency_guest');
+                if (savedPlan) {
+                    const parsed = JSON.parse(savedPlan);
+                    if (parsed && ((parsed.plannedTasks && parsed.plannedTasks.length > 0) || (parsed.tasks && parsed.tasks.length > 0))) {
+                        confirmedPlan = parsed;
+                    }
+                }
+            } catch (e) {}
+        }
+        if (!confirmedPlan && window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getDefaultReferencePlan === 'function') {
+            confirmedPlan = window.TempoPlanWorkspace.getDefaultReferencePlan();
+        }
 
         const todayStr = getTodayISOString();
         const profile = window.TempoAuth ? window.TempoAuth.getCurrentProfile() : null;
         const greetingInfo = getSafeGreetingInfo(profile);
+        const userName = (greetingInfo && !greetingInfo.isFallback && greetingInfo.name)
+            || (profile && (profile.preferredName || profile.displayName || profile.display_name || profile.full_name || profile.name))
+            || 'Innie';
         const selfCheckState = getSelfCheckState();
         const recentlyState = getRecentlyState();
-        const isWeeklyReviewReady = checkIsWeeklyReviewReady();
-        const latestEligibleWeek = (window.TempoWeeklyReview && typeof window.TempoWeeklyReview.getLatestEligibleWeek === 'function')
-            ? window.TempoWeeklyReview.getLatestEligibleWeek()
-            : null;
 
         rmodeBox.innerHTML = `
-            ${renderRmodeHeader()}
-            ${renderRecoveryIntroBanner()}
-            <div class="space-y-8" data-tempo-ui="recovery-home-shell">
-                <!-- Main Asymmetric Grid: ~65% Left / ~35% Right on Desktop -->
+            <!-- ONE CONTINUOUS RECOVERY DASHBOARD -->
+            <div class="space-y-10" data-tempo-ui="recovery-home-shell">
+                <!-- FIRST SCREEN: Asymmetric Grid (~65% Left / ~35% Right on Desktop) -->
                 <div class="recovery-home-main-grid">
                     <!-- LEFT COLUMN (~65%) -->
-                    <div class="recovery-left-col">
+                    <div class="recovery-left-col space-y-4">
+                        ${renderRmodeHeader()}
+                        
+                        <!-- Greeting (Terracotta #D48366) -->
+                        <div class="recovery-greeting pb-0 pt-0" style="margin-top: -15px; margin-bottom: -11px;">
+                            <h2 class="text-2xl sm:text-[28px] font-extrabold text-[#D48366] tracking-tight flex items-center space-x-2.5">
+                                <span class="text-3xl select-none">👋</span>
+                                <span>Hi ${escapeHTML(userName)}, how are you today?</span>
+                            </h2>
+                        </div>
+
                         ${renderSelfCheckCard(selfCheckState, greetingInfo)}
+                        ${renderRecoverySupportRowHTML()}
                     </div>
 
                     <!-- RIGHT COLUMN (~35%) -->
-                    <div class="recovery-right-col space-y-6">
+                    <div class="recovery-right-col">
                         ${renderRecoveryNoteCard()}
                         ${renderRecentlyCard(recentlyState)}
+                        
+                        <!-- Prompt and mode-switch button -->
+                        <div class="recovery-prompt-wrap pt-0 flex flex-col items-center text-center space-y-2.5" style="margin-top: 20px;">
+                            <p class="font-bold text-base sm:text-[17px] text-[#55504A]">
+                                Are things feeling more overwhelming now?
+                            </p>
+                            <button type="button" 
+                                    onclick="window.TempoMode.openChangeModeModal()"
+                                    class="w-full max-w-[280px] py-3 rounded-2xl font-bold text-sm sm:text-base bg-[#D79277] hover:bg-[#C68166] text-white shadow-xs border border-[#C68166]/30 transition cursor-pointer">
+                                Change my mode
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                ${renderWeeklyReviewShell(isWeeklyReviewReady, latestEligibleWeek)}
-                ${renderRecoveryTodaySection(confirmedPlan, todayStr)}
-                ${renderRecoverySharedEcosystem()}
-                ${renderRecoveryPostsSection()}
+                <!-- SECOND SCREEN (Continuous vertical scroll directly beneath first screen) -->
+                <!-- Two-Column Section: ~65% Working Plan / ~35% Community -->
+                <div class="recovery-plan-comm-grid">
+                    <!-- LEFT COLUMN (~65%): Your Working Plan -->
+                    <div class="recovery-plan-col">
+                        ${renderRecoveryWorkingPlanSection(confirmedPlan, todayStr)}
+                    </div>
+
+                    <!-- RIGHT COLUMN (~35%): From the Tempo Community -->
+                    <div class="recovery-comm-col">
+                        ${renderRecoveryCommunityCard()}
+                    </div>
+                </div>
+
+                <!-- FULL-WIDTH SECTION: Enjoy Tempo Tools -->
+                ${renderRecoveryEnjoyToolsSection()}
             </div>
         `;
 
@@ -4191,7 +4662,7 @@ window.TempoMode = (function() {
 
     function renderActiveModeHome() {
         renderShellIndicator();
-        if (activeSharedTool === 'ucheck') {
+        if (activeSharedTool === 'ucheck' || activeContext === MODES.UNCLEAR) {
             renderUmodeHome();
             return;
         }
@@ -4202,6 +4673,9 @@ window.TempoMode = (function() {
             case MODES.RECOVERY:
                 renderRmodeHome();
                 break;
+            case MODES.UNCLEAR:
+                renderUmodeHome();
+                break;
             default:
                 restoreDefaultHome();
                 break;
@@ -4209,20 +4683,9 @@ window.TempoMode = (function() {
     }
 
     function renderRmodeHeader() {
-        const todayObj = new Date();
-        const formattedDate = window.TempoI18n ? window.TempoI18n.formatDate(todayObj, {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric'
-        }) : todayObj.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric'
-        });
-
         return `
-            <div class="relative pb-1">
-                <!-- Top Mode Selector & Date Row -->
+            <div class="relative recovery-mode-header pb-0">
+                <!-- Top Mode Selector Row -->
                 <div class="flex items-center justify-between gap-4">
                     <!-- Anchored Mode Selector Dropdown -->
                     <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
@@ -4239,11 +4702,6 @@ window.TempoMode = (function() {
                             <span class="text-[10px] ml-0.5 opacity-80">▾</span>
                         </button>
                         <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
-                    </div>
-
-                    <!-- Date Display -->
-                    <div class="hidden sm:block text-xs font-semibold text-[#6F6B68]">
-                        ${escapeHTML(formattedDate)}
                     </div>
                 </div>
             </div>
@@ -4280,445 +4738,1212 @@ window.TempoMode = (function() {
         `;
     }
 
+    // =========================================================================
+    // RMODE SEQUENTIAL DAILY SELF-CHECK & SKIP CONTROLLER
+    // =========================================================================
+
+    let isSubmittingRmodeSelfCheck = false;
+
+    function getRmodeUserId() {
+        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') {
+            const uid = window.TempoAuth.getCurrentUserId();
+            if (uid) return uid;
+        }
+        return 'local_user';
+    }
+
+    function getRmodeTodayDateStr() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getRmodeSkippedTrackers() {
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const key = `tempo_rmode_skipped_trackers_${uid}_${todayStr}`;
+        try {
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function addRmodeSkippedTracker(trackerId) {
+        if (!trackerId) return;
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const key = `tempo_rmode_skipped_trackers_${uid}_${todayStr}`;
+        const list = getRmodeSkippedTrackers();
+        if (!list.includes(trackerId)) {
+            list.push(trackerId);
+            try {
+                localStorage.setItem(key, JSON.stringify(list));
+            } catch (e) {}
+        }
+    }
+
+    function removeRmodeSkippedTracker(trackerId) {
+        if (!trackerId) return;
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const key = `tempo_rmode_skipped_trackers_${uid}_${todayStr}`;
+        let list = getRmodeSkippedTrackers();
+        list = list.filter(id => id !== trackerId);
+        try {
+            localStorage.setItem(key, JSON.stringify(list));
+        } catch (e) {}
+    }
+
+    function resetRmodeSkippedTrackers() {
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const key = `tempo_rmode_skipped_trackers_${uid}_${todayStr}`;
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {}
+        renderRmodeHome();
+    }
+
+    function getRmodeTodayObservation(trackerId) {
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.getTodayObservation === 'function') {
+            const obs = window.TempoSelfCheckWorkspace.getTodayObservation(trackerId);
+            if (obs) return obs;
+        }
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const checkinsKey = `tempo_selfcheck_checkins_${uid}`;
+        const obsKey = `tempo_selfcheck_observations_${uid}`;
+        try {
+            const rawChk = localStorage.getItem(checkinsKey) || (uid === 'local_user' ? localStorage.getItem('tempo_selfcheck_checkins') : null);
+            const rawObs = localStorage.getItem(obsKey) || (uid === 'local_user' ? localStorage.getItem('tempo_selfcheck_observations') : null);
+            const checkins = rawChk ? JSON.parse(rawChk) : [];
+            const todayChk = checkins.find(c => c.checkin_date === todayStr);
+            if (todayChk && rawObs) {
+                const allObs = JSON.parse(rawObs);
+                return allObs.find(o => o.checkin_id === todayChk.id && o.tracker_id === trackerId) || null;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function isRmodeTrackerAnsweredToday(trackerId) {
+        const obs = getRmodeTodayObservation(trackerId);
+        if (!obs) return false;
+        if (obs.status !== 'answered') return false;
+        if (obs.value === null || obs.value === undefined || obs.value === '') return false;
+        return true;
+    }
+
+    function saveRmodeFallbackObservation(trackerId, value, status = 'answered') {
+        const uid = getRmodeUserId();
+        const todayStr = getRmodeTodayDateStr();
+        const checkinsKey = `tempo_selfcheck_checkins_${uid}`;
+        const obsKey = `tempo_selfcheck_observations_${uid}`;
+
+        let checkins = [];
+        try {
+            checkins = JSON.parse(localStorage.getItem(checkinsKey) || '[]');
+            if (checkins.length === 0 && uid === 'local_user') {
+                checkins = JSON.parse(localStorage.getItem('tempo_selfcheck_checkins') || '[]');
+            }
+        } catch (e) {}
+
+        let allObs = [];
+        try {
+            allObs = JSON.parse(localStorage.getItem(obsKey) || '[]');
+            if (allObs.length === 0 && uid === 'local_user') {
+                allObs = JSON.parse(localStorage.getItem('tempo_selfcheck_observations') || '[]');
+            }
+        } catch (e) {}
+
+        let todayChk = checkins.find(c => c.checkin_date === todayStr);
+        if (!todayChk) {
+            todayChk = {
+                id: 'chk_' + todayStr.replace(/-/g, '') + '_' + Math.random().toString(36).substr(2, 4),
+                user_id: uid,
+                checkin_date: todayStr,
+                completed_at: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            checkins.push(todayChk);
+            localStorage.setItem(checkinsKey, JSON.stringify(checkins));
+            if (uid === 'local_user') localStorage.setItem('tempo_selfcheck_checkins', JSON.stringify(checkins));
+        }
+
+        const existingIdx = allObs.findIndex(o => o.checkin_id === todayChk.id && o.tracker_id === trackerId);
+        if (existingIdx !== -1) {
+            allObs[existingIdx].value = value;
+            allObs[existingIdx].status = status;
+            allObs[existingIdx].updated_at = new Date().toISOString();
+        } else {
+            allObs.push({
+                id: 'obs_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                checkin_id: todayChk.id,
+                tracker_id: trackerId,
+                value: value,
+                status: status,
+                note: '',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
+        }
+
+        localStorage.setItem(obsKey, JSON.stringify(allObs));
+        if (uid === 'local_user') localStorage.setItem('tempo_selfcheck_observations', JSON.stringify(allObs));
+    }
+
+    function submitRmodeSelfCheckValue(trackerId, value) {
+        if (isSubmittingRmodeSelfCheck) return;
+        isSubmittingRmodeSelfCheck = true;
+
+        try {
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.setTodayObservation === 'function') {
+                window.TempoSelfCheckWorkspace.setTodayObservation(trackerId, value, 'answered');
+            } else {
+                saveRmodeFallbackObservation(trackerId, value, 'answered');
+            }
+
+            removeRmodeSkippedTracker(trackerId);
+            renderRmodeHome();
+
+            if (window.TempoAlertSystem && typeof window.TempoAlertSystem.evaluateAndTriggerAlert === 'function') {
+                window.TempoAlertSystem.evaluateAndTriggerAlert(trackerId);
+            }
+        } catch (e) {
+            console.error("Failed to save check-in:", e);
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast("Could not save check-in. Please try again.");
+            }
+        } finally {
+            setTimeout(() => { isSubmittingRmodeSelfCheck = false; }, 300);
+        }
+    }
+
+    function skipRmodeCurrentSelfCheck(trackerId) {
+        if (isSubmittingRmodeSelfCheck) return;
+        isSubmittingRmodeSelfCheck = true;
+
+        try {
+            addRmodeSkippedTracker(trackerId);
+            renderRmodeHome();
+        } finally {
+            setTimeout(() => { isSubmittingRmodeSelfCheck = false; }, 300);
+        }
+    }
+
+    function submitRmodeQuantityValue(trackerId) {
+        const input = document.getElementById(`rmode-qty-input-${trackerId}`);
+        if (!input) return;
+        const raw = input.value.trim();
+        if (!raw) {
+            input.classList.add('border-red-400', 'ring-1', 'ring-red-400');
+            input.focus();
+            return;
+        }
+        const num = parseFloat(raw);
+        if (isNaN(num) || num < 0 || !isFinite(num)) {
+            input.classList.add('border-red-400', 'ring-1', 'ring-red-400');
+            input.focus();
+            return;
+        }
+        input.classList.remove('border-red-400', 'ring-1', 'ring-red-400');
+        submitRmodeSelfCheckValue(trackerId, num);
+    }
+
     function renderSelfCheckCard(selfCheckState, greetingInfo) {
-        const greetingText = greetingInfo ? greetingInfo.greetingText : 'Hi there 👋';
+        const streakCount = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.calculateStreak === 'function')
+            ? window.TempoRecoverySelfCheck.calculateStreak()
+            : ((selfCheckState && typeof selfCheckState.streak === 'number') ? selfCheckState.streak : 0);
 
-        if (selfCheckState && selfCheckState.type === 'STATE_B') {
-            const streakCount = selfCheckState.streak || 0;
-            const trackerCount = selfCheckState.trackersCount || 0;
-            const days = selfCheckState.days || ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-            const dayStatus = selfCheckState.dayStatus || ['done', 'done', 'done', 'done', 'done', 'done', 'pending'];
+        const activeTrackers = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function')
+            ? window.TempoRecoverySelfCheck.getActiveTrackers()
+            : [];
 
+        if (activeTrackers.length === 0) {
             return `
-                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
-                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
-                        ${escapeHTML(greetingText)}
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                            ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
-                        </span>
-                    </div>
+                <div class="recovery-card-selfcheck bg-[#FEFAF4] rounded-3xl p-6 sm:p-7 soft-card-shadow border border-white/60 flex flex-col justify-between" style="min-height: 290px; width: calc(100% - 30px); margin-inline: auto; background-color: #FEFAF4;" data-tempo-ui="recovery-self-check">
                     <div class="space-y-1">
-                        <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                            How have things been today?
-                        </h3>
-                        <p class="text-xs text-[#6F6B68] font-medium">${window.t ? window.t('modes.recovery.streakCount', { count: streakCount }, `${streakCount}-day streak`) : `${streakCount} day check-in streak`}</p>
+                        <span class="text-xs sm:text-sm font-extrabold text-[#4A6B5D] uppercase tracking-wide block">Your daily check-in</span>
+                        <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#484541] tracking-tight leading-snug">Today’s self-check</h3>
+                        <p class="text-xs italic text-[#7B7672] font-medium">${streakCount}-day streak</p>
                     </div>
-
-                    <!-- Streak Calendar Row -->
-                    <div class="flex items-center space-x-2 py-1">
-                        ${days.map((d, i) => `
-                            <div class="flex flex-col items-center space-y-1">
-                                <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${dayStatus[i] === 'done' ? 'bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]' : (dayStatus[i] === 'pending' ? 'border-2 border-[#166545] text-[#166545]' : 'border border-stone-200 text-stone-400')}">
-                                    ${dayStatus[i] === 'done' ? '✓' : (dayStatus[i] === 'pending' ? '●' : '○')}
-                                </div>
-                                <span class="text-[10px] text-stone-500 font-semibold">${d}</span>
-                            </div>
-                        `).join('')}
+                    <div class="py-3 text-center space-y-1">
+                        <p class="text-xs font-semibold text-[#5B5550]">No tracking items in your system yet.</p>
+                        <p class="text-[11px] text-stone-400">Add habits or indicators in your Self-check tool to check in here.</p>
                     </div>
-
-                    <p class="text-xs text-[#6F6B68]">${trackerCount} things you're keeping track of</p>
-
-                    <div class="pt-2 flex flex-wrap items-center gap-3">
-                        <button onclick="window.TempoMode.handleSelfCheckAction('checkin')"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>${window.t ? window.t('modes.recovery.checkInToday', {}, 'Check in') : 'Check in'}</span>
-                            <span>→</span>
-                        </button>
-                        <button onclick="window.TempoMode.handleSelfCheckAction('manage')"
-                                class="text-xs font-semibold text-[#166545] hover:text-[#0E4A32] transition cursor-pointer">
-                            ${window.t ? window.t('modes.recovery.manageSelfCheck', {}, 'Manage Self-check') : 'Manage Self-check'}
-                        </button>
-                        <span class="text-stone-300">·</span>
-                        <button onclick="window.TempoMode.handleSelfCheckAction('history')"
-                                class="text-xs font-semibold text-[#166545] hover:text-[#0E4A32] transition cursor-pointer">
-                            ${window.t ? window.t('modes.recovery.viewHistory', {}, 'View history') : 'View history'}
+                    <div class="pt-1 flex flex-wrap items-center gap-3">
+                        <button type="button" 
+                                onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open', { sourceContext: 'recovery', openAdjust: true }); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; }"
+                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#7B9688] hover:bg-[#6D8475] text-white shadow-xs transition cursor-pointer">
+                            Edit tracking system
                         </button>
                     </div>
                 </div>
             `;
         }
 
-        if (selfCheckState && selfCheckState.type === 'STATE_C') {
-            const streakCount = selfCheckState.streak || 0;
-            const checkedCount = selfCheckState.checkedCount || 0;
-            const totalCount = selfCheckState.totalCount || 0;
-            const days = selfCheckState.days || ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-            const dayStatus = selfCheckState.dayStatus || ['done', 'done', 'done', 'done', 'done', 'done', 'done'];
+        const answeredTrackers = activeTrackers.filter(t => isRmodeTrackerAnsweredToday(t.id));
+        const answeredCount = answeredTrackers.length;
+        const totalCount = activeTrackers.length;
+        const progressPercent = Math.round((answeredCount / totalCount) * 100);
 
-            return `
-                <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-5 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
-                    <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
-                        ${escapeHTML(greetingText)}
+        const skippedIds = new Set(getRmodeSkippedTrackers());
+        const skippedTrackers = activeTrackers.filter(t => !isRmodeTrackerAnsweredToday(t.id) && skippedIds.has(t.id));
+
+        const pendingTrackers = activeTrackers.filter(t => !isRmodeTrackerAnsweredToday(t.id) && !skippedIds.has(t.id));
+
+        // Middle Section HTML: Single current tracker OR completed state
+        let middleSectionHTML = '';
+
+        if (pendingTrackers.length > 0) {
+            const currentTracker = pendingTrackers[0];
+            const dotColor = currentTracker.type_color || (currentTracker.category === 'stress_sign' ? '#D48366' : (currentTracker.category === 'supportive' ? '#166545' : '#1E40AF'));
+            const method = currentTracker.check_method;
+            const nameLower = (currentTracker.name || '').toLowerCase();
+
+            let controlsHTML = '';
+
+            if (method === 'percentage' || nameLower.includes('tension')) {
+                controlsHTML = `
+                    <div class="space-y-1.5 pt-0.5 pb-1">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-[#7B7672] font-medium">Select level:</span>
+                            <span id="rmode-slider-val" class="font-extrabold text-[#37352F] text-sm">50%</span>
+                        </div>
+                        <div class="flex items-center space-x-2.5">
+                            <input type="range" min="0" max="100" value="50" 
+                                   id="rmode-selfcheck-range"
+                                   oninput="const el = document.getElementById('rmode-slider-val'); if (el) el.textContent = this.value + '%'"
+                                   class="w-full accent-[#4A6B5D] cursor-pointer">
+                            <button type="button" 
+                                    onclick="window.TempoMode.submitRmodeSelfCheckValue('${currentTracker.id}', parseInt(document.getElementById('rmode-selfcheck-range').value, 10))"
+                                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#7B9688] hover:bg-[#6D8475] text-white transition cursor-pointer shrink-0 shadow-2xs">
+                                Save
+                            </button>
+                        </div>
                     </div>
+                `;
+            } else if (method === 'options' || method === 'yes_no' || nameLower.includes('sleep')) {
+                let opts = currentTracker.options;
+                if (!opts || !Array.isArray(opts) || opts.length === 0) {
+                    opts = nameLower.includes('sleep') ? ['Good', 'Not good'] : ['Yes', 'No'];
+                }
+                controlsHTML = `
+                    <div class="pt-0.5 pb-1">
+                        <div class="flex items-center flex-wrap gap-2">
+                            ${opts.map(opt => `
+                                <button type="button" 
+                                        onclick="window.TempoMode.submitRmodeSelfCheckValue('${currentTracker.id}', '${escapeHTML(opt)}')"
+                                        class="px-4 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-[#F4F7F5] border border-stone-300/80 text-[#37352F] hover:border-[#7B9688] hover:text-[#166545] transition cursor-pointer shadow-2xs">
+                                    ${escapeHTML(opt)}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (method === 'scale') {
+                const scaleMax = currentTracker.scale_max || (currentTracker.scale_range === '1-10' ? 10 : 5);
+                const scaleNums = [];
+                for (let n = 1; n <= scaleMax; n++) scaleNums.push(n);
+                controlsHTML = `
+                    <div class="pt-0.5 pb-1">
+                        <div class="flex items-center space-x-1.5 overflow-x-auto pb-0.5">
+                            ${scaleNums.map(n => `
+                                <button type="button" 
+                                        onclick="window.TempoMode.submitRmodeSelfCheckValue('${currentTracker.id}', ${n})"
+                                        class="w-8 h-8 rounded-xl text-xs font-bold bg-white hover:bg-[#F4F7F5] border border-stone-300/80 text-[#37352F] hover:border-[#7B9688] hover:text-[#166545] transition cursor-pointer flex items-center justify-center shrink-0 shadow-2xs">
+                                    ${n}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (method === 'quantity' || nameLower.includes('walk')) {
+                const unit = currentTracker.quantity_unit || 'min';
+                controlsHTML = `
+                    <div class="pt-0.5 pb-1">
+                        <div class="flex items-center flex-wrap gap-2">
+                            <input type="number" 
+                                   id="rmode-qty-input-${currentTracker.id}"
+                                   placeholder="Enter quantity"
+                                   min="0"
+                                   step="any"
+                                   class="w-28 sm:w-32 px-3 py-1.5 text-xs font-semibold rounded-xl border border-stone-300 focus:outline-none focus:border-[#4A6B5D] bg-white shadow-2xs">
+                            <span class="text-xs font-bold text-[#5B5550]">${escapeHTML(unit)}</span>
+                            <button type="button" 
+                                    onclick="window.TempoMode.submitRmodeQuantityValue('${currentTracker.id}')"
+                                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#7B9688] hover:bg-[#6D8475] text-white transition cursor-pointer shrink-0 shadow-2xs">
+                                Save
+                            </button>
+                            <button type="button" 
+                                    onclick="window.TempoMode.submitRmodeSelfCheckValue('${currentTracker.id}', 'no')"
+                                    class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer">
+                                Didn't do
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                controlsHTML = `
+                    <div class="pt-0.5 pb-1 flex items-center space-x-2">
+                        <button type="button" 
+                                onclick="window.TempoMode.submitRmodeSelfCheckValue('${currentTracker.id}', 'yes')"
+                                class="px-4 py-1.5 rounded-xl text-xs font-bold bg-[#7B9688] text-white hover:bg-[#6D8475] shadow-2xs transition">
+                            Check in
+                        </button>
+                    </div>
+                `;
+            }
+
+            middleSectionHTML = `
+                <div class="space-y-2 py-1">
+                    <!-- Tracker Header with Color Dot & Small Secondary Skip Button -->
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
-                            <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
-                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                                ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
-                            </span>
+                        <div class="flex items-center space-x-2 text-sm font-bold text-[#484541] truncate min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
+                            <span class="truncate">${escapeHTML(currentTracker.name)}</span>
                         </div>
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]">
-                            ✓ ${window.t ? window.t('modes.recovery.viewToday', {}, 'Checked in today') : 'Checked in today'}
-                        </span>
-                    </div>
-                    <div class="space-y-1">
-                        <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                            Checked in for today
-                        </h3>
-                        <p class="text-xs text-[#6F6B68] font-medium">${window.t ? window.t('modes.recovery.streakCount', { count: streakCount }, `${streakCount}-day streak`) : `${streakCount} day check-in streak`}</p>
-                    </div>
-
-                    <!-- Streak Calendar Row -->
-                    <div class="flex items-center space-x-2 py-1">
-                        ${days.map((d, i) => `
-                            <div class="flex flex-col items-center space-y-1">
-                                <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${dayStatus[i] === 'done' ? 'bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]' : (dayStatus[i] === 'pending' ? 'border-2 border-[#166545] text-[#166545]' : 'border border-stone-200 text-stone-400')}">
-                                    ${dayStatus[i] === 'done' ? '✓' : (dayStatus[i] === 'pending' ? '●' : '○')}
-                                </div>
-                                <span class="text-[10px] text-stone-500 font-semibold">${d}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-
-                    <p class="text-xs text-[#6F6B68]">You checked in on ${checkedCount} of ${totalCount} things.</p>
-                    <div class="pt-2 flex flex-wrap items-center gap-3">
-                        <button onclick="window.TempoMode.handleSelfCheckAction('view')"
-                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#166545] hover:bg-[#115237] text-white shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>${window.t ? window.t('modes.recovery.viewToday', {}, "View today's check-in") : "View today's check-in"}</span>
-                            <span>→</span>
+                        <button type="button" 
+                                onclick="window.TempoMode.skipRmodeCurrentSelfCheck('${currentTracker.id}')"
+                                class="text-xs font-semibold text-[#8C8681] hover:text-[#37352F] hover:bg-stone-200/50 px-2.5 py-1 rounded-lg transition cursor-pointer shrink-0"
+                                title="Skip for now">
+                            Skip
                         </button>
-                        <div class="flex items-center space-x-2 text-xs font-semibold text-[#166545]">
-                            <button onclick="window.TempoMode.handleSelfCheckAction('edit')" class="hover:text-[#0E4A32] transition cursor-pointer">Edit check-in</button>
-                            <span class="text-stone-300">·</span>
-                            <button onclick="window.TempoMode.handleSelfCheckAction('manage')" class="hover:text-[#0E4A32] transition cursor-pointer">${window.t ? window.t('modes.recovery.manageSelfCheck', {}, 'Manage Self-check') : 'Manage Self-check'}</button>
-                            <span class="text-stone-300">·</span>
-                            <button onclick="window.TempoMode.handleSelfCheckAction('history')" class="hover:text-[#0E4A32] transition cursor-pointer">${window.t ? window.t('modes.recovery.viewHistory', {}, 'History') : 'History'}</button>
-                        </div>
+                    </div>
+
+                    <!-- Single Interactive Control -->
+                    ${controlsHTML}
+
+                    <!-- Summary Line (without progress bar) -->
+                    <div class="pt-1 flex items-center justify-between text-xs text-[#5B5550]">
+                        <span>You checked in on ${answeredCount} of ${totalCount} things.</span>
+                        ${skippedTrackers.length > 0 ? `<span class="text-[11px] text-[#8C8681]">(${skippedTrackers.length} skipped)</span>` : ''}
+                    </div>
+                </div>
+            `;
+        } else {
+            // Completed / All Items Processed Summary State
+            const allChecked = answeredCount === totalCount;
+            middleSectionHTML = `
+                <div class="space-y-2 py-1.5">
+                    <div class="flex items-center space-x-2 text-sm font-bold ${allChecked ? 'text-[#166545]' : 'text-[#484541]'}">
+                        <span class="w-2.5 h-2.5 rounded-full ${allChecked ? 'bg-[#166545]' : 'bg-[#7B9688]'} inline-block"></span>
+                        <span>${allChecked ? 'All check-ins completed today! 🎉' : 'Today’s check-in complete'}</span>
+                    </div>
+
+                    <!-- Summary Line (without progress bar) -->
+                    <div class="pt-0.5 flex items-center justify-between text-xs text-[#5B5550]">
+                        <span>You checked in on ${answeredCount} of ${totalCount} things.</span>
+                        ${skippedTrackers.length > 0 ? `
+                            <button type="button" 
+                                    onclick="window.TempoMode.resetRmodeSkippedTrackers()"
+                                    class="text-xs font-bold text-[#4A6B5D] hover:underline cursor-pointer">
+                                Review ${skippedTrackers.length} skipped
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
         }
 
-        // DEFAULT: STATE A — NO SELF-CHECK CONFIGURED
         return `
-            <div class="recovery-card-selfcheck bg-white border border-[#CDE9DA] rounded-3xl p-6 sm:p-8 space-y-4 shadow-xs relative overflow-hidden" data-tempo-ui="recovery-self-check">
-                <div class="text-xs sm:text-sm font-semibold text-[#6F6B68]">
-                    ${escapeHTML(greetingText)}
+            <div class="recovery-card-selfcheck bg-[#FEFAF4] rounded-3xl p-6 sm:p-7 soft-card-shadow border border-white/60 flex flex-col justify-between" style="min-height: 290px; width: calc(100% - 30px); margin-inline: auto; background-color: #FEFAF4;" data-tempo-ui="recovery-self-check">
+                <!-- Top Block: Category, Title, Streak -->
+                <div class="space-y-1">
+                    <span class="text-xs sm:text-sm font-extrabold text-[#4A6B5D] uppercase tracking-wide block">Your daily check-in</span>
+                    <h3 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#484541] tracking-tight leading-snug">Today’s self-check</h3>
+                    <p class="text-xs italic text-[#7B7672] font-medium">${streakCount}-day streak</p>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
-                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
-                        ${window.t ? window.t('modes.recovery.selfCheck', {}, 'SELF-CHECK') : 'SELF-CHECK'}
-                    </span>
-                </div>
-                <div class="space-y-1.5">
-                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124] tracking-tight">
-                        ${window.t ? window.t('modes.recovery.selfCheckDesc', {}, 'What would you like to keep an eye on?') : 'What would you like to keep an eye on?'}
-                    </h3>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed max-w-lg">
-                        Create your own check-in with the things that matter to you — stress signs, supportive habits, or anything else.
-                    </p>
-                </div>
-                <div class="pt-3">
+
+                <!-- Middle Block: Single Tracking Item OR Completed State -->
+                ${middleSectionHTML}
+
+                <!-- Bottom Block: Action Buttons -->
+                <div class="pt-1 flex flex-wrap items-center gap-3">
                     <button type="button" 
-                            onclick="window.TempoMode.handleSelfCheckSetupClick()"
-                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                        <span>${window.t ? window.t('modes.recovery.setupSelfCheck', {}, 'Set up Self-check') : 'Set up Self-check'}</span>
-                        <span>→</span>
+                            onclick="window.TempoMode.handleSelfCheckAction('view')"
+                            class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#7B9688] hover:bg-[#6D8475] text-white shadow-xs transition cursor-pointer">
+                        View today's checkin
+                    </button>
+                    <button type="button" 
+                            onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open', { sourceContext: 'recovery' }); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; }"
+                            class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-white border border-[#7B9688] text-[#4A6B5D] hover:bg-[#F4F7F5] shadow-xs transition cursor-pointer">
+                        Edit tracking system
                     </button>
                 </div>
             </div>
         `;
     }
 
-    // -------------------------------------------------------------------------
-    // SHARED ECOSYSTEM FOR RECOVERY MODE
-    // -------------------------------------------------------------------------
-    function renderRecoverySharedEcosystem() {
+    // Side-by-side Quick Relief & Learn & Solve cards beneath Today's self-check
+    function renderRecoverySupportRowHTML() {
         return `
-            <div id="recovery-shared-ecosystem-container" data-tempo-ui="recovery-tools" class="space-y-8">
-                ${window.TempoTools ? window.TempoTools.renderSectionHTML() : ''}
-                ${window.TempoLearnSolve ? `<div id="rmode-learn-solve-container">${window.TempoLearnSolve.renderSectionHTML()}</div>` : ''}
+            <div class="recovery-support-row grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Tool 1: Quick Relief -->
+                ${renderQuickReliefCardHTML()}
+
+                <!-- Tool 2: Learn & Solve -->
+                ${renderLearnSolveCardHTML()}
             </div>
         `;
     }
 
-    // Preserved for backwards compatibility (consolidated into shared ecosystem)
-    function renderRecoverySupportRowHTML() {
-        return '';
+    function getAuthoritativeTrackerObservations(trackerId) {
+        const uid = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function')
+            ? (window.TempoAuth.getCurrentUserId() || 'local_user')
+            : 'local_user';
+        const checkinsKey = `tempo_selfcheck_checkins_${uid}`;
+        const obsKey = `tempo_selfcheck_observations_${uid}`;
+
+        let checkins = [];
+        let allObs = [];
+        try {
+            checkins = JSON.parse(localStorage.getItem(checkinsKey) || (uid === 'local_user' ? (localStorage.getItem('tempo_selfcheck_checkins') || '[]') : '[]'));
+            allObs = JSON.parse(localStorage.getItem(obsKey) || (uid === 'local_user' ? (localStorage.getItem('tempo_selfcheck_observations') || '[]') : '[]'));
+        } catch (e) {}
+
+        const dateMap = {};
+        if (Array.isArray(checkins)) {
+            checkins.forEach(c => {
+                if (c && c.id && c.checkin_date) {
+                    dateMap[c.id] = c.checkin_date;
+                }
+            });
+        }
+
+        const todayStr = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTodayDateStr === 'function')
+            ? window.TempoRecoverySelfCheck.getTodayDateStr()
+            : new Date().toISOString().split('T')[0];
+
+        if (!Array.isArray(allObs)) return [];
+
+        return allObs
+            .filter(o => o && o.tracker_id === trackerId && o.status === 'answered' && o.value !== null && o.value !== undefined)
+            .map(o => ({
+                ...o,
+                date: dateMap[o.checkin_id] || todayStr
+            }))
+            .filter(o => o.date <= todayStr)
+            .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    }
+
+    function getWeeklyReportCountdownText() {
+        const now = new Date();
+        const day = now.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
+        // Weekly review cycle in Tempo runs Monday to Sunday.
+        // The weekly report is available at the end of the weekly cycle (Sunday).
+        const days = (7 - day) % 7;
+        if (days === 0) {
+            return 'Your weekly report is ready today.';
+        }
+        return `${days} day${days === 1 ? '' : 's'} until your weekly report.`;
     }
 
     function renderRecentlyCard(recentlyState) {
-        if (window.TempoSelfCheckHistory && typeof window.TempoSelfCheckHistory.renderRecentlyCard === 'function') {
-            return window.TempoSelfCheckHistory.renderRecentlyCard();
+        let activeTrackers = [];
+        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function') {
+            activeTrackers = window.TempoRecoverySelfCheck.getActiveTrackers();
+        } else {
+            try {
+                const uid = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function')
+                    ? (window.TempoAuth.getCurrentUserId() || 'local_user')
+                    : 'local_user';
+                const raw = localStorage.getItem(`tempo_selfcheck_trackers_${uid}`) || localStorage.getItem('tempo_selfcheck_trackers');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    activeTrackers = Array.isArray(parsed) ? parsed.filter(t => !t.archived && !t.is_archived) : [];
+                }
+            } catch (e) {}
         }
 
-        if (recentlyState && recentlyState.type === 'NOT_ENOUGH') {
-            return `
-                <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
-                    <div class="space-y-3">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">
-                                ${window.t ? window.t('modes.recovery.recently', {}, 'RECENTLY') : 'RECENTLY'}
-                            </span>
-                        </div>
-                        <h4 class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            ${window.t ? window.t('modes.recovery.recentlyJustStarted', {}, "You're just getting started.") : "You're just getting started."}
-                        </h4>
-                        <p class="text-xs text-[#6F6B68] leading-relaxed">
-                            ${window.t ? window.t('modes.recovery.recentlyJustStartedDesc', {}, "There's not enough history to compare yet. Keep checking in at your own pace.") : "There's not enough history to compare yet. Keep checking in at your own pace."}
-                        </p>
-                    </div>
-                    <div class="pt-4 border-t border-stone-100 text-[11px] text-[#6F6B68]">
-                        <span>Look back history activates after 3 check-ins.</span>
-                    </div>
+        const countdownText = getWeeklyReportCountdownText();
+
+        let itemsHTML = '';
+        if (activeTrackers.length === 0) {
+            itemsHTML = `
+                <div class="py-3 text-center">
+                    <p class="text-xs text-[#7B7672]">No active tracking items.</p>
                 </div>
             `;
+        } else {
+            itemsHTML = activeTrackers.map(tracker => {
+                const nameLower = (tracker.name || '').toLowerCase();
+                const dotColor = tracker.type_color || (
+                    tracker.category === 'stress_sign' ? '#D48366' :
+                    (nameLower.includes('sleep') ? '#5A9E75' :
+                    (tracker.category === 'supportive' ? '#5A9E75' : '#7B9688'))
+                );
+
+                const observations = getAuthoritativeTrackerObservations(tracker.id);
+                const latestObs = observations.length > 0 ? observations[observations.length - 1] : null;
+
+                let description = '';
+                let formattedValue = '';
+
+                if (!latestObs) {
+                    // Missing data: never invent values, never treat missing check-in as zero
+                    if (tracker.check_method === 'percentage' || nameLower.includes('tension')) {
+                        description = `Your average ${escapeHTML(nameLower)} level is`;
+                    } else if (tracker.check_method === 'options' || tracker.check_method === 'yes_no') {
+                        description = nameLower.includes('sleep') ? 'Nights of Quality Sleep' : 'Latest recorded choice';
+                    } else if (tracker.check_method === 'scale') {
+                        description = 'Latest recorded rating';
+                    } else if (tracker.check_method === 'quantity' || nameLower.includes('walk')) {
+                        description = nameLower.includes('walk') ? 'You have walked for' : 'You have logged';
+                    } else {
+                        description = `Your average ${escapeHTML(nameLower)} level is`;
+                    }
+                    formattedValue = '<span class="text-[#8E8A85] text-sm font-normal">—</span>';
+                } else {
+                    // Format historical values according to the method that was active when recorded
+                    const method = latestObs.check_method || tracker.check_method || 'yes_no';
+
+                    if (method === 'percentage' || (!latestObs.check_method && nameLower.includes('tension'))) {
+                        const pctObs = observations.filter(o => o.value !== null && o.value !== undefined && (typeof o.value === 'number' || !isNaN(parseFloat(o.value))));
+                        if (pctObs.length > 0) {
+                            const sum = pctObs.reduce((acc, o) => acc + parseFloat(o.value), 0);
+                            const avg = Math.round(sum / pctObs.length);
+                            description = `Your average ${escapeHTML(nameLower)} level is`;
+                            formattedValue = `${avg}%`;
+                        } else {
+                            description = `Your average ${escapeHTML(nameLower)} level is`;
+                            formattedValue = '<span class="text-[#8E8A85] text-sm font-normal">—</span>';
+                        }
+                    } else if (method === 'options' || method === 'yes_no') {
+                        if (nameLower.includes('sleep')) {
+                            description = 'Nights of Quality Sleep';
+                            const goodCount = observations.filter(o => {
+                                const valStr = String(o.value || '').trim().toLowerCase();
+                                return valStr === 'good' || valStr === 'yes' || valStr === 'true';
+                            }).length;
+                            formattedValue = `${goodCount}`;
+                        } else {
+                            description = 'Latest recorded choice';
+                            let valStr = String(latestObs.value || '');
+                            if (valStr.toLowerCase() === 'true' || valStr.toLowerCase() === 'yes') valStr = 'Yes';
+                            else if (valStr.toLowerCase() === 'false' || valStr.toLowerCase() === 'no') valStr = 'No';
+                            formattedValue = escapeHTML(valStr);
+                        }
+                    } else if (method === 'scale') {
+                        const max = (tracker.scale_max !== undefined) ? tracker.scale_max : 5;
+                        description = 'Latest recorded rating';
+                        formattedValue = `${escapeHTML(String(latestObs.value))}/${max}`;
+                    } else if (method === 'quantity') {
+                        const unit = latestObs.quantity_unit || tracker.quantity_unit || (nameLower.includes('walk') ? 'min' : '');
+                        if (nameLower.includes('walk')) {
+                            description = 'You have walked for';
+                            const formattedUnit = (!unit || unit === 'min' || unit === 'm') ? 'm' : ` ${unit}`;
+                            formattedValue = `${escapeHTML(String(latestObs.value))}${formattedUnit}`;
+                        } else {
+                            description = 'You have logged';
+                            const formattedUnit = unit ? ` ${unit}` : '';
+                            formattedValue = `${escapeHTML(String(latestObs.value))}${formattedUnit}`;
+                        }
+                    } else {
+                        description = `Your average ${escapeHTML(nameLower)} level is`;
+                        formattedValue = escapeHTML(String(latestObs.value));
+                    }
+                }
+
+                return `
+                    <div class="flex items-center justify-between">
+                        <div class="space-y-0.5">
+                            <div class="flex items-center space-x-2 text-sm font-bold text-[#484541]">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
+                                <span class="truncate">${escapeHTML(tracker.name)}</span>
+                            </div>
+                            <p class="text-xs text-[#7B7672] pl-4.5">${description}</p>
+                        </div>
+                        <div class="text-base font-extrabold text-[#4A6B5D] text-right shrink-0">
+                            ${formattedValue}
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
-        // DEFAULT: HONEST EMPTY STATE FOR PHASE 1
         return `
-            <div class="recovery-card-recently bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs flex flex-col justify-between h-full" data-tempo-ui="recovery-recently">
-                <div class="space-y-3">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#6F6B68]">
-                            ${window.t ? window.t('modes.recovery.recently', {}, 'RECENTLY') : 'RECENTLY'}
-                        </span>
-                    </div>
-                    <h4 class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                        ${window.t ? window.t('modes.recovery.recentlyEmpty', {}, 'Nothing here yet.') : 'Nothing here yet.'}
+            <div class="recovery-card-recently bg-[#FEFAF4] rounded-3xl p-6 shadow-xs border border-white/60 space-y-3 mt-2.5" style="margin-top: 10px; background-color: #FEFAF4;" data-tempo-ui="recovery-recently">
+                <div class="flex items-center justify-between pb-1">
+                    <h4 class="font-heading text-xl font-extrabold text-[#484541]">
+                        Recently
                     </h4>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        ${window.t ? window.t('modes.recovery.recentlyEmptyDesc', {}, "Once you start checking in, this space can help you look back at what you've been noticing over time.") : "Once you start checking in, this space can help you look back at what you've been noticing over time."}
-                    </p>
+                    <button type="button" 
+                            onclick="if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') { window.TempoMode.openStrack('open', { sourceContext: 'recovery' }); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; }"
+                            class="px-3 py-1 rounded-full text-xs font-bold bg-[#7D9485] hover:bg-[#6D8475] text-white shadow-2xs transition cursor-pointer">
+                        Adjust Tracking
+                    </button>
                 </div>
-                <div class="pt-4 border-t border-stone-100 text-[11px] text-[#6F6B68]">
-                    <span>${window.t ? window.t('modes.recovery.nothingNeedsRecorded', {}, 'Nothing needs to be recorded until you\'re ready.') : 'Nothing needs to be recorded until you\'re ready.'}</span>
+
+                <!-- Divider line -->
+                <div class="border-b border-[#F0EBE6]"></div>
+
+                <!-- Metrics -->
+                <div class="space-y-3 pt-1">
+                    ${itemsHTML}
+                </div>
+
+                <!-- Footer message -->
+                <div class="pt-3 text-center text-xs font-bold text-[#55504A]">
+                    ${countdownText}
                 </div>
             </div>
         `;
     }
 
     function renderRecoveryNoteCard() {
-        if (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.renderHomeCard === 'function') {
-            return window.TempoRecoveryNote.renderHomeCard();
-        }
-        return '';
-    }
-
-    function renderWeeklyReviewShell(isReady, reviewData) {
-        if (!reviewData) {
-            if (window.TempoWeeklyReview && typeof window.TempoWeeklyReview.getLatestEligibleWeek === 'function') {
-                reviewData = window.TempoWeeklyReview.getLatestEligibleWeek();
+        let noteText = "Drink more than 3 cups of water";
+        try {
+            const savedNote = localStorage.getItem('tempo_recovery_note');
+            if (savedNote) {
+                const parsed = JSON.parse(savedNote);
+                if (parsed && (parsed.content || parsed.text)) {
+                    noteText = parsed.content || parsed.text;
+                }
             }
-        }
-        if (!reviewData) return '';
-
-        const weekRange = reviewData.dateRange || 'Sep 21 – Sep 27';
-
-        // Check if already reviewed
-        const existingReflection = (window.TempoWeeklyReview && typeof window.TempoWeeklyReview.getReflectionForWeek === 'function')
-            ? window.TempoWeeklyReview.getReflectionForWeek(reviewData.start)
-            : null;
-
-        if (existingReflection) {
-            return `
-                <div class="recovery-card-weeklyreview-quiet bg-[#F4FAF6] border border-[#CDE9DA] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">WEEKLY REVIEW</span>
-                        <span class="text-xs text-[#6F6B68] font-medium">• ${escapeHTML(weekRange)}</span>
-                        <span class="text-xs font-semibold text-[#166545]">• ✓ Last week reviewed</span>
-                    </div>
-                    <button type="button" onclick="window.TempoWeeklyReview.open('${reviewData.start}', false)"
-                            class="text-xs font-bold text-[#166545] hover:text-[#0E4A32] underline cursor-pointer self-start sm:self-auto">
-                        View review →
-                    </button>
-                </div>
-            `;
-        }
-
-        if (!isReady) return ''; // Hidden when dismissed or ineligible
+        } catch (e) {}
 
         return `
-            <div class="recovery-card-weeklyreview bg-gradient-to-br from-[#F4FAF6] to-[#EDF7F1] border border-[#CDE9DA] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs" data-tempo-ui="recovery-weekly-review">
-                <div class="flex items-center space-x-2">
-                    <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">
-                        YOUR WEEKLY REVIEW IS READY
-                    </span>
-                    <span class="text-xs text-[#6F6B68] font-medium">• ${escapeHTML(weekRange)}</span>
+            <div class="space-y-1.5 cursor-pointer"
+                 onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('tool-notes'); } else { window.location.hash = '#tool-notes'; }">
+                <div class="flex items-center justify-between pb-0.5">
+                    <div class="flex items-center space-x-1.5 text-xs font-extrabold uppercase tracking-wider text-[#4A6B5D]">
+                        <span class="text-sm">💡</span>
+                        <span class="font-bold text-sm text-[#484541]">NOTE</span>
+                    </div>
+                    <a role="button" tabindex="0"
+                       onclick="event.stopPropagation(); if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('tool-notes'); } else { window.location.hash = '#tool-notes'; }"
+                       class="px-2.5 py-0.5 rounded-full text-xs font-bold text-[#4A6B5D] hover:text-[#385547] bg-[#EBF1ED] hover:bg-[#DFE8E2] border border-[#C6D8CE] transition cursor-pointer flex items-center space-x-1"
+                       title="Create your notes">
+                        <span>Create your notes</span>
+                        <span class="text-[10px]">→</span>
+                    </a>
                 </div>
-                <div class="space-y-1">
-                    <h4 class="font-heading text-lg font-bold text-[#202124]">A look back at what you checked in with</h4>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-xl leading-relaxed">
-                        A look back at what you checked in with, what you worked through, and how the week felt.
+
+                <div role="button" tabindex="0"
+                     onclick="event.stopPropagation(); if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('tool-notes'); } else { window.location.hash = '#tool-notes'; }"
+                     onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('tool-notes'); } else { window.location.hash = '#tool-notes'; } }"
+                     class="bg-[#DFE7E1] border border-[#CBD8D0] hover:border-[#B5C7BC] hover:bg-[#D5E0D7] hover:shadow-md rounded-2xl px-5 py-6 min-h-[85px] flex items-center shadow-xs cursor-pointer transition select-none group"
+                     title="Tool Notes"
+                     data-tempo-ui="dashboard-note-card">
+                    <p class="text-sm font-semibold text-[#5B6D63] leading-relaxed group-hover:text-[#46574E] transition">
+                        ${escapeHTML(noteText)}
                     </p>
-                </div>
-                <div class="pt-2 flex flex-wrap items-center gap-3">
-                    <button onclick="if(window.TempoWeeklyReview && window.TempoWeeklyReview.open) { window.TempoWeeklyReview.open('${reviewData.start}', true); }"
-                            class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#166545] hover:bg-[#115237] text-white shadow-xs transition cursor-pointer">
-                        Look back at my week →
-                    </button>
-                    <button onclick="window.TempoMode.dismissWeeklyReviewNotice()"
-                            class="px-4 py-2.5 rounded-xl border border-[#CDE9DA] bg-white text-xs font-semibold text-stone-700 hover:bg-stone-50 transition cursor-pointer">
-                        Maybe later
-                    </button>
                 </div>
             </div>
         `;
     }
 
-    function renderRecoveryTodaySection(confirmedPlan, todayStr) {
-        const allPlanned = (confirmedPlan && confirmedPlan.plannedTasks) ? confirmedPlan.plannedTasks : [];
-        const todayTasks = allPlanned.filter(pt => pt.dayDate === todayStr);
+    // Canonical task completion status evaluator: strictly source of truth
+    function isTaskExplicitlyCompleted(taskItem) {
+        if (!taskItem) return false;
+        const task = (taskItem && taskItem.task) ? taskItem.task : taskItem;
 
-        let contentHTML = '';
+        // 1. Direct boolean property
+        if (task.completed === true || taskItem.completed === true) return true;
+        if (task.completed === false || taskItem.completed === false) return false;
 
-        if (todayTasks.length === 0) {
-            contentHTML = `
-                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-2 shadow-xs">
-                    <h4 class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                        Nothing planned for today.
-                    </h4>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        You don't need to fill the space. Take things at your own pace.
-                    </p>
-                </div>
-            `;
-        } else {
-            const allTodayCompleted = todayTasks.every(pt => pt.task && pt.task.completed);
-            if (allTodayCompleted) {
-                contentHTML = `
-                    <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-2 shadow-xs">
-                        <div class="flex items-center space-x-2 text-[#166545] font-bold text-sm sm:text-base">
-                            <span>✓</span>
-                            <span>You're done with today's plan.</span>
-                        </div>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                            Rest and recovery are an essential part of the process. No need to rush into tomorrow's work.
-                        </p>
-                    </div>
-                `;
-            } else {
-                let activeItem = todayTasks.find(pt => pt.task && pt.task.isInProgress && !pt.task.completed);
-                const isContinue = !!activeItem;
-                if (!activeItem) {
-                    activeItem = todayTasks.find(pt => pt.task && !pt.task.completed);
+        // 2. String representation ("true" / "false")
+        if (task.completed === 'true' || taskItem.completed === 'true') return true;
+        if (task.completed === 'false' || taskItem.completed === 'false') return false;
+
+        // 3. Execution / progress status
+        const status = String(task.executionStatus || task.execution_status || task.status || taskItem.executionStatus || taskItem.status || '').toLowerCase();
+        if (status === 'completed' || status === 'done') return true;
+        if (status === 'pending' || status === 'in_progress' || status === 'active' || status === 'not_started') return false;
+
+        // 4. Default: strictly NOT completed (never infer completion from missing value, position, or mock state)
+        return false;
+    }
+
+    function renderRecoveryWorkingPlanSection(confirmedPlan, todayStr) {
+        if (!todayStr) todayStr = getTodayISOString();
+
+        function formatPlanDateHeader(dateStr, fallbackLabel) {
+            if (!dateStr || typeof dateStr !== 'string') return fallbackLabel || 'Scheduled';
+            const clean = dateStr.split(/[T ]/)[0];
+            const parts = clean.split('-');
+            if (parts.length === 3) {
+                const year = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1;
+                const day = parseInt(parts[2], 10);
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                if (month >= 0 && month < 12 && !isNaN(day)) {
+                    return `${months[month]} ${day}`;
                 }
+            }
+            return fallbackLabel || dateStr;
+        }
 
-                if (activeItem && activeItem.task) {
-                    const task = activeItem.task;
-                    let nextActionText = "Begin focused work block.";
-                    if (task.subtasks && task.subtasks.length > 0) {
-                        const incompleteSubtasks = task.subtasks.filter(s => !s.completed);
-                        nextActionText = incompleteSubtasks.length > 0 ? `Next: ${incompleteSubtasks[0].title}` : (task.description || "All preliminary steps completed.");
-                    } else if (task.description) {
-                        nextActionText = task.description;
+        // Shared plan resolution
+        function hasValidTasks(p) {
+            return Boolean(p && (
+                (Array.isArray(p.plannedTasks) && p.plannedTasks.length > 0) ||
+                (Array.isArray(p.tasks) && p.tasks.length > 0) ||
+                (Array.isArray(p.unarrangedTasks) && p.unarrangedTasks.length > 0)
+            ));
+        }
+
+        let plan = hasValidTasks(confirmedPlan) ? confirmedPlan : null;
+        if (!plan && window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getActivePlan === 'function') {
+            const p = window.TempoPlanWorkspace.getActivePlan();
+            if (hasValidTasks(p)) plan = p;
+        }
+        if (!plan && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            const p = window.TempoPlanStore.getActivePlan('recovery') || window.TempoPlanStore.getActivePlan('emergency') || window.TempoPlanStore.getActivePlan('default');
+            if (hasValidTasks(p)) plan = p;
+        }
+        if (!plan && window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
+            const p = window.TempoEmergencyFlow.getConfirmedPlan();
+            if (hasValidTasks(p)) plan = p;
+        }
+        if (!plan) {
+            try {
+                const savedPlan = localStorage.getItem('tempo_working_plan') || localStorage.getItem('tempo_store_active_emergency_guest');
+                if (savedPlan) {
+                    const parsed = JSON.parse(savedPlan);
+                    if (hasValidTasks(parsed)) plan = parsed;
+                }
+            } catch (e) {}
+        }
+        if (!plan && window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getDefaultReferencePlan === 'function') {
+            plan = window.TempoPlanWorkspace.getDefaultReferencePlan();
+        }
+
+        let plannedList = [];
+        if (plan && Array.isArray(plan.plannedTasks) && plan.plannedTasks.length > 0) {
+            plannedList = plan.plannedTasks;
+        } else if (plan && Array.isArray(plan.tasks) && plan.tasks.length > 0) {
+            plannedList = plan.tasks.map((t, idx) => ({
+                dayDate: t.scheduledDate || t.deadlineDate || (idx < 2 ? todayStr : null),
+                task: t
+            }));
+        }
+
+        const unarrangedList = (plan && Array.isArray(plan.unarrangedTasks)) ? plan.unarrangedTasks : [];
+        const completedList = (plan && (Array.isArray(plan.completedTasks) ? plan.completedTasks : (Array.isArray(plan.doneTasks) ? plan.doneTasks : []))) || [];
+
+        let allItems = [];
+        const seenTaskIds = new Set();
+
+        if (plannedList.length > 0) {
+            plannedList.forEach((pt, index) => {
+                const t = (pt && pt.task) ? pt.task : (pt || {});
+                const taskId = t.id || pt.id || `task-${index}`;
+                seenTaskIds.add(String(taskId));
+                const isToday = (pt.dayDate === todayStr) || (!pt.dayDate && index < 2);
+                const isCompleted = isTaskExplicitlyCompleted(pt);
+                const subCount = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.length : 0;
+                const subDone = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.filter(s => isTaskExplicitlyCompleted(s)).length : 0;
+                const dDate = pt.dayDate || (isToday ? todayStr : (t.deadlineDate || todayStr));
+                const headerDateLabel = formatPlanDateHeader(dDate, pt.dayLabel || (isToday ? 'Today' : dDate));
+
+                let timeHeader = pt.timeBlock;
+                if (!timeHeader) {
+                    if (pt.startTime && pt.endTime) {
+                        timeHeader = isToday
+                            ? `Today, ${formatTime12H(pt.startTime)} to ${formatTime12H(pt.endTime)}`
+                            : `${headerDateLabel}, ${formatTime12H(pt.startTime)} to ${formatTime12H(pt.endTime)}`;
+                    } else if (pt.startTime) {
+                        timeHeader = isToday
+                            ? `Today, ${formatTime12H(pt.startTime)}`
+                            : `${headerDateLabel}, ${formatTime12H(pt.startTime)}`;
+                    } else {
+                        timeHeader = isToday ? 'Today, Scheduled' : `${headerDateLabel}, Scheduled`;
                     }
-
-                    const durationText = task.isUnknownDuration ? "Time not estimated" : `~ ${task.durationLabel || '45 min'}`;
-
-                    contentHTML = `
-                        <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-4 shadow-xs">
-                            <div class="flex items-center justify-between">
-                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${isContinue ? 'bg-[#FFE9DC] text-[#B83D08]' : 'bg-stone-100 text-stone-700'} uppercase tracking-wider">
-                                    ${isContinue ? 'CONTINUE' : 'UP NEXT'}
-                                </span>
-                                <span class="text-xs text-[#6F6B68] font-medium">${escapeHTML(durationText)}</span>
-                            </div>
-
-                            <div class="space-y-1">
-                                <h4 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                                    ${escapeHTML(task.name)}
-                                </h4>
-                                <p class="text-xs sm:text-sm text-[#6F6B68]">
-                                    ${escapeHTML(nextActionText)}
-                                </p>
-                            </div>
-
-                            <div class="pt-2 flex flex-wrap items-center gap-3">
-                                <button onclick="window.TempoMode.startTaskFocus('${task.id}')"
-                                        class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                                    <span>${isContinue ? 'Continue' : 'Focus on this task'}</span>
-                                    <span>→</span>
-                                </button>
-                                <button onclick="window.TempoApp.navigateTo('plan-workspace'); if (window.TempoPlanWorkspace && window.TempoPlanWorkspace.selectTask) { window.TempoPlanWorkspace.selectTask('${task.id}'); }"
-                                        class="px-4 py-2.5 rounded-xl border border-[#EAE4DF] text-xs font-bold text-[#202124] bg-white hover:bg-stone-50 transition shadow-xs cursor-pointer inline-flex items-center space-x-1.5">
-                                    <span>View task</span>
-                                    <span>→</span>
-                                </button>
-                            </div>
-                        </div>
-                    `;
                 }
+
+                let tag = 'Later';
+                let tagClass = 'bg-[#E2EDF2] text-[#4F7A8A]';
+                if (t.userLabel === 'Now' || pt.executionBadge === 'Now' || t.priorityCategory === 'DO_FIRST' || (isToday && index === 0)) {
+                    tag = 'Now';
+                    tagClass = 'bg-[#D79277] text-white';
+                } else if (t.userLabel === 'Then' || (isToday && index === 1)) {
+                    tag = 'Then';
+                    tagClass = 'bg-[#F7E7D4] text-[#A6753A]';
+                }
+
+                let dueDateStr = 'Due: Upcoming';
+                if (t.dueDate) {
+                    dueDateStr = `Due: ${t.dueDate}`;
+                } else if (t.deadlineDate) {
+                    const formattedDDate = formatPlanDateHeader(t.deadlineDate, t.deadlineDate);
+                    const timePart = t.deadlineTime ? ` - ${formatTime12H(t.deadlineTime)}` : '';
+                    dueDateStr = `Due: ${formattedDDate}${timePart}`;
+                } else if (t.deadline) {
+                    dueDateStr = `Due: ${t.deadline}`;
+                }
+
+                allItems.push({
+                    id: taskId,
+                    task: t,
+                    name: t.name || t.title || 'Untitled Task',
+                    date: dDate,
+                    dayLabel: pt.dayLabel || headerDateLabel,
+                    headerDateLabel: headerDateLabel,
+                    timeHeader: timeHeader,
+                    tag: tag,
+                    tagClass: tagClass,
+                    dueDate: dueDateStr,
+                    subtasksText: `${subDone}/${subCount} subtasks`,
+                    completed: isCompleted
+                });
+            });
+        }
+
+        // Include any explicitly completed unarranged tasks in allItems so they show up in Done column
+        unarrangedList.forEach((u, uIdx) => {
+            const t = (u && u.task) ? u.task : u;
+            const taskId = t.id || u.id || `unarranged-${uIdx}`;
+            if (seenTaskIds.has(String(taskId))) return;
+            const isCompleted = isTaskExplicitlyCompleted(u);
+            if (isCompleted) {
+                seenTaskIds.add(String(taskId));
+                const subCount = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.length : 0;
+                const subDone = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.filter(s => isTaskExplicitlyCompleted(s)).length : 0;
+                allItems.push({
+                    id: taskId,
+                    task: t,
+                    name: t.name || t.title || 'Untitled Task',
+                    date: t.deadlineDate || todayStr,
+                    dayLabel: 'Flexible',
+                    headerDateLabel: 'Completed',
+                    timeHeader: 'Flexible Schedule',
+                    tag: 'Done',
+                    tagClass: 'bg-[#E8EFE8] text-[#556B54]',
+                    dueDate: t.deadlineDate ? `Due: ${formatPlanDateHeader(t.deadlineDate, t.deadlineDate)}` : 'Flexible schedule',
+                    subtasksText: `${subDone}/${subCount} subtasks`,
+                    completed: true
+                });
             }
+        });
+
+        // Also include any tasks from plan.completedTasks or plan.doneTasks if not already present
+        completedList.forEach((c, cIdx) => {
+            const t = (c && c.task) ? c.task : c;
+            const taskId = t.id || c.id || `completed-${cIdx}`;
+            if (seenTaskIds.has(String(taskId))) return;
+            seenTaskIds.add(String(taskId));
+            const subCount = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.length : 0;
+            const subDone = (Array.isArray(t.subtasks) && t.subtasks.length > 0) ? t.subtasks.filter(s => isTaskExplicitlyCompleted(s)).length : 0;
+            allItems.push({
+                id: taskId,
+                task: t,
+                name: t.name || t.title || 'Untitled Task',
+                date: c.dayDate || t.deadlineDate || todayStr,
+                dayLabel: c.dayLabel || 'Completed',
+                headerDateLabel: 'Completed',
+                timeHeader: 'Completed Task',
+                tag: 'Done',
+                tagClass: 'bg-[#E8EFE8] text-[#556B54]',
+                dueDate: t.deadlineDate ? `Due: ${formatPlanDateHeader(t.deadlineDate, t.deadlineDate)}` : 'Completed',
+                subtasksText: `${subDone}/${subCount} subtasks`,
+                completed: true
+            });
+        });
+
+        // Fallback default tasks if absolutely no tasks were loaded
+        if (allItems.length === 0) {
+            let mockState = {};
+            try {
+                mockState = JSON.parse(localStorage.getItem('tempo_rmode_mock_tasks') || '{}');
+            } catch (e) {}
+
+            const m1Done = (typeof mockState['task-marketing-research'] === 'boolean') ? mockState['task-marketing-research'] : (typeof mockState['rmode-mock-1'] === 'boolean' ? mockState['rmode-mock-1'] : false);
+            const m2Done = (typeof mockState['task-event-proposal'] === 'boolean') ? mockState['task-event-proposal'] : (typeof mockState['rmode-mock-2'] === 'boolean' ? mockState['rmode-mock-2'] : false);
+            const m3Done = (typeof mockState['task-edit-video'] === 'boolean') ? mockState['task-edit-video'] : (typeof mockState['rmode-mock-3'] === 'boolean' ? mockState['rmode-mock-3'] : false);
+
+            const tmrw = new Date();
+            tmrw.setDate(tmrw.getDate() + 1);
+            const tmrwStr = tmrw.toISOString().split('T')[0];
+
+            allItems = [
+                {
+                    id: 'task-marketing-research',
+                    name: 'Marketing Research',
+                    date: todayStr,
+                    dayLabel: 'Today',
+                    headerDateLabel: formatPlanDateHeader(todayStr, 'Today'),
+                    timeHeader: 'Today, 2:00 PM to 4:00 PM',
+                    tag: 'Now',
+                    tagClass: 'bg-[#D79277] text-white',
+                    dueDate: 'Due: Oct 17, 2026 - 9:00 PM',
+                    subtasksText: '0/6 subtasks',
+                    completed: m1Done
+                },
+                {
+                    id: 'task-event-proposal',
+                    name: 'Event Proposal',
+                    date: todayStr,
+                    dayLabel: 'Today',
+                    headerDateLabel: formatPlanDateHeader(todayStr, 'Today'),
+                    timeHeader: 'Today, 5:00 PM to 7:00 PM',
+                    tag: 'Then',
+                    tagClass: 'bg-[#F7E7D4] text-[#A6753A]',
+                    dueDate: 'Due: Oct 18, 2026 - 10:00 AM',
+                    subtasksText: '0/3 subtasks',
+                    completed: m2Done
+                },
+                {
+                    id: 'task-edit-video',
+                    name: 'Edit Video',
+                    date: tmrwStr,
+                    dayLabel: 'Tomorrow',
+                    headerDateLabel: formatPlanDateHeader(tmrwStr, 'Tomorrow'),
+                    timeHeader: `${formatPlanDateHeader(tmrwStr, 'Tomorrow')}, 1:00 PM to 5:00 PM`,
+                    tag: 'Later',
+                    tagClass: 'bg-[#E2EDF2] text-[#4F7A8A]',
+                    dueDate: 'Due: Oct 20, 2026 - 10:00 PM',
+                    subtasksText: '0/3 subtasks',
+                    completed: m3Done
+                }
+            ];
+        }
+
+        const totalCount = Math.max(allItems.length, (plannedList.length + unarrangedList.length) || 6);
+        const completedTasks = allItems.filter(item => item.completed);
+        const incompleteTasks = allItems.filter(item => !item.completed);
+        const completedCount = completedTasks.length;
+        const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+        function renderTaskCard(item) {
+            const isDone = !!item.completed;
+            return `
+                <div class="space-y-1.5" data-task-id="${item.id}">
+                    <div class="text-xs font-bold text-[#55504A]">
+                        ${escapeHTML(item.timeHeader)}
+                    </div>
+                    <div class="border border-[#D8C7B5] rounded-2xl p-4 bg-white hover:bg-stone-50/50 transition flex items-start space-x-3 group ${isDone ? 'opacity-85' : ''}">
+                        <button type="button" 
+                                onclick="window.TempoMode.toggleTaskCompletion('${item.id}')"
+                                class="w-5 h-5 rounded border ${isDone ? 'bg-[#7B9688] border-[#7B9688] text-white' : 'border-[#C8B39E] bg-white hover:border-[#D79277]'} flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition"
+                                title="${isDone ? 'Mark incomplete' : 'Mark complete'}">
+                            ${isDone ? '✓' : ''}
+                        </button>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2">
+                                <h5 class="text-base font-extrabold truncate ${isDone ? 'line-through opacity-60 text-stone-400' : 'text-[#484541]'}">
+                                    ${escapeHTML(item.name)}
+                                </h5>
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isDone ? 'bg-[#E8EFE8] text-[#556B54]' : item.tagClass} shrink-0">
+                                    ${isDone ? 'Done' : escapeHTML(item.tag)}
+                                </span>
+                            </div>
+                            <p class="text-xs text-[#7B7672] mt-1">
+                                ${escapeHTML(item.dueDate)}
+                            </p>
+                            <p class="text-xs text-[#7B7672] mt-0.5">
+                                ${escapeHTML(item.subtasksText)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         return `
-            <div id="recovery-today-section" class="recovery-section-today space-y-3 pt-1" data-tempo-ui="recovery-today">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center space-x-2">
-                        <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                            Today
-                        </h3>
-                        <span class="text-xs text-[#6F6B68] font-medium hidden sm:inline">• Shared academic plan</span>
-                    </div>
-                    <button onclick="window.TempoApp.navigateTo('plan-workspace');"
-                            class="text-xs font-bold text-[#166545] hover:text-[#0E4A32] flex items-center space-x-1 transition cursor-pointer">
-                        <span>View / Edit Plan</span>
-                        <span>→</span>
+            <div class="recovery-working-plan-card bg-[#FEFAF4] rounded-3xl p-6 sm:p-7 shadow-xs border border-white/60 space-y-4 max-w-full min-w-0" data-tempo-ui="recovery-working-plan" id="recovery-working-plan">
+                <!-- Header -->
+                <div class="flex items-center justify-between pb-1 shrink-0">
+                    <h3 class="font-heading text-2xl font-extrabold text-[#484541] tracking-tight">
+                        Your Working Plan
+                    </h3>
+                    <button type="button"
+                            onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('plan-workspace'); } else { window.location.hash = '#plan-workspace'; }"
+                            class="px-4 py-1.5 rounded-full text-xs font-bold bg-[#D79277] hover:bg-[#C68166] text-white shadow-2xs transition cursor-pointer">
+                        Adjust Plan
                     </button>
                 </div>
-                ${contentHTML}
+
+                <!-- Overall Progress Bar -->
+                <div class="flex items-center space-x-3 pb-2 shrink-0">
+                    <div class="flex-1 h-2 bg-[#E0DDD9] rounded-full overflow-hidden">
+                        <div class="h-full bg-[#D79277] rounded-full transition-all duration-300" style="width: ${progressPercent}%;"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-[#6F6B68] shrink-0">${completedCount}/${totalCount} Tasks</span>
+                </div>
+
+                <!-- Two-Column Container (Left: Tasks, Right: Task Done) -->
+                <div class="recovery-working-plan-scroll flex-1 min-h-0 overflow-x-auto overflow-y-auto pr-1 pb-1"
+                     data-tempo-ui="recovery-plan-scroll-container">
+                    <div class="recovery-plan-columns grid flex flex-row items-stretch h-full gap-4 md:gap-5 w-full min-w-0 pt-1"
+                         data-tempo-ui="recovery-plan-columns">
+
+                        <!-- Left Column: Tasks (all incomplete tasks) -->
+                        <div class="recovery-plan-column flex flex-col h-full min-w-0 flex-1"
+                             data-tempo-ui="recovery-date-column"
+                             data-tempo-column="tasks">
+                            <div class="text-xs sm:text-sm font-extrabold text-[#55504A] uppercase tracking-wider flex items-center justify-between pb-2 shrink-0">
+                                <span>Tasks</span>
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#F3EFEA] text-[#7B7672]">(${incompleteTasks.length})</span>
+                            </div>
+                            <div class="recovery-column-tasks flex-1 min-h-0 overflow-y-auto space-y-4 pr-1.5" data-tempo-ui="recovery-column-task-list">
+                                ${incompleteTasks.length > 0 ? incompleteTasks.map(renderTaskCard).join('') : `
+                                    <div class="p-4 text-xs text-[#8C8782] italic text-center border border-dashed border-[#D8C7B5] rounded-2xl bg-white/50">
+                                        No tasks pending
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+
+                        <!-- Vertical Divider -->
+                        <div class="recovery-plan-divider flex justify-center items-stretch shrink-0 self-stretch px-1" aria-hidden="true">
+                            <div class="w-1.5 bg-[#D2D6D8] rounded-full self-stretch my-1"></div>
+                        </div>
+
+                        <!-- Right Column: Task Done (all completed tasks) -->
+                        <div class="recovery-plan-column flex flex-col h-full min-w-0 flex-1"
+                             data-tempo-ui="recovery-done-column"
+                             data-tempo-column="done">
+                            <div class="text-xs sm:text-sm font-extrabold text-[#7B9688] uppercase tracking-wider flex items-center justify-between pb-2 shrink-0">
+                                <span>Task Done</span>
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#EBF1ED] text-[#4A6B5D]">(${completedTasks.length})</span>
+                            </div>
+                            <div class="recovery-column-tasks flex-1 min-h-0 overflow-y-auto space-y-4 pr-1.5" data-tempo-ui="recovery-column-task-list">
+                                ${completedTasks.length > 0 ? completedTasks.map(renderTaskCard).join('') : `
+                                    <div class="p-4 text-xs text-[#8C8782] italic text-center border border-dashed border-[#D8C7B5] rounded-2xl bg-white/50">
+                                        Completed tasks will appear here
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
             </div>
         `;
     }
 
-    function renderRecoveryPostsSection() {
+    function renderRecoveryCommunityCard() {
         const allPosts = (window.TempoCommunity && window.TempoCommunity.getAllPosts)
             ? window.TempoCommunity.getAllPosts()
             : [];
 
-        let previewPosts = allPosts.filter(p => p.tag === '#Recovery' || p.tag === '#MentalHealth');
-        if (previewPosts.length < 2) {
-            previewPosts = allPosts.slice(0, 2);
-        } else {
-            previewPosts = previewPosts.slice(0, 2);
-        }
-
+        let previewPosts = allPosts.slice(0, 2);
         const postsCardsHTML = (previewPosts.length > 0 && window.TempoCommunity && window.TempoCommunity.renderPostCardHTML)
             ? previewPosts.map(p => window.TempoCommunity.renderPostCardHTML(p)).join('')
             : '';
 
         return `
-            <div class="recovery-section-posts space-y-4 pt-2" data-tempo-ui="recovery-posts">
+            <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-white/60 space-y-4" data-tempo-ui="recovery-community">
                 <!-- Header -->
-                <div class="flex items-center justify-between">
-                    <div class="space-y-0.5">
-                        <div class="flex items-center space-x-2">
-                            <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#202124]">
-                                Tempo Posts
-                            </h3>
-                            <span class="text-xs text-[#6F6B68] font-medium hidden sm:inline">• A little something for when you have space.</span>
-                        </div>
-                        <p class="text-xs text-[#6F6B68] sm:hidden">A little something for when you have space.</p>
+                <div class="flex items-center justify-between pb-1">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-lg">💬</span>
+                        <h4 class="font-heading text-lg sm:text-xl font-extrabold text-[#484541]">
+                            From the Tempo Community
+                        </h4>
                     </div>
                     <button type="button" 
-                            onclick="if (window.TempoCommunity) { window.TempoCommunity.openCommunityModal(); }" 
-                            class="text-xs font-bold text-[#166545] hover:text-[#0E4A32] flex items-center space-x-1 transition cursor-pointer">
-                        <span>See all posts</span>
+                            onclick="if (window.TempoCommunity && typeof window.TempoCommunity.openCommunityModal === 'function') { window.TempoCommunity.openCommunityModal(); }"
+                            class="px-3 py-1 rounded-full text-xs font-bold bg-[#FDECE4] hover:bg-[#FBD9CB] text-[#C97B5E] shadow-2xs transition cursor-pointer flex items-center space-x-1">
+                        <span>See all</span>
                         <span>→</span>
                     </button>
                 </div>
 
                 <!-- Social Post Previews -->
-                <div id="recovery-community-posts-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div id="recovery-community-posts-list" class="space-y-3.5">
                     ${postsCardsHTML}
                 </div>
             </div>
         `;
+    }
+
+    function renderRecoveryEnjoyToolsSection() {
+        return `
+            <div id="enjoy-tempo-tools" class="pt-10 sm:pt-14 pb-8 space-y-6" data-tempo-ui="recovery-enjoy-tempo-tools">
+                <!-- Centered Section Title -->
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-[#5B5550] text-center tracking-tight">
+                    Enjoy Tempo Tools
+                </h2>
+
+                <!-- 4 Cards Horizontal Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <!-- 1. Focus Now -->
+                    <div onclick="if (window.TempoFocusZone && typeof window.TempoFocusZone.openQuickEntry === 'function') { window.TempoFocusZone.openQuickEntry(); } else if (window.TempoFocusZone && typeof window.TempoFocusZone.open === 'function') { window.TempoFocusZone.open(); } else if (window.TempoTriage && typeof window.TempoTriage.launchFocusMode === 'function') { window.TempoTriage.launchFocusMode(); }"
+                         class="recovery-card-focus-now bg-[#DE9A83] border border-[#C68069] rounded-3xl p-5 sm:p-6 flex items-center justify-between min-h-[165px] shadow-xs hover:shadow-md transition cursor-pointer group select-none relative overflow-hidden"
+                         title="Focus Now">
+                        <img src="assets/focus-now-mascot.png" alt="Focus Now Icon" class="recovery-focus-mascot h-[98px] sm:h-[116px] -ml-1.5 sm:-ml-2.5 w-auto object-contain shrink-0 group-hover:scale-105 transition-transform" />
+                        <div class="flex-1 min-w-0 pl-3.5 sm:pl-4 text-left">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-white mb-1 group-hover:text-white/90 transition">
+                                Focus Now
+                            </h3>
+                            <p class="text-xs sm:text-sm text-white/90 leading-snug">
+                                Your own personalized workspace.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 2. Tempo break -->
+                    <div onclick="if (window.TempoTools && typeof window.TempoTools.openBreak === 'function') { window.TempoTools.openBreak(); } else if (window.TempoFocusZone) { window.TempoFocusZone.openQuickEntry(); }"
+                         class="bg-[#D3DFE4] border border-[#BACAD0] rounded-3xl p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-xs hover:shadow-md transition cursor-pointer group select-none relative overflow-hidden"
+                         title="Tempo break">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#3D4E56] mb-1 group-hover:text-[#2A373E] transition">
+                                Tempo break
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#5B6C74] leading-snug">
+                                Take a break with fun activities to unwind.
+                            </p>
+                        </div>
+                        <img src="assets/tempo-break-mascot.png" alt="Tempo break Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 group-hover:scale-105 transition-transform" />
+                    </div>
+
+                    <!-- 3. Practice Breathing -->
+                    <div onclick="if (window.TempoTriage && typeof window.TempoTriage.openBoxBreathingModal === 'function') { window.TempoTriage.openBoxBreathingModal(); } else if (window.TempoBreathing && typeof window.TempoBreathing.openModal === 'function') { window.TempoBreathing.openModal(); }"
+                         class="bg-[#E6EDE7] border border-[#C6D8CC] rounded-3xl p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-xs hover:shadow-md transition cursor-pointer group select-none relative overflow-hidden"
+                         title="Practice Breathing">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#3C5245] mb-1 group-hover:text-[#2A3B31] transition">
+                                Practice Breathing
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#596E62] leading-snug">
+                                Take a deep breath and find your calm.
+                            </p>
+                        </div>
+                        <img src="assets/practice-breathing-mascot.png" alt="Practice Breathing Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 group-hover:scale-105 transition-transform" />
+                    </div>
+
+                    <!-- 4. Create Notes -->
+                    <div onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('tool-notes'); } else { window.location.hash = '#tool-notes'; }"
+                         class="bg-[#F9E8E2] border border-[#E8D2C6] rounded-3xl p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-xs hover:shadow-md transition cursor-pointer group select-none relative overflow-hidden"
+                         title="Create Notes">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#4E3F39] mb-1 group-hover:text-[#382B26] transition">
+                                Create Notes
+                            </h3>
+                            <p class="text-xs sm:text-sm text-[#6B5B54] leading-snug">
+                                Write down anything you want to remember.
+                            </p>
+                        </div>
+                        <img src="assets/notes-mascot.png" alt="Create Notes Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 group-hover:scale-105 transition-transform" />
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Preserved for backwards compatibility
+    function renderWeeklyReviewShell(isReady, reviewData) {
+        return '';
+    }
+
+    function renderRecoveryTodaySection(confirmedPlan, todayStr) {
+        return '';
+    }
+
+    function renderRecoverySharedEcosystem() {
+        return '';
+    }
+
+    function renderRecoveryPostsSection() {
+        return '';
     }
 
     // =========================================================================
@@ -4800,18 +6025,76 @@ window.TempoMode = (function() {
         let matchedTask = null;
         const sTaskId = String(taskId);
 
+        if (sTaskId.startsWith('rmode-mock-')) {
+            let mockTasks = {};
+            try {
+                mockTasks = JSON.parse(localStorage.getItem('tempo_rmode_mock_tasks') || '{}');
+            } catch (e) {}
+            const curVal = !!mockTasks[sTaskId];
+            const targetVal = (typeof isCompleted === 'boolean') ? isCompleted : !curVal;
+            mockTasks[sTaskId] = targetVal;
+            localStorage.setItem('tempo_rmode_mock_tasks', JSON.stringify(mockTasks));
+
+            // Sync with real task if exists
+            const mockMap = {
+                'rmode-mock-1': 'task-marketing-research',
+                'rmode-mock-2': 'task-event-proposal',
+                'rmode-mock-3': 'task-edit-video'
+            };
+            const realId = mockMap[sTaskId];
+            if (realId) {
+                try {
+                    const wpRaw = localStorage.getItem('tempo_working_plan');
+                    if (wpRaw) {
+                        const wp = JSON.parse(wpRaw);
+                        let mutated = false;
+                        if (Array.isArray(wp.plannedTasks)) {
+                            const pt = wp.plannedTasks.find(item => item.task && String(item.task.id) === realId);
+                            if (pt && pt.task) {
+                                pt.task.completed = targetVal;
+                                mutated = true;
+                            }
+                        }
+                        if (mutated) {
+                            localStorage.setItem('tempo_working_plan', JSON.stringify(wp));
+                            if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
+                                window.TempoPlanStore.saveActivePlan('emergency', wp);
+                                window.TempoPlanStore.saveActivePlan('recovery', wp);
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            renderRmodeHome();
+            if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
+                window.TempoPlanWorkspace.render();
+            }
+            isTaskActionSubmitting = false;
+            return true;
+        }
+
         try {
             // 1. Retrieve active plan with robust fallback
+            const isRecovery = (activeContext === MODES.RECOVERY);
             const activeStorePlan = window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function'
-                ? window.TempoPlanStore.getActivePlan('emergency')
+                ? (isRecovery ? (window.TempoPlanStore.getActivePlan('recovery') || window.TempoPlanStore.getActivePlan('emergency')) : window.TempoPlanStore.getActivePlan('emergency'))
                 : null;
             const flowPlan = window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function'
                 ? window.TempoEmergencyFlow.getConfirmedPlan()
                 : null;
+            const wsPlan = (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getActivePlan === 'function')
+                ? window.TempoPlanWorkspace.getActivePlan()
+                : null;
+            let localPlan = null;
+            try {
+                const raw = localStorage.getItem('tempo_working_plan') || localStorage.getItem('tempo_store_active_emergency_guest');
+                if (raw) localPlan = JSON.parse(raw);
+            } catch (e) {}
 
             const plan = (activeStorePlan && ((Array.isArray(activeStorePlan.plannedTasks) && activeStorePlan.plannedTasks.length > 0) || (Array.isArray(activeStorePlan.tasks) && activeStorePlan.tasks.length > 0)))
                 ? activeStorePlan
-                : (flowPlan || activeStorePlan);
+                : (flowPlan || wsPlan || localPlan || activeStorePlan);
 
             if (!plan) {
                 throw new Error("Active Working Plan not found.");
@@ -4819,29 +6102,69 @@ window.TempoMode = (function() {
 
             // 2. Identify target task by stable ID across all plan task collections
             if (Array.isArray(plan.plannedTasks)) {
-                const pt = plan.plannedTasks.find(item => item.task && String(item.task.id) === sTaskId);
-                if (pt && pt.task) matchedTask = pt.task;
+                const pt = plan.plannedTasks.find(item => {
+                    const t = (item && item.task) ? item.task : item;
+                    return t && String(t.id) === sTaskId;
+                });
+                if (pt) matchedTask = pt.task || pt;
             }
             if (!matchedTask && Array.isArray(plan.unarrangedTasks)) {
-                const u = plan.unarrangedTasks.find(item => String(item && item.task ? item.task.id : item.id) === sTaskId);
+                const u = plan.unarrangedTasks.find(item => {
+                    const t = (item && item.task) ? item.task : item;
+                    return t && String(t.id) === sTaskId;
+                });
                 if (u) matchedTask = u.task || u;
             }
             if (!matchedTask && Array.isArray(plan.unallocatedTasks)) {
-                const u = plan.unallocatedTasks.find(item => String(item && item.task ? item.task.id : item.id) === sTaskId);
+                const u = plan.unallocatedTasks.find(item => {
+                    const t = (item && item.task) ? item.task : item;
+                    return t && String(t.id) === sTaskId;
+                });
                 if (u) matchedTask = u.task || u;
             }
             if (!matchedTask && Array.isArray(plan.tasks)) {
                 matchedTask = plan.tasks.find(t => t && String(t.id) === sTaskId);
             }
+            if (!matchedTask && Array.isArray(plan.completedTasks)) {
+                const c = plan.completedTasks.find(item => {
+                    const t = (item && item.task) ? item.task : item;
+                    return t && String(t.id) === sTaskId;
+                });
+                if (c) matchedTask = c.task || c;
+            }
+
+            // Also check wsPlan if distinct instance
+            if (!matchedTask && wsPlan && wsPlan !== plan) {
+                if (Array.isArray(wsPlan.plannedTasks)) {
+                    const pt = wsPlan.plannedTasks.find(item => {
+                        const t = (item && item.task) ? item.task : item;
+                        return t && String(t.id) === sTaskId;
+                    });
+                    if (pt) matchedTask = pt.task || pt;
+                }
+                if (!matchedTask && Array.isArray(wsPlan.unarrangedTasks)) {
+                    const u = wsPlan.unarrangedTasks.find(item => {
+                        const t = (item && item.task) ? item.task : item;
+                        return t && String(t.id) === sTaskId;
+                    });
+                    if (u) matchedTask = u.task || u;
+                }
+            }
 
             // Also check flowPlan if distinct instance
             if (!matchedTask && flowPlan && flowPlan !== plan) {
                 if (Array.isArray(flowPlan.plannedTasks)) {
-                    const pt = flowPlan.plannedTasks.find(item => item.task && String(item.task.id) === sTaskId);
-                    if (pt && pt.task) matchedTask = pt.task;
+                    const pt = flowPlan.plannedTasks.find(item => {
+                        const t = (item && item.task) ? item.task : item;
+                        return t && String(t.id) === sTaskId;
+                    });
+                    if (pt) matchedTask = pt.task || pt;
                 }
                 if (!matchedTask && Array.isArray(flowPlan.unarrangedTasks)) {
-                    const u = flowPlan.unarrangedTasks.find(item => String(item && item.task ? item.task.id : item.id) === sTaskId);
+                    const u = flowPlan.unarrangedTasks.find(item => {
+                        const t = (item && item.task) ? item.task : item;
+                        return t && String(t.id) === sTaskId;
+                    });
                     if (u) matchedTask = u.task || u;
                 }
                 if (!matchedTask && Array.isArray(flowPlan.tasks)) {
@@ -4850,11 +6173,25 @@ window.TempoMode = (function() {
             }
 
             if (!matchedTask) {
+                if (sTaskId.startsWith('rmode-mock-') || activeContext === MODES.RECOVERY) {
+                    let mockTasks = {};
+                    try {
+                        mockTasks = JSON.parse(localStorage.getItem('tempo_rmode_mock_tasks') || '{}');
+                    } catch (e) {}
+                    const curVal = !!mockTasks[sTaskId];
+                    mockTasks[sTaskId] = (typeof isCompleted === 'boolean') ? isCompleted : !curVal;
+                    localStorage.setItem('tempo_rmode_mock_tasks', JSON.stringify(mockTasks));
+                    if (activeContext === MODES.RECOVERY) {
+                        renderRmodeHome();
+                    }
+                    isTaskActionSubmitting = false;
+                    return true;
+                }
                 throw new Error("Task not found in active Working Plan.");
             }
 
             // Snapshot previous state for atomic rollback on persistence failure
-            previousCompleted = matchedTask.completed;
+            previousCompleted = isTaskExplicitlyCompleted(matchedTask);
             previousInProgress = matchedTask.isInProgress ?? matchedTask.in_progress ?? false;
 
             const targetCompleted = (typeof isCompleted === 'boolean') ? isCompleted : !previousCompleted;
@@ -4864,8 +6201,14 @@ window.TempoMode = (function() {
 
             // 3. Mutate task in active plan
             matchedTask.completed = targetCompleted;
+            matchedTask.executionStatus = targetCompleted ? 'completed' : 'pending';
             matchedTask.isInProgress = targetInProgress;
             matchedTask.in_progress = targetInProgress;
+            if (targetCompleted) {
+                matchedTask.completedAt = Date.now();
+            } else {
+                delete matchedTask.completedAt;
+            }
 
             if (flowPlan && flowPlan !== plan) {
                 if (Array.isArray(flowPlan.plannedTasks)) {
@@ -4903,12 +6246,27 @@ window.TempoMode = (function() {
                 }
                 if (typeof window.TempoPlanStore.saveActivePlan === 'function' && plan) {
                     await window.TempoPlanStore.saveActivePlan('emergency', plan);
+                    await window.TempoPlanStore.saveActivePlan('recovery', plan);
                 }
             }
 
+            // Also persist in localStorage tempo_working_plan and tempo_rmode_mock_tasks
+            try {
+                localStorage.setItem('tempo_working_plan', JSON.stringify(plan));
+                let mockTasks = {};
+                try {
+                    mockTasks = JSON.parse(localStorage.getItem('tempo_rmode_mock_tasks') || '{}');
+                } catch(e) {}
+                if (sTaskId === 'task-marketing-research') mockTasks['rmode-mock-1'] = targetCompleted;
+                if (sTaskId === 'task-event-proposal') mockTasks['rmode-mock-2'] = targetCompleted;
+                if (sTaskId === 'task-edit-video') mockTasks['rmode-mock-3'] = targetCompleted;
+                mockTasks[sTaskId] = targetCompleted;
+                localStorage.setItem('tempo_rmode_mock_tasks', JSON.stringify(mockTasks));
+            } catch(e) {}
+
             // 6. Verify persistence succeeded
             const verifiedPlan = window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function'
-                ? window.TempoPlanStore.getActivePlan('emergency')
+                ? (window.TempoPlanStore.getActivePlan('emergency') || window.TempoPlanStore.getActivePlan('recovery') || plan)
                 : (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function' ? window.TempoEmergencyFlow.getConfirmedPlan() : plan);
 
             let verifiedTask = null;
@@ -4940,8 +6298,11 @@ window.TempoMode = (function() {
                 }
             }
 
-            // 8. Recompute and refresh active mode home (Urmode dashboard)
+            // 8. Recompute and refresh active mode home (Urmode / Rmode dashboard)
             renderActiveModeHome();
+            if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
+                window.TempoPlanWorkspace.render();
+            }
             return true;
         } catch (err) {
             console.error("[TempoMode] Task completion operation failed:", err);
@@ -5112,12 +6473,92 @@ window.TempoMode = (function() {
         return setTaskCompletionStatus(taskId, true, { isOverdue: true });
     }
 
-    async function clearOverdueTask(taskId) {
-        if (isTaskActionSubmitting) return;
-        if (!confirm("Are you sure you want to remove this task from your Working Plan?")) {
+    let pendingClearOverdueTaskId = null;
+    let isClearOverdueSubmitting = false;
+
+    function promptClearOverdueTask(taskId) {
+        pendingClearOverdueTaskId = taskId;
+        let modal = document.getElementById('modal-mode-clear-task-confirm');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-mode-clear-task-confirm';
+            modal.className = 'fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.setAttribute('aria-labelledby', 'mode-clear-task-title');
+            modal.onclick = function(e) {
+                if (e.target === modal) closeClearOverdueTaskModal();
+            };
+            modal.innerHTML = `
+                <div class="tempo-card bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full relative">
+                    <button type="button"
+                            onclick="window.TempoMode.closeClearOverdueTaskModal()"
+                            class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                            title="Close"
+                            aria-label="Close">✕</button>
+                    <div class="space-y-2 pr-6">
+                        <h3 id="mode-clear-task-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Clear this task?</h3>
+                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                            This task will be removed from your Working Plan. This action cannot be undone.
+                        </p>
+                    </div>
+                    <div class="flex items-center justify-end space-x-3 pt-2">
+                        <button type="button"
+                                onclick="window.TempoMode.closeClearOverdueTaskModal()"
+                                class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
+                            Cancel
+                        </button>
+                        <button type="button"
+                                id="btn-confirm-clear-overdue-task"
+                                onclick="window.TempoMode.executeClearOverdueTask()"
+                                class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#C53B27] hover:bg-[#B03422] text-white shadow-sm transition cursor-pointer inline-flex items-center justify-center">
+                            Clear task
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.classList.remove('hidden');
+        }
+    }
+
+    function closeClearOverdueTaskModal() {
+        if (isClearOverdueSubmitting) return;
+        const modal = document.getElementById('modal-mode-clear-task-confirm');
+        if (modal) modal.classList.add('hidden');
+        pendingClearOverdueTaskId = null;
+    }
+
+    async function executeClearOverdueTask() {
+        if (isClearOverdueSubmitting) return;
+        const taskId = pendingClearOverdueTaskId;
+        if (!taskId) {
+            closeClearOverdueTaskModal();
             return;
         }
 
+        isClearOverdueSubmitting = true;
+        const confirmBtn = document.getElementById('btn-confirm-clear-overdue-task');
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        try {
+            await executeClearOverdueTaskAction(taskId);
+            closeClearOverdueTaskModal();
+        } finally {
+            isClearOverdueSubmitting = false;
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+    }
+
+    async function executeClearOverdueTaskAction(taskId) {
+        if (isTaskActionSubmitting) return;
         isTaskActionSubmitting = true;
         try {
             const activeStorePlan = window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function'
@@ -5181,6 +6622,10 @@ window.TempoMode = (function() {
         } finally {
             isTaskActionSubmitting = false;
         }
+    }
+
+    async function clearOverdueTask(taskId) {
+        promptClearOverdueTask(taskId);
     }
 
     function showTomorrowTaskInCard() {
@@ -5289,6 +6734,9 @@ window.TempoMode = (function() {
         hasActiveContext,
         getSourceContext,
         setSourceContext,
+        getOriginatingMode,
+        setOriginatingMode,
+        clearOriginatingMode,
         getActiveSharedTool,
         getPendingIntent,
         setPendingIntent,
@@ -5297,6 +6745,8 @@ window.TempoMode = (function() {
         requestContext,
         openUcheck,
         returnToSourceContext,
+        resolveActiveDashboardContext,
+        navigateToActiveDashboard,
         getMode,
         getCurrentMode: getMode,
         getPendingMode,
@@ -5326,6 +6776,7 @@ window.TempoMode = (function() {
         renderDmodeHome,
         renderEntryHome,
         renderEntryHomeHTML,
+        getUserPersistedActiveContext,
         hasEstablishedContext,
         renderDmodeModeSwitchEntry,
         restoreDefaultHome,
@@ -5342,11 +6793,17 @@ window.TempoMode = (function() {
         setSelfCheckState,
         handleSelfCheckSetupClick,
         handleSelfCheckAction,
+        submitRmodeSelfCheckValue,
+        skipRmodeCurrentSelfCheck,
+        submitRmodeQuantityValue,
+        resetRmodeSkippedTrackers,
         openStrack,
+        showStressCheckScreen,
         getDestinationDisplayName,
         isValidPendingIntent,
         getRecentlyState,
         setRecentlyState,
+        renderRecentlyCard,
         checkIsWeeklyReviewReady,
         setWeeklyReviewReady,
         dismissWeeklyReviewNotice,
@@ -5361,12 +6818,22 @@ window.TempoMode = (function() {
         handleCardTaskComplete,
         setSubtaskCompleted,
         handleSubtaskComplete: setSubtaskCompleted,
+        promptClearOverdueTask,
+        closeClearOverdueTaskModal,
+        executeClearOverdueTask,
         clearOverdueTask,
         markOverdueTaskDone,
         showTomorrowTaskInCard,
         setRestingForToday,
+        updateNavbarForMode,
         getActiveHomeState: () => currentActiveHomeState,
         EPLAN_STATES
     };
 })();
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && window.TempoMode && typeof window.TempoMode.closeClearOverdueTaskModal === 'function') {
+        window.TempoMode.closeClearOverdueTaskModal();
+    }
+});
 

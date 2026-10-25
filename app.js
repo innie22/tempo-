@@ -134,10 +134,22 @@ window.TempoApp = (function() {
             return;
         }
 
+        if (tabId === 'plan' || tabId === 'recovery-plan' || tabId === 'recovery-working-plan') {
+            const isRecovery = window.TempoMode && typeof window.TempoMode.getMode === 'function' && window.TempoMode.getMode() === 'recovery';
+            if (isRecovery) {
+                scrollToRecoveryPlan();
+                return;
+            }
+            tabId = 'plan-workspace';
+        }
+
         // Shared Authenticated Tool: Strack (Self-check)
         if (tabId === 'strack' || tabId === 'stress-check') {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('open');
+            if (window.TempoMode && typeof window.TempoMode.showStressCheckScreen === 'function') {
+                window.TempoMode.showStressCheckScreen();
+                return;
+            } else if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('tool', { view: 'page' });
                 return;
             }
         }
@@ -229,12 +241,48 @@ window.TempoApp = (function() {
             return;
         }
 
-        // Shared Assessment Tool: Ucheck
-        if (tabId === 'unclear-mode') {
-            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
-                window.TempoMode.openUcheck({ sourceContext: window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry' });
-                return;
+        // Assessment Directory & Results Routes
+        if (tabId === 'explore-mental-health-tests' || tabId === 'mental-health-tests') {
+            const category = subTab || 'depression';
+            currentTab = 'explore-mental-health-tests';
+            window.location.hash = `#explore-mental-health-tests?category=${category}`;
+            document.querySelectorAll('.screen-container').forEach(screen => {
+                screen.classList.add('hidden');
+            });
+            const targetScreen = document.getElementById('screen-explore-mental-health-tests');
+            if (targetScreen) targetScreen.classList.remove('hidden');
+            if (window.TempoExploreAssessments && typeof window.TempoExploreAssessments.selectCategory === 'function') {
+                window.TempoExploreAssessments.selectCategory(category, false);
             }
+            window.scrollTo(0, 0);
+            return;
+        }
+
+        if (tabId === 'my-test-results') {
+            currentTab = 'my-test-results';
+            window.location.hash = '#my-test-results';
+            document.querySelectorAll('.screen-container').forEach(screen => {
+                screen.classList.add('hidden');
+            });
+            const targetScreen = document.getElementById('screen-my-test-results');
+            if (targetScreen) targetScreen.classList.remove('hidden');
+            window.scrollTo(0, 0);
+            return;
+        }
+
+        // Shared Assessment Tool: Ucheck / Unclear Mode
+        if (tabId === 'unclear-mode' || tabId === 'unclear' || tabId === 'ucheck') {
+            const currentMode = (window.TempoMode && typeof window.TempoMode.getActiveContext === 'function' && window.TempoMode.getActiveContext())
+                || (window.TempoMode && typeof window.TempoMode.getMode === 'function' ? window.TempoMode.getMode() : null);
+            const src = (currentMode === 'recovery' || currentMode === 'emergency') ? currentMode : (window.TempoMode && window.TempoMode.getOriginatingMode ? window.TempoMode.getOriginatingMode() : 'entry');
+
+            if (window.TempoMode && typeof window.TempoMode.openUcheck === 'function') {
+                window.TempoMode.openUcheck({ sourceContext: src });
+            } else if (window.TempoMode && typeof window.TempoMode.setMode === 'function') {
+                window.TempoMode.setMode('unclear', { sourceContext: src });
+            }
+            navigateTo('today');
+            return;
         }
 
         // Active Contexts: emergency & recovery
@@ -266,6 +314,10 @@ window.TempoApp = (function() {
         const targetScreen = document.getElementById(`screen-${tabId}`) || (tabId === 'learn' ? document.getElementById('screen-hub') : null);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
+        }
+
+        if (tabId === 'tool-notes' && window.TempoToolNotes && typeof window.TempoToolNotes.renderToolNotesPage === 'function') {
+            window.TempoToolNotes.renderToolNotesPage();
         }
 
         // If on today tab, synchronize active mode dashboard with strict mutual exclusivity
@@ -314,10 +366,32 @@ window.TempoApp = (function() {
 
         // If entering Plan Workspace, render workspace
         if (tabId === 'plan-workspace') {
+            document.body.style.backgroundColor = '#EFFAFF';
+            const mainEl = document.querySelector('main');
+            if (mainEl) mainEl.style.backgroundColor = '#EFFAFF';
             if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
                 window.TempoPlanWorkspace.render();
             }
         }
+
+        // If entering Self-check page, render workspace
+        if (tabId === 'stress-check' || tabId === 'strack') {
+            document.body.style.backgroundColor = '#E6EDE7';
+            const mainEl = document.querySelector('main');
+            if (mainEl) mainEl.style.backgroundColor = '#E6EDE7';
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
+                window.TempoSelfCheckWorkspace.render();
+            }
+        } else if (tabId === 'today') {
+            if (window.TempoMode && typeof window.TempoMode.applyModeVisibility === 'function') {
+                window.TempoMode.applyModeVisibility();
+            }
+        } else if (tabId !== 'plan-workspace') {
+            document.body.style.backgroundColor = '';
+            const mainEl = document.querySelector('main');
+            if (mainEl) mainEl.style.backgroundColor = '';
+        }
+
 
         // Update desktop nav item active states
         document.querySelectorAll('header nav a[data-nav]').forEach(el => {
@@ -330,6 +404,11 @@ window.TempoApp = (function() {
                 el.classList.add('text-[#6F6B68]', 'hover:text-[#202124]', 'hover:bg-[#F3F1EF]');
             }
         });
+
+        // Sync navbar items for active mode context
+        if (window.TempoMode && typeof window.TempoMode.updateNavbarForMode === 'function') {
+            window.TempoMode.updateNavbarForMode();
+        };
 
         // Update mobile bottom nav items
         document.querySelectorAll('nav.md\\:hidden a[data-nav]').forEach(el => {
@@ -387,6 +466,27 @@ window.TempoApp = (function() {
         }
     }
 
+    function scrollToRecoveryPlan() {
+        const doScroll = () => {
+            const el = document.getElementById('recovery-working-plan')
+                || document.querySelector('[data-tempo-ui="recovery-working-plan"]')
+                || Array.from(document.querySelectorAll('h3, h2')).find(h => (h.textContent || '').includes('Your Working Plan'));
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        };
+
+        const todayScreen = document.getElementById('screen-today');
+        const isTodayVisible = todayScreen && !todayScreen.classList.contains('hidden');
+
+        if (isTodayVisible) {
+            doScroll();
+        } else {
+            navigateTo('today');
+            setTimeout(doScroll, 100);
+        }
+    }
+
     function handleHashChange() {
         const rawHash = window.location.hash.replace('#', '');
         if (!rawHash) return;
@@ -403,10 +503,27 @@ window.TempoApp = (function() {
             navigateTo('posts', section);
         } else if (rawHash.startsWith('direct-messages')) {
             navigateTo('posts', 'messages');
-        } else if (rawHash === 'hub' || rawHash === 'learn-solve' || rawHash === 'learn') {
-            navigateTo('learn');
+        } else if (rawHash === 'recovery-working-plan') {
+            scrollToRecoveryPlan();
+        } else if (rawHash.startsWith('explore-mental-health-tests') || rawHash.startsWith('mental-health-tests')) {
+            const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
+            const params = new URLSearchParams(queryPart);
+            const category = params.get('category') || 'depression';
+            navigateTo('explore-mental-health-tests', category);
+        } else if (rawHash.startsWith('my-test-results')) {
+            navigateTo('my-test-results');
+        } else if (rawHash === 'unclear-mode' || rawHash === 'unclear' || rawHash === 'ucheck') {
+            navigateTo('ucheck');
         } else {
             navigateTo(rawHash);
+        }
+    }
+
+    function handleLogoClick() {
+        if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') {
+            window.TempoMode.navigateToActiveDashboard();
+        } else {
+            navigateTo('today');
         }
     }
 
@@ -852,6 +969,7 @@ window.TempoApp = (function() {
         init,
         navigateTo,
         scrollToEnjoyTempoTools,
+        scrollToRecoveryPlan,
         setRole,
         showToast,
         triggerConfetti,
@@ -865,7 +983,15 @@ window.TempoApp = (function() {
             const firstCard = m.querySelector('.state-choice-card');
             if (firstCard) firstCard.focus();
         },
-        getCurrentTab: () => currentTab
+        getCurrentTab: () => currentTab,
+        handleLogoClick,
+        navigateToActiveDashboard: () => {
+            if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') {
+                window.TempoMode.navigateToActiveDashboard();
+            } else {
+                navigateTo('today');
+            }
+        }
     };
 })();
 
