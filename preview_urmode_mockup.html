@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo — Urgent Mode (Urmode) Full Dashboard &amp; Lower Scroll Mockup Preview</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plus Jakarta Sans & Arimo Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400..700;1,400..700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #e6ede7;
+            color: #202124;
+            -webkit-font-smoothing: antialiased;
+        }
+        .soft-card-shadow {
+            box-shadow: 0 4px 14px -2px rgba(75, 55, 40, 0.05), 0 10px 22px -4px rgba(75, 55, 40, 0.07);
+        }
+        .btn-terracotta {
+            background-color: #D79277;
+            color: #FFFFFF;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-terracotta:hover {
+            background-color: #C68166;
+            transform: translateY(-1px);
+        }
+        .flag-circle {
+            border-radius: 50%;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-[#e6ede7] text-[#202124] selection:bg-[#D79277]/30 flex flex-col">
+
+    <!-- Top Watermark / Notice -->
+    <div class="bg-[#D79277]/15 border-b border-[#D79277]/25 py-1.5 px-4 text-center text-xs font-semibold text-[#8C5D49] sticky top-0 z-50 backdrop-blur-md bg-[#e6ede7]/90">
+        🎨 <strong>Visual Mockup Only</strong> — Full-Page Tempo Urmode (Upper Dashboard + Lower Scroll Section). No production code modified.
+    </div>
+
+    <!-- Global App Header — PRESERVES ENTRY HOME NAVBAR EXACTLY -->
+    <header class="bg-[#FEFAF4] border-b border-[#E8E4E1] sticky top-[29px] z-40 entry-header">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
+            
+            <!-- 1. Left Region: Exact Entry Home Logo & Dimensions -->
+            <div class="flex items-center shrink-0">
+                <div id="brand-logo-container" class="flex items-center cursor-pointer shrink-0 py-1" title="Tempo — A calmer you, one step at a time.">
+                    <img src="../assets/tempo-logo.png" 
+                         alt="Tempo — A calmer you, one step at a time." 
+                         class="h-14 sm:h-[62px] lg:h-[80px] w-auto object-contain block">
+                </div>
+            </div>
+
+            <!-- 2. Central Region: Navigation Links with 'Plan' changed to 'Tools' -->
+            <nav class="hidden md:flex items-center justify-center flex-1 px-4 lg:px-8 space-x-6 sm:space-x-8 lg:space-x-10 xl:space-x-12 text-sm sm:text-[15px] font-semibold text-[#736F68]">
+                <a href="#about" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">About</a>
+                <a href="#check" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">Check</a>
+                <a href="#tools" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">Tools</a>
+                <a href="#learn" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">Learn</a>
+                <a href="#posts" class="text-[#736F68] hover:text-[#FF6B2C] transition whitespace-nowrap">Post</a>
+            </nav>
+
+            <!-- 3. Right Region: Search, Language selector, SOS, User Profile -->
+            <div class="flex items-center space-x-2 sm:space-x-2.5 lg:space-x-3 shrink-0">
+                <button type="button" class="w-9 h-9 rounded-full bg-[#F6E6DE] hover:bg-[#EAE4DF] flex items-center justify-center text-[#202124] transition cursor-pointer" title="Search Tempo">
+                    <svg class="w-4 h-4 text-[#202124]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </button>
+                <div class="relative">
+                    <button type="button" class="px-3 py-1.5 rounded-full border border-[#D5D0CB] bg-white text-xs font-semibold text-[#202124] flex items-center space-x-1.5 hover:bg-[#F8F6F4] transition cursor-pointer">
+                        <span class="flag-circle"><img src="../assets/flag-us.png" alt="English" class="w-full h-full object-cover"></span>
+                        <span>EN</span>
+                        <span class="text-[10px] text-stone-500">▾</span>
+                    </button>
+                </div>
+                <button type="button" class="bg-[#D92D20] text-white px-3.5 py-1.5 rounded-full font-bold text-xs tracking-wider shadow-xs hover:bg-[#B42318] transition flex items-center space-x-1 cursor-pointer">
+                    <span>(((SOS)))</span>
+                </button>
+                <div class="relative flex items-center">
+                    <button type="button" class="w-9 h-9 rounded-full flex items-center justify-center p-0.5 border border-[#D5D0CB] hover:border-[#FF6B2C] transition cursor-pointer bg-white">
+                        <div class="w-full h-full rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-xs flex items-center justify-center select-none" title="Innie">
+                            I
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Main Content Shell (Canvas Background: #e6ede7) -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 flex-1 w-full bg-[#e6ede7] space-y-10">
+
+        <!-- ==============================================================
+             SECTION 1: UPPER VIEWPORT DASHBOARD
+             ============================================================== -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- LEFT COLUMN (~65% / 7 cols) -->
+            <div class="lg:col-span-7 space-y-5">
+
+                <!-- Top Mode Pill & Greeting -->
+                <div class="space-y-2.5">
+                    <div>
+                        <span class="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-bold bg-[#FBF0E9] text-[#D79277] border border-[#D79277]/50 shadow-2xs">
+                            Urgent Mode
+                        </span>
+                    </div>
+                    <h1 class="text-2xl sm:text-[28px] font-extrabold text-[#484541] tracking-tight flex items-center gap-2.5">
+                        <span>👋</span>
+                        <span>Hi Innie, ready to get things done?</span>
+                    </h1>
+                </div>
+
+                <!-- 1. Hero Card: "Your task for now" -->
+                <div class="bg-[#F8EEDA] border border-[#000000] rounded-3xl p-6 sm:p-7 soft-card-shadow relative overflow-hidden transition">
+                    <div class="mb-3.5">
+                        <span class="inline-block px-4 py-1.5 rounded-full text-xs font-bold bg-[#D79277] text-white shadow-2xs">
+                            Your task for now
+                        </span>
+                    </div>
+                    <h2 class="text-3xl sm:text-[34px] font-extrabold text-[#484541] tracking-tight leading-snug mb-2.5">
+                        Marketing Research
+                    </h2>
+                    <div class="flex items-center space-x-2.5 mb-4">
+                        <div class="w-4 h-4 rounded border-2 border-[#8C6C63]/60 bg-transparent flex items-center justify-center shrink-0 cursor-pointer"></div>
+                        <span class="italic text-sm sm:text-base font-medium text-[#5D5954]">
+                            Subtask 1: Literature Review
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 text-xs sm:text-[13px] font-semibold text-[#8C6C63] py-2.5 border-t border-[#E8D9C5]">
+                        <div class="flex items-center space-x-1.5">
+                            <span>📅</span>
+                            <span>Due: Oct 17, 2026 - 9:00 PM</span>
+                        </div>
+                        <span class="text-[#D0C0AC]">|</span>
+                        <div class="flex items-center space-x-1.5">
+                            <span>⏱</span>
+                            <span>~2h 30m</span>
+                        </div>
+                        <span class="text-[#D0C0AC]">|</span>
+                        <div class="flex items-center space-x-1.5">
+                            <span>📝</span>
+                            <span>0/6 subtasks</span>
+                        </div>
+                    </div>
+                    <div class="pt-4 flex flex-wrap items-center gap-3">
+                        <button type="button" class="btn-terracotta px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm inline-flex items-center space-x-2 cursor-pointer">
+                            <span class="text-xs">▶</span>
+                            <span>Focus on this task</span>
+                        </button>
+                        <button type="button" class="px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs inline-flex items-center transition cursor-pointer">
+                            <span>Edit task</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Bottom Row: Quick Relief & Focus Now (Exact Entry Home Components) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 w-full">
+                    <!-- Tool 1: Quick Relief -->
+                    <div class="bg-[#E6EDE7] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group" title="Quick Relief">
+                        <div class="flex-1 min-w-0 pr-1.5">
+                            <h3 class="text-[22px] sm:text-[25px] font-bold text-[#92A491] mb-1 group-hover:text-[#7D8F7C] transition leading-tight whitespace-nowrap">
+                                Quick Relief
+                            </h3>
+                            <p class="text-[14px] sm:text-[16px] text-[#92A491] leading-[1.35]">
+                                Quick ways to ease stress and feel better.
+                            </p>
+                        </div>
+                        <img src="../assets/quick-relief-mascot-transparent.png" alt="Quick Relief Mascot" class="w-[150px] h-[150px] object-contain shrink-0 select-none pointer-events-none" />
+                    </div>
+
+                    <!-- Tool 2: Focus Now -->
+                    <div class="bg-[#D7A690] border border-[#000000] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group" title="Focus Now">
+                        <img src="../assets/focus-now-mascot.png" alt="Focus Now Mascot" class="w-[170px] h-[170px] -translate-x-[33px] -mr-[10px] object-contain shrink-0 select-none pointer-events-none" />
+                        <div class="flex-1 min-w-0 text-left -translate-x-[28px] sm:w-[168px] sm:min-w-[168px]">
+                            <h3 class="text-[25px] sm:text-[29px] font-bold text-white mb-1 group-hover:text-stone-100 transition leading-tight whitespace-nowrap">
+                                Focus Now
+                            </h3>
+                            <p class="text-[14px] sm:text-[16px] text-white/90 leading-[1.35]">
+                                Your own personalized workspace.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN (~35% / 5 cols) -->
+            <div class="lg:col-span-5 space-y-5">
+
+                <!-- 1. NOTE Card Section (+10px taller: min-h-[96px] with py-7 sm:py-7.5) -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between pb-0.5">
+                        <div class="flex items-center space-x-1.5 text-xs font-extrabold uppercase tracking-wider text-[#D79277]">
+                            <span>💡</span>
+                            <span>NOTE</span>
+                        </div>
+                        <button type="button" 
+                                onclick="if (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.openEditModal === 'function') { window.TempoRecoveryNote.openEditModal(); } else if (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.openViewModal === 'function') { window.TempoRecoveryNote.openViewModal(); } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('recovery-mode'); }"
+                                class="px-2.5 py-0.5 rounded-full text-xs font-bold text-[#D79277] hover:text-[#B85D38] bg-[#FDF2EC] hover:bg-[#FBE8DE] border border-[#D79277]/30 transition cursor-pointer flex items-center space-x-1"
+                                title="Create your notes">
+                            <span>Create your notes</span>
+                            <span class="text-[10px]">→</span>
+                        </button>
+                    </div>
+
+                    <!-- Note Card: min-h-[96px] (+10px taller than previous 86px) -->
+                    <div class="bg-[#FCF2E9] border border-[#D79277]/60 rounded-2xl px-5 py-7 sm:py-7.5 min-h-[96px] flex items-center soft-card-shadow">
+                        <p class="text-sm font-semibold text-[#B85D38] leading-relaxed">
+                            Drink more than 3 cups of water
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 2. "Your Working Plan" Panel -->
+                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 soft-card-shadow space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg sm:text-xl font-extrabold text-[#484541] tracking-tight">
+                            Your Working Plan
+                        </h3>
+                        <button type="button" class="px-3.5 py-1 rounded-full text-xs font-bold bg-[#D79277] hover:bg-[#C68166] text-white shadow-2xs transition cursor-pointer">
+                            Adjust Plan
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-3 pt-1">
+                        <div class="flex-1 h-2 rounded-full bg-[#EFE9E4] overflow-hidden">
+                            <div class="h-full bg-[#D79277] rounded-full" style="width: 0%;"></div>
+                        </div>
+                        <span class="text-xs font-semibold text-[#8C8782] shrink-0">
+                            0/4 Tasks
+                        </span>
+                    </div>
+                    <div class="space-y-3 pt-2">
+                        <div class="p-3.5 sm:p-4 rounded-2xl border border-[#E8E2DD] bg-[#FFFFFF] hover:border-[#D79277]/40 transition space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2.5">
+                                    <div class="w-4 h-4 rounded border-2 border-[#D79277] bg-transparent flex items-center justify-center shrink-0"></div>
+                                    <span class="font-bold text-sm sm:text-base text-[#484541]">Marketing Research</span>
+                                </div>
+                                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D79277] text-white">Now</span>
+                            </div>
+                            <div class="pl-6.5 text-[11px] sm:text-xs text-[#8C8782] flex items-center space-x-3">
+                                <span>Due: Oct 17, 2026 - 9:00 PM</span>
+                                <span>•</span>
+                                <span>0/6 subtasks</span>
+                            </div>
+                        </div>
+                        <div class="p-3.5 sm:p-4 rounded-2xl border border-[#E8E2DD] bg-[#FFFFFF] hover:border-stone-300 transition space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-2.5">
+                                    <div class="w-4 h-4 rounded border-2 border-[#D1C7BD] bg-transparent flex items-center justify-center shrink-0"></div>
+                                    <span class="font-bold text-sm sm:text-base text-[#484541]">Event Proposal</span>
+                                </div>
+                                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#D3DFE4] text-[#5A6B73]">Later</span>
+                            </div>
+                            <div class="pl-6.5 text-[11px] sm:text-xs text-[#8C8782] flex items-center space-x-3">
+                                <span>Due: Oct 18, 2026 - 10:00 PM</span>
+                                <span>•</span>
+                                <span>0/3 subtasks</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Mode Change Prompt & Large Action Button -->
+                <div class="pt-2 flex flex-col items-center text-center space-y-2.5">
+                    <p class="text-sm sm:text-[15px] font-bold text-[#484541]">
+                        Are things feeling less urgent now?
+                    </p>
+                    <button type="button" class="w-full max-w-[280px] py-3 rounded-2xl font-bold text-sm sm:text-base bg-[#D79277] hover:bg-[#C68166] text-white shadow-[0_4px_12px_rgba(215,146,119,0.35)] hover:shadow-[0_6px_16px_rgba(215,146,119,0.45)] border border-[#C68166]/40 transition transform hover:-translate-y-0.5 cursor-pointer">
+                        Change my mode
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- ==============================================================
+             SECTION 2: LOWER SCROLL SECTION (BELOW THE VIEWPORT)
+             Enjoy Tempo Tools & From the Tempo Community
+             ============================================================== -->
+        <div class="pt-8 border-t border-[#D0E0D7] mt-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+                <!-- LEFT COLUMN: Enjoy Tempo Tools (2x2 Grid + Self-Check Banner) -->
+                <div class="lg:col-span-7 flex flex-col space-y-4">
+                    
+                    <h2 class="text-2xl sm:text-[28px] font-extrabold text-[#726D69] tracking-tight">
+                        Enjoy Tempo Tools
+                    </h2>
+
+                    <!-- 2x2 Grid of Tool Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                        
+                        <!-- Tool 1: Learn & Solve -->
+                        <div class="bg-[#FBEDD9] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative" title="Learn & Solve">
+                            <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                <h3 class="text-[22px] sm:text-[25px] font-bold text-[#736F68] mb-1 group-hover:text-[#5B5751] transition leading-tight whitespace-nowrap">
+                                    Learn &amp; Solve
+                                </h3>
+                                <p class="text-[14px] sm:text-[16px] text-[#736F68] leading-[1.35] max-w-[155px]">
+                                    Tips and tools to help you cope.
+                                </p>
+                            </div>
+                            <img src="../assets/learn-solve-mascot.png" alt="Learn & Solve Mascot" class="h-[105px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1 sm:-mr-2 translate-y-1" />
+                        </div>
+
+                        <!-- Tool 2: Tempo break -->
+                        <div class="bg-[#D3DFE4] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative" title="Tempo break">
+                            <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                <h3 class="text-[22px] sm:text-[25px] font-bold text-[#736D69] mb-1 group-hover:text-[#5B5551] transition leading-tight whitespace-nowrap">
+                                    Tempo break
+                                </h3>
+                                <p class="text-[14px] sm:text-[16px] text-[#736D69] leading-[1.35] max-w-[155px]">
+                                    Take a break with fun activities to unwind.
+                                </p>
+                            </div>
+                            <img src="../assets/tempo-break-mascot.png" alt="Tempo break Mascot" class="h-[125px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1 sm:-mr-2 translate-y-1" />
+                        </div>
+
+                        <!-- Tool 3: Practice Breathing -->
+                        <div class="bg-[#E6EDE7] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative" title="Practice Breathing">
+                            <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                <h3 class="text-[18px] sm:text-[18.5px] font-bold text-[#736F68] mb-1 group-hover:text-[#5B5751] transition leading-tight whitespace-nowrap">
+                                    Practice Breathing
+                                </h3>
+                                <p class="text-[14px] sm:text-[16px] text-[#736F68] leading-[1.35] max-w-[155px]">
+                                    Take a deep breath and find your calm.
+                                </p>
+                            </div>
+                            <img src="../assets/practice-breathing-mascot.png" alt="Practice Breathing Mascot" class="h-[120px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1" />
+                        </div>
+
+                        <!-- Tool 4: Create Notes -->
+                        <div class="bg-[#F9E8E2] border border-[#736F68] rounded-3xl overflow-hidden p-4 sm:p-5 flex items-center justify-between min-h-[175px] h-[175px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative" title="Create Notes">
+                            <div class="relative z-10 flex-1 min-w-0 pr-1">
+                                <h3 class="text-[22px] sm:text-[25px] font-bold text-[#8C6C63] mb-1 group-hover:text-[#72554D] transition leading-tight whitespace-nowrap">
+                                    Create Notes
+                                </h3>
+                                <p class="text-[14px] sm:text-[16px] text-[#8C6C63] leading-[1.35] max-w-[155px]">
+                                    Write down anything you want to remember.
+                                </p>
+                            </div>
+                            <img src="../assets/notes-mascot.png" alt="Create Notes Mascot" class="h-[115px] w-auto object-contain shrink-0 select-none pointer-events-none -mr-1" />
+                        </div>
+
+                    </div>
+
+                    <!-- Lower Full-Width Banner: How are you feeling today? (Reduced width by additional 40px, Compact Centered Content Group, bg #e8ecf1) -->
+                    <div class="bg-[#e8ecf1] border border-[#708088] rounded-3xl overflow-hidden p-5 sm:p-6 flex items-center justify-center min-h-[135px] w-[calc(100%-110px)] mx-auto shadow-[0_4px_10px_-2px_rgba(75,55,40,0.07),0_14px_28px_-5px_rgba(75,55,40,0.12)] hover:shadow-[0_6px_14px_-2px_rgba(75,55,40,0.09),0_20px_36px_-4px_rgba(75,55,40,0.16)] transition cursor-pointer group relative" title="Self-check">
+                        <div class="flex items-center justify-center gap-5 sm:gap-7 max-w-full">
+                            <div class="text-left min-w-0 sm:shrink-0">
+                                <h3 class="text-2xl sm:text-[26px] font-extrabold text-[#527668] mb-1 leading-tight tracking-tight">
+                                    How are you feeling today?
+                                </h3>
+                                <p class="text-sm sm:text-base text-[#628A7A] leading-snug">
+                                    Take a moment to check in with yourself.
+                                </p>
+                            </div>
+                            <img src="../assets/self-check-mascot.png" alt="Self-check Mascot" class="h-[95px] sm:h-[110px] w-auto object-contain shrink-0 select-none pointer-events-none" />
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- RIGHT COLUMN: From the Tempo Community -->
+                <div class="lg:col-span-5">
+                    <div class="bg-[#FEFAF4] border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 soft-card-shadow flex flex-col space-y-4">
+                        
+                        <!-- Header -->
+                        <div class="flex items-center justify-between pb-1 border-b border-[#EAE4DF]">
+                            <div class="flex items-center space-x-2.5">
+                                <div class="w-8 h-8 rounded-full bg-[#F6E6DE] flex items-center justify-center shrink-0">
+                                    <img src="../assets/comment-symbol.png" alt="Community" class="w-4 h-4 object-contain">
+                                </div>
+                                <h3 class="font-extrabold text-base sm:text-lg text-[#726D69] tracking-tight">
+                                    From the Tempo Community
+                                </h3>
+                            </div>
+                            <button type="button" class="px-3.5 py-1 rounded-full bg-[#F6E6DE] hover:bg-[#EED8CE] text-[#D99E87] text-xs font-bold transition flex items-center space-x-1 cursor-pointer">
+                                <span>See all</span>
+                                <span class="text-xs">→</span>
+                            </button>
+                        </div>
+
+                        <!-- Post Card 1: FPT Bá khí -->
+                        <div class="p-4 rounded-2xl border border-[#EAE4DF] bg-white space-y-3 shadow-2xs hover:border-[#D79277]/40 transition">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-center space-x-2.5">
+                                    <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" alt="Avatar" class="w-9 h-9 rounded-full object-cover">
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-bold text-xs text-[#202124]">FPT Bá khí</span>
+                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#E3E8EC] text-[#4A5D6B]">mental health</span>
+                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#D4957D] text-white">Deadline</span>
+                                        </div>
+                                        <span class="text-[11px] text-[#8C8782] italic">2 hours ago</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="text-stone-400 hover:text-[#D79277] transition cursor-pointer">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                                </button>
+                            </div>
+                            <p class="text-xs text-[#4A4744] leading-relaxed">
+                                How to survive 4 projects in just 2 weeks without destroying my mental health? Urgent situation; please give me some tips. Thank you all.
+                            </p>
+                            <div class="p-2.5 bg-[#FAF7F4] rounded-xl border border-[#F0ECE9] text-[11px] text-[#6F6B68] space-y-1">
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="font-bold text-[#4A4744]">fess</span>
+                                    <span class="text-[10px] text-stone-400">1h ago</span>
+                                </div>
+                                <p>Omg same here I'm dying with deadline...</p>
+                            </div>
+                            <div class="flex items-center space-x-4 pt-1 text-xs text-[#8C8782]">
+                                <span class="flex items-center space-x-1 hover:text-[#D79277] cursor-pointer"><span>🤍</span><span>29</span></span>
+                                <span class="flex items-center space-x-1 hover:text-[#D79277] cursor-pointer"><span>💬</span><span>5</span></span>
+                                <span class="hover:text-[#D79277] cursor-pointer">↗</span>
+                            </div>
+                        </div>
+
+                        <!-- Post Card 2: Temposocute -->
+                        <div class="p-4 rounded-2xl border border-[#EAE4DF] bg-white space-y-3 shadow-2xs hover:border-[#D79277]/40 transition">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-center space-x-2.5">
+                                    <img src="../assets/tempo-logo.png" alt="Tempo Avatar" class="w-9 h-9 rounded-full object-contain bg-[#FEFAF4] border border-[#EAE4DF] p-1">
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-bold text-xs text-[#202124]">Temposocute</span>
+                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#7C9985] text-white">Focus zone</span>
+                                            <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#FBF0DC] text-[#8C6B37]">Background</span>
+                                        </div>
+                                        <span class="text-[11px] text-[#8C8782] italic">5 hours ago</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="text-stone-400 hover:text-[#D79277] transition cursor-pointer">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+                                </button>
+                            </div>
+                            <p class="text-xs text-[#4A4744] leading-relaxed">
+                                Hello, we have updated more background for Focus Zone, check it out now!
+                            </p>
+                            <div class="grid grid-cols-4 gap-2 pt-1">
+                                <div class="aspect-4/3 rounded-lg bg-[#8CA5B4]/30 border border-[#8CA5B4]/40 overflow-hidden shadow-2xs"><div class="w-full h-full bg-gradient-to-b from-[#A5C3D6] to-[#7A9BB0]"></div></div>
+                                <div class="aspect-4/3 rounded-lg bg-[#8EA391]/30 border border-[#8EA391]/40 overflow-hidden shadow-2xs"><div class="w-full h-full bg-gradient-to-b from-[#ABC2AE] to-[#7F9983]"></div></div>
+                                <div class="aspect-4/3 rounded-lg bg-[#DF9F82]/30 border border-[#DF9F82]/40 overflow-hidden shadow-2xs"><div class="w-full h-full bg-gradient-to-b from-[#F2BEA7] to-[#D78B6C]"></div></div>
+                                <div class="aspect-4/3 rounded-lg bg-[#D3DFE4]/30 border border-[#D3DFE4]/40 overflow-hidden shadow-2xs"><div class="w-full h-full bg-gradient-to-b from-[#C9DBE2] to-[#9CB8C4]"></div></div>
+                            </div>
+                            <div class="flex items-center space-x-4 pt-1 text-xs text-[#8C8782]">
+                                <span class="flex items-center space-x-1 hover:text-[#D79277] cursor-pointer"><span>🤍</span><span>58</span></span>
+                                <span class="flex items-center space-x-1 hover:text-[#D79277] cursor-pointer"><span>💬</span><span>20</span></span>
+                                <span class="hover:text-[#D79277] cursor-pointer">↗</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+</body>
+</html>
