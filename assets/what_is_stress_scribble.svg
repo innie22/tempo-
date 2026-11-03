@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" width="100%" height="100%" fill="none">
+    <rect width="400" height="320" rx="16" fill="#FFFFFF"/>
+    <!-- Head and Shoulders Contour -->
+    <path d="M140 310 C145 270 170 255 185 245 C175 235 170 215 170 190 C170 160 180 145 200 145 C220 145 230 160 230 190 C230 215 225 235 215 245 C230 255 255 270 260 310" stroke="#222222" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Scribble Tangle on Head -->
+    <path d="M180 140 C150 110 130 120 125 90 C120 60 145 40 180 45 C215 50 250 30 270 50 C290 70 280 100 260 115 C240 130 260 150 240 160 C220 170 190 155 175 140 Z" stroke="#222222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M160 70 Q220 30 260 80 Q290 120 230 130 Q170 140 140 100 Q110 60 180 50 Q250 40 270 90 Q290 140 210 150 Q130 160 130 80 Q130 20 200 35 Q270 50 280 110 Q290 170 220 160 Q150 150 120 110 Q90 70 160 40 Q230 10 260 60 Q290 110 240 150 Q190 190 150 140 Q110 90 170 60 Q230 30 270 70 Q310 110 250 140 Q190 170 140 130 Q90 90 150 50 Q210 10 280 50 Q350 90 270 140 Q190 190 140 120" stroke="#1A1A1A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 100 Q200 60 250 90 Q300 120 220 145 Q140 170 130 105 Q120 40 190 40 Q260 40 270 100 Q280 160 210 150 Q140 140 150 85 Q160 30 230 55 Q300 80 260 130" stroke="#333333" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M170 120 C190 80 230 70 250 110 C270 150 210 160 180 135 C150 110 170 70 210 60 C250 50 280 90 260 130" stroke="#2B2B2B" stroke-width="1.6"/>
+</svg>
