@@ -3,15 +3,29 @@
  * File: selfCheckWorkspace.js
  *
  * Implements the Tempo Self-check tool page matching the reference design:
- * - Left column: Weekly self-check summary, Today's self-check interactive card,
+ * - Left column: Weekly self-check summary, Điểm danh hôm nay interactive card,
  *   My weekly report button, and My Recovery notice button.
- * - Right column: Your Tracking System with independently scrollable tracker cards,
+ * - Right column: Hệ thống Theo dõi của bạn with independently scrollable tracker cards,
  *   Add Tracking, Clear all with confirmation, Adjust edit popup, and View my full check popup.
  * - Context-aware navigation and persistence via window.TempoRecoverySelfCheck and window.TempoRecoveryNote.
  */
 
 window.TempoSelfCheckWorkspace = (function () {
     'use strict';
+
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        const stored = localStorage.getItem('tempo_lang');
+        if (stored === 'vi' || stored === 'en') return stored === 'vi';
+        return (navigator.language || '').toLowerCase().startsWith('vi');
+    }
+
+    function formatTrackerDisplayName(name) {
+        if (!name || typeof name !== 'string') return '';
+        return name.trim();
+    }
 
     let showNoteInput = false;
     let selectedTrackerForHistory = null;
@@ -71,7 +85,9 @@ window.TempoSelfCheckWorkspace = (function () {
         const mon = new Date(now);
         mon.setDate(now.getDate() + diffToMon);
 
-        const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const dayLabelsEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const dayLabelsVi = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
+        const dayLabels = isViLocale() ? dayLabelsVi : dayLabelsEn;
         const days = [];
 
         for (let i = 0; i < 7; i++) {
@@ -96,6 +112,10 @@ window.TempoSelfCheckWorkspace = (function () {
         const days = getCurrentWeekDays();
         const mon = days[0].dateObj;
         const sun = days[6].dateObj;
+        if (isViLocale()) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(mon.getDate())}/${pad(mon.getMonth() + 1)} – ${pad(sun.getDate())}/${pad(sun.getMonth() + 1)}`;
+        }
         const monStr = mon.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const sunStr = sun.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         return `${monStr} to ${sunStr}`;
@@ -165,6 +185,16 @@ window.TempoSelfCheckWorkspace = (function () {
             localStorage.setItem(checkinsKey, JSON.stringify(checkins));
             localStorage.setItem(obsKey, JSON.stringify(allObs));
         } catch (e) {}
+
+        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.refreshRecoveryHomeIfActive === 'function') {
+            window.TempoRecoverySelfCheck.refreshRecoveryHomeIfActive();
+        }
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated'));
+        } catch (e) {}
     }
 
     // Return today's observation for a tracker
@@ -182,7 +212,11 @@ window.TempoSelfCheckWorkspace = (function () {
 
             const rawObs = localStorage.getItem(obsKey) || (uid === 'local_user' ? localStorage.getItem('tempo_selfcheck_observations') : null);
             const allObs = rawObs ? JSON.parse(rawObs) : [];
-            return allObs.find(o => o.checkin_id === todayChk.id && o.tracker_id === trackerId) || null;
+            const trk = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackerById === 'function')
+                ? window.TempoRecoverySelfCheck.getTrackerById(trackerId)
+                : null;
+            const aliasIds = (trk && Array.isArray(trk.alias_ids)) ? trk.alias_ids : [];
+            return allObs.find(o => o.checkin_id === todayChk.id && (o.tracker_id === trackerId || aliasIds.includes(o.tracker_id))) || null;
         } catch (e) {
             return null;
         }
@@ -264,6 +298,13 @@ window.TempoSelfCheckWorkspace = (function () {
             window.TempoRecoverySelfCheck.get7DayHistory();
         }
 
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated'));
+        } catch (e) {}
+
         if (status === 'answered') {
             if (window.TempoAlertSystem && typeof window.TempoAlertSystem.evaluateAndTriggerAlert === 'function') {
                 setTimeout(() => {
@@ -342,63 +383,33 @@ window.TempoSelfCheckWorkspace = (function () {
 
     // Calculate weekly summary metrics for a tracker
     function calculateTrackerWeeklySummary(tracker, weekDays) {
-        let checkedCount = 0;
-        let sum = 0;
-        let countNumeric = 0;
-        let goodCount = 0;
-        let totalQty = 0;
-
-        weekDays.forEach(day => {
+        const isVi = isViLocale();
+        const observations = [];
+        (weekDays || []).forEach(day => {
             const obs = getObservationForDate(tracker.id, day.dateStr);
-            if (obs && obs.status === 'answered' && obs.value !== null && obs.value !== undefined) {
-                checkedCount++;
-                const val = obs.value;
-                if (typeof val === 'number') {
-                    sum += val;
-                    countNumeric++;
-                    totalQty += val;
-                } else if (typeof val === 'string') {
-                    const num = parseFloat(val);
-                    if (!isNaN(num)) {
-                        sum += num;
-                        countNumeric++;
-                        totalQty += num;
-                    }
-                    if (val.toLowerCase() === 'good' || val.toLowerCase() === 'yes') {
-                        goodCount++;
-                    }
-                }
+            if (obs && obs.status === 'answered' && obs.value !== null && obs.value !== undefined && obs.value !== '') {
+                observations.push(obs);
             }
         });
 
-        const nameLower = (tracker.name || '').toLowerCase();
-        let metricLabel = '';
-        let metricValue = '';
+        const summary = (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.calculateTrackingSummary === 'function')
+            ? window.TempoRecoverySelfCheck.calculateTrackingSummary(tracker, observations, { isVi })
+            : {
+                method: tracker.check_method || 'percentage',
+                metricLabel: isVi ? 'Mức trung bình' : 'Average level',
+                metricValue: '—',
+                hasData: false,
+                count: observations.length
+            };
 
-        if (tracker.check_method === 'percentage' || nameLower.includes('tension')) {
-            const avg = countNumeric > 0 ? `${Math.round(sum / countNumeric)}%` : '0%';
-            metricLabel = `Your average ${escapeHTML(nameLower)} level is`;
-            metricValue = avg;
-        } else if (tracker.check_method === 'yes_no' || nameLower.includes('sleep')) {
-            metricLabel = `Nights of Quality Sleep`;
-            metricValue = `${goodCount}`;
-        } else if (tracker.check_method === 'quantity' || nameLower.includes('walk')) {
-            const unit = tracker.quantity_unit || 'min';
-            metricLabel = `Total logged this week`;
-            metricValue = `${totalQty} ${unit}`;
-        } else if (tracker.check_method === 'scale') {
-            const avg = countNumeric > 0 ? `${(sum / countNumeric).toFixed(1)}/${tracker.scale_max || 5}` : `0/${tracker.scale_max || 5}`;
-            metricLabel = `Average rating`;
-            metricValue = avg;
-        } else {
-            metricLabel = `Your average ${escapeHTML(nameLower)} level is`;
-            metricValue = countNumeric > 0 ? `${Math.round(sum / countNumeric)}%` : '0%';
-        }
+        const checkedCount = observations.length;
+        const metricLabel = summary.metricLabel;
+        const metricValue = summary.hasData ? summary.metricValue : '—';
 
         const summaryHTML = `
             <div class="flex items-center justify-between text-xs sm:text-sm text-[#5B5550]">
                 <span>${metricLabel}</span>
-                <span class="font-bold text-sm text-[#37352F]">${metricValue}</span>
+                <span class="font-bold text-sm text-[#37352F]">${escapeHTML(metricValue)}</span>
             </div>
         `;
 
@@ -420,18 +431,32 @@ window.TempoSelfCheckWorkspace = (function () {
             return `<span class="font-semibold text-xs text-[#37352F]">${parseInt(val, 10)}%</span>`;
         }
 
-        if (method === 'yes_no' || method === 'options' || nameLower.includes('sleep')) {
-            if (typeof val === 'string' && (val.toLowerCase() === 'good' || val.toLowerCase() === 'yes')) {
-                return `<span class="font-semibold text-xs text-[#37352F]">Good</span>`;
-            } else if (typeof val === 'string' && (val.toLowerCase() === 'not_good' || val.toLowerCase() === 'no')) {
-                return `<span class="font-semibold text-xs text-[#7B7672]">No</span>`;
+        if (method === 'yes_no' || method === 'options' || nameLower.includes('sleep') || nameLower.includes('giấc ngủ')) {
+            const isVi = isViLocale();
+            // Preserve user-defined custom options exactly as configured
+            if (tracker.options && Array.isArray(tracker.options) && tracker.options.length > 0) {
+                const match = tracker.options.find(o => String(o).trim().toLowerCase() === String(val).trim().toLowerCase());
+                return `<span class="font-semibold text-xs text-[#37352F]">${escapeHTML(match ? String(match) : String(val))}</span>`;
+            }
+
+            if (typeof val === 'string' && (val.toLowerCase() === 'good' || val.toLowerCase() === 'tốt' || val.toLowerCase() === 'yes' || val.toLowerCase() === 'có')) {
+                const label = (nameLower.includes('sleep') || nameLower.includes('giấc ngủ') || val.toLowerCase() === 'good' || val.toLowerCase() === 'tốt')
+                    ? (isVi ? 'Tốt' : 'Good')
+                    : (isVi ? 'Có' : 'Yes');
+                return `<span class="font-semibold text-xs text-[#37352F]">${label}</span>`;
+            } else if (typeof val === 'string' && (val.toLowerCase() === 'not_good' || val.toLowerCase() === 'chưa tốt' || val.toLowerCase() === 'no' || val.toLowerCase() === 'không')) {
+                const label = (nameLower.includes('sleep') || nameLower.includes('giấc ngủ') || val.toLowerCase() === 'not_good' || val.toLowerCase() === 'chưa tốt')
+                    ? (isVi ? 'Chưa tốt' : 'Not good')
+                    : (isVi ? 'Không' : 'No');
+                return `<span class="font-semibold text-xs text-[#7B7672]">${label}</span>`;
             }
             return `<span class="font-semibold text-xs text-[#37352F]">${escapeHTML(String(val))}</span>`;
         }
 
-        if (method === 'quantity' || nameLower.includes('walk')) {
-            if (val === 'no') {
-                return `<span class="font-semibold text-xs text-[#7B7672]">No</span>`;
+        if (method === 'quantity' || nameLower.includes('walk') || nameLower.includes('đi bộ')) {
+            const isVi = isViLocale();
+            if (val === 'no' || val === 'không') {
+                return `<span class="font-semibold text-xs text-[#7B7672]">${isVi ? 'Không' : 'No'}</span>`;
             }
             const numVal = parseFloat(val);
             if (!isNaN(numVal)) {
@@ -635,10 +660,13 @@ window.TempoSelfCheckWorkspace = (function () {
             }
         }
 
+        const isVi = isViLocale();
         const dotColor = tracker.type_color || (tracker.category === 'stress_sign' ? '#D48366' : (tracker.category === 'supportive' ? '#166545' : '#1E40AF'));
-        const unit = tracker.quantity_unit || 'min';
-        const isWalk = (tracker.name || '').toLowerCase().includes('walk');
-        const questionText = isWalk ? 'Did you go for a walk today?' : `Did you log your ${escapeHTML((tracker.name || '').toLowerCase())} today?`;
+        const unit = tracker.quantity_unit || (isVi ? 'phút' : 'min');
+        const isWalk = (tracker.name || '').toLowerCase().includes('walk') || (tracker.name || '').toLowerCase().includes('đi bộ');
+        const questionText = isWalk 
+            ? (isVi ? 'Hôm nay bạn có đi bộ không?' : 'Did you go for a walk today?') 
+            : (isVi ? `Hôm nay bạn đã ghi nhận ${escapeHTML(formatTrackerDisplayName(tracker.name).toLowerCase())} chưa?` : `Did you log your ${escapeHTML((tracker.name || '').toLowerCase())} today?`);
         const radioName = isWalk ? 'selfcheck_walk_today' : `selfcheck_qty_${tracker.id}`;
         const inputId = `selfcheck-qty-input-${tracker.id}`;
 
@@ -650,7 +678,7 @@ window.TempoSelfCheckWorkspace = (function () {
             <div class="space-y-1.5" data-quantity-tracker-id="${tracker.id}">
                 <div class="flex items-center space-x-2 text-sm font-bold text-[#37352F]">
                     <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
-                    <span>${escapeHTML(tracker.name)}</span>
+                    <span>${escapeHTML(formatTrackerDisplayName(tracker.name))}</span>
                 </div>
                 <p class="text-xs text-[#5B5550]">${questionText}</p>
                 <div class="space-y-1.5 text-xs text-[#5B5550]">
@@ -662,17 +690,17 @@ window.TempoSelfCheckWorkspace = (function () {
                                    ${isYesChecked ? 'checked' : ''}
                                    onchange="window.TempoSelfCheckWorkspace.setQuantityChoice('${tracker.id}', 'yes')"
                                    class="accent-[#166545]">
-                            <span>Yes</span>
+                            <span>${isVi ? 'Có' : 'Yes'}</span>
                         </label>
                         ${isYesChecked ? `
                             <div class="inline-flex items-center space-x-1.5 pl-0.5">
-                                <span class="text-stone-500 font-medium">For</span>
+                                <span class="text-stone-500 font-medium">${isVi ? 'Trong' : 'For'}</span>
                                 <input type="number" 
                                        id="${inputId}"
                                        data-tracker-id="${tracker.id}"
                                        step="any"
                                        min="0"
-                                       placeholder="Enter quantity"
+                                       placeholder="${isVi ? 'Nhập số lượng' : 'Enter quantity'}"
                                        value="${displayVal}"
                                        oninput="window.TempoSelfCheckWorkspace.onQuantityInput('${tracker.id}', this.value)"
                                        onchange="window.TempoSelfCheckWorkspace.onQuantityChange('${tracker.id}', this.value)"
@@ -689,7 +717,7 @@ window.TempoSelfCheckWorkspace = (function () {
                                ${isNoChecked ? 'checked' : ''}
                                onchange="window.TempoSelfCheckWorkspace.setQuantityChoice('${tracker.id}', 'no')"
                                class="accent-[#166545]">
-                        <span>No, i didn't</span>
+                        <span>${isVi ? 'Không' : "No, I didn't"}</span>
                     </label>
                 </div>
             </div>
@@ -741,12 +769,15 @@ window.TempoSelfCheckWorkspace = (function () {
                 const s = calculateTrackerWeeklySummary(t, days);
                 return `
                     <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
-                            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color: ${t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#166545' : '#1E40AF')};"></span>
-                            <span class="font-bold text-xs sm:text-sm text-[#202124]">${escapeHTML(t.name)}</span>
+                        <div class="space-y-0.5 min-w-0">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background-color: ${t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#166545' : '#1E40AF')};"></span>
+                                <span class="font-bold text-xs sm:text-sm text-[#202124] truncate">${escapeHTML(t.name)}</span>
+                            </div>
+                            <p class="text-xs text-[#7B7672] pl-4.5">${s.metricLabel}</p>
                         </div>
-                        <div class="text-right">
-                            <span class="text-xs font-semibold text-[#5B5550]">Checked: ${s.checkedCount}/7 days</span>
+                        <div class="text-right shrink-0 max-w-[60%] pl-2">
+                            <span class="text-xs sm:text-sm font-bold text-[#166545]">${escapeHTML(s.metricValue)}</span>
                         </div>
                     </div>
                 `;
@@ -756,16 +787,16 @@ window.TempoSelfCheckWorkspace = (function () {
                 <div class="space-y-4">
                     <div class="p-4 rounded-2xl bg-[#EDF7F1] border border-[#CDE9DA] flex items-center justify-between">
                         <div>
-                            <span class="text-xs font-bold text-[#166545] uppercase tracking-wider block">CONSISTENCY</span>
-                            <h4 class="font-heading text-lg font-extrabold text-[#202124]">${streak}-day check-in streak</h4>
+                            <span class="text-xs font-bold text-[#166545] uppercase tracking-wider block">${isViLocale() ? 'TÍNH NHẤT QUÁN' : 'CONSISTENCY'}</span>
+                            <h4 class="font-heading text-lg font-extrabold text-[#202124]">${isViLocale() ? `${streak} ngày điểm danh liên tiếp` : `${streak}-day streak`}</h4>
                         </div>
                         <span class="text-2xl select-none">🌱</span>
                     </div>
 
                     <div class="space-y-2">
-                        <h5 class="text-xs font-bold uppercase tracking-wider text-[#6F6B68]">Tracker Summary for this week</h5>
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-[#6F6B68]">${isViLocale() ? 'Tổng kết theo dõi tuần này' : 'This week’s tracking summary'}</h5>
                         <div class="space-y-2">
-                            ${summaryItemsHTML || '<p class="text-xs text-stone-500 italic">No active trackers.</p>'}
+                            ${summaryItemsHTML || `<p class="text-xs text-stone-500 italic">${isViLocale() ? 'Chưa có mục theo dõi nào.' : 'No active trackers.'}</p>`}
                         </div>
                     </div>
                 </div>
@@ -789,24 +820,86 @@ window.TempoSelfCheckWorkspace = (function () {
         }
     }
 
-    function openAddTracking() {
+    function ensureAdjustModalMounted() {
+        let modal = document.getElementById('modal-selfcheck-adjust');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-selfcheck-adjust';
+            modal.className = 'fixed inset-0 z-[80] flex items-center justify-center modal-backdrop p-4 hidden';
+            modal.style.zIndex = '80';
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            modal.onclick = function(e) {
+                if (e.target === modal) window.TempoSelfCheckWorkspace.closeAdjustModal();
+            };
+            modal.innerHTML = `
+                <div id="selfcheck-adjust-modal-card" 
+                     class="max-w-[390px] sm:max-w-[420px] w-full p-6 sm:p-7 bg-[#FEFAF4] rounded-3xl shadow-2xl relative border border-[#EAE4DF]/80 max-h-[92vh] overflow-y-auto"
+                     style="background-color: #FEFAF4;">
+                    <!-- Rendered dynamically by renderAdjustModal -->
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
+            modal.className = 'fixed inset-0 z-[80] flex items-center justify-center modal-backdrop p-4 hidden';
+            modal.style.zIndex = '80';
+        }
+        return modal;
+    }
+
+    function openAddTracking(prefill = null) {
+        ensureAdjustModalMounted();
+
+        let initialName = '';
+        let initialTypeId = 'stress_sign';
+        let initialTypeName = isViLocale() ? 'Dấu hiệu căng thẳng' : 'Sign of stress';
+        let initialTypeColor = '#C34D2E';
+        let initialMethod = 'percentage';
+        let initialUnit = 'minutes';
+        let initialOptions = ['Yes', 'No'];
+
+        if (prefill) {
+            if (typeof prefill === 'string') {
+                initialName = prefill;
+            } else if (typeof prefill === 'object') {
+                initialName = prefill.name || '';
+                if (prefill.category === 'supportive' || prefill.type_id === 'supportive') {
+                    initialTypeId = 'supportive';
+                    initialTypeName = isViLocale() ? 'Yếu tố hỗ trợ' : 'Supportive';
+                    initialTypeColor = '#859B8B';
+                }
+                if (prefill.check_method) {
+                    initialMethod = prefill.check_method === 'yes_no' ? 'options' : prefill.check_method;
+                }
+                if (prefill.quantity_unit) {
+                    initialUnit = prefill.quantity_unit;
+                }
+                if (prefill.options && Array.isArray(prefill.options)) {
+                    initialOptions = [...prefill.options];
+                }
+            }
+        }
+
         adjustDraftState = {
             mode: 'create',
             trackerId: null,
-            trackerName: '',
-            typeId: 'stress_sign',
-            typeName: 'Sign of stress',
-            typeColor: '#C34D2E',
-            checkMethod: 'percentage',
-            options: ['Yes', 'No'],
+            trackerName: initialName,
+            typeId: initialTypeId,
+            typeName: initialTypeName,
+            typeColor: initialTypeColor,
+            checkMethod: initialMethod,
+            options: initialOptions,
             scaleRange: '1-5',
-            quantityUnit: 'minutes',
+            quantityUnit: initialUnit,
             alertEnabled: true,
-            alertType: 'stress_sign',
+            alertType: initialTypeId === 'supportive' ? 'supportive_reminder' : 'stress_sign',
             alertOperator: 'more_than',
-            alertThreshold: 60,
+            alertThreshold: initialMethod === 'scale' ? 3 : 60,
             alertDays: 4,
-            alertTargetOption: 'Yes',
+            alertTargetOption: initialOptions[0] || 'Yes',
             showNewTypeForm: false,
             newTypeError: '',
             selectedNewColor: '#C34D2E',
@@ -951,14 +1044,20 @@ window.TempoSelfCheckWorkspace = (function () {
 
     let adjustDraftState = null;
 
-    function openAdjustTracker(trackerId) {
+    function openAdjustTracker(trackerIdOrObj) {
+        ensureAdjustModalMounted();
         let tracker = null;
-        if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackerById === 'function') {
-            tracker = window.TempoRecoverySelfCheck.getTrackerById(trackerId);
-        }
-        if (!tracker && window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function') {
-            const active = window.TempoRecoverySelfCheck.getActiveTrackers();
-            tracker = active.find(t => t.id === trackerId);
+        if (typeof trackerIdOrObj === 'object' && trackerIdOrObj !== null) {
+            tracker = trackerIdOrObj;
+        } else {
+            const trackerId = trackerIdOrObj;
+            if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackerById === 'function') {
+                tracker = window.TempoRecoverySelfCheck.getTrackerById(trackerId);
+            }
+            if (!tracker && window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function') {
+                const active = window.TempoRecoverySelfCheck.getActiveTrackers();
+                tracker = active.find(t => t.id === trackerId);
+            }
         }
         if (!tracker) return;
 
@@ -977,7 +1076,7 @@ window.TempoSelfCheckWorkspace = (function () {
             trackerId: tracker.id,
             trackerName: tracker.name || '',
             typeId: tracker.type_id || tracker.category || 'stress_sign',
-            typeName: tracker.type_label || (tracker.category === 'supportive' ? 'Supportive' : 'Sign of stress'),
+            typeName: tracker.type_label || (tracker.category === 'supportive' ? (isViLocale() ? 'Yếu tố hỗ trợ' : 'Supportive') : (isViLocale() ? 'Dấu hiệu căng thẳng' : 'Sign of stress')),
             typeColor: tracker.type_color || (tracker.category === 'supportive' ? '#859B8B' : '#C34D2E'),
             checkMethod: defaultMethod,
             options: [...defaultOptions],
@@ -989,6 +1088,8 @@ window.TempoSelfCheckWorkspace = (function () {
             alertThreshold: alertCfg.threshold !== undefined ? alertCfg.threshold : (defaultMethod === 'scale' ? 3 : 60),
             alertDays: alertCfg.days || 4,
             alertTargetOption: alertCfg.target_option || defaultOptions[0] || 'Yes',
+            linkedNoteItemIds: Array.isArray(tracker.linked_note_item_ids) ? [...tracker.linked_note_item_ids] : [],
+            linkedNoteItemIds: Array.isArray(tracker.linked_note_item_ids) ? [...tracker.linked_note_item_ids] : [],
             showNewTypeForm: false,
             newTypeError: '',
             selectedNewColor: '#C34D2E',
@@ -1029,6 +1130,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function setAdjustType(typeId, typeName, typeColor) {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         adjustDraftState.typeId = typeId;
         adjustDraftState.typeName = typeName;
         adjustDraftState.typeColor = typeColor;
@@ -1037,6 +1139,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function toggleCreateNewTypeForm(show = null) {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         adjustDraftState.showNewTypeForm = (show !== null) ? show : !adjustDraftState.showNewTypeForm;
         adjustDraftState.newTypeError = '';
         renderAdjustModal();
@@ -1044,6 +1147,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function setNewTypeColor(color) {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         const input = document.getElementById('adjust-new-type-input');
         if (input) adjustDraftState.newTypeName = input.value;
         adjustDraftState.selectedNewColor = color;
@@ -1056,6 +1160,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function saveNewType() {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         const input = document.getElementById('adjust-new-type-input');
         const name = (input && input.value.trim()) ? input.value.trim() : (adjustDraftState.newTypeName || '');
         const color = adjustDraftState.selectedNewColor || '#859B8B';
@@ -1079,7 +1184,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function setAdjustMethod(method) {
         if (!adjustDraftState) return;
-        readCurrentAlertInputs();
+        readCurrentDraftInputs();
         adjustDraftState.checkMethod = method;
         if (method === 'scale' && (adjustDraftState.alertThreshold === 60 || adjustDraftState.alertThreshold > 10)) {
             adjustDraftState.alertThreshold = 3;
@@ -1091,6 +1196,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function addAdjustOption() {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         const input = document.getElementById('adjust-new-option-input');
         const opt = input ? input.value.trim() : '';
         if (opt && !adjustDraftState.options.includes(opt)) {
@@ -1101,6 +1207,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function removeAdjustOption(opt) {
         if (!adjustDraftState || adjustDraftState.options.length <= 1) return;
+        readCurrentDraftInputs();
         adjustDraftState.options = adjustDraftState.options.filter(o => o !== opt);
         if (adjustDraftState.alertTargetOption === opt) {
             adjustDraftState.alertTargetOption = adjustDraftState.options[0] || '';
@@ -1110,12 +1217,14 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function setAdjustScaleRange(range) {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         adjustDraftState.scaleRange = range;
         renderAdjustModal();
     }
 
     function setAdjustQuantityUnit(unit) {
         if (!adjustDraftState) return;
+        readCurrentDraftInputs();
         adjustDraftState.quantityUnit = unit ? unit.trim() : 'minutes';
         const unitLabel = document.getElementById('adjust-alert-unit-label');
         if (unitLabel) unitLabel.textContent = adjustDraftState.quantityUnit;
@@ -1123,16 +1232,29 @@ window.TempoSelfCheckWorkspace = (function () {
 
     function toggleAdjustAlertSystem() {
         if (!adjustDraftState) return;
-        readCurrentAlertInputs();
+        readCurrentDraftInputs();
         adjustDraftState.alertEnabled = !adjustDraftState.alertEnabled;
         renderAdjustModal();
     }
 
     function onAlertOperatorChanged(val) {
         if (!adjustDraftState) return;
-        readCurrentAlertInputs();
+        readCurrentDraftInputs();
         adjustDraftState.alertOperator = val;
         renderAdjustModal();
+    }
+
+    function readCurrentDraftInputs() {
+        if (!adjustDraftState) return;
+        const nameInp = document.getElementById('adjust-tracker-name-input');
+        if (nameInp && nameInp.value !== undefined) {
+            adjustDraftState.trackerName = nameInp.value;
+        }
+        const newTypeInp = document.getElementById('adjust-new-type-input');
+        if (newTypeInp && newTypeInp.value !== undefined) {
+            adjustDraftState.newTypeName = newTypeInp.value;
+        }
+        readCurrentAlertInputs();
     }
 
     function readCurrentAlertInputs() {
@@ -1156,7 +1278,7 @@ window.TempoSelfCheckWorkspace = (function () {
         if (!adjustDraftState) return;
         if (adjustDraftState.isSaving) return; // Prevent duplicate submissions
 
-        readCurrentAlertInputs();
+        readCurrentDraftInputs();
 
         // Read current name from input if present
         const nameInp = document.getElementById('adjust-tracker-name-input');
@@ -1165,7 +1287,8 @@ window.TempoSelfCheckWorkspace = (function () {
 
         // Validate: Require a valid, non-empty tracking name before saving
         if (!cleanName) {
-            adjustDraftState.nameError = 'Please enter a tracking name.';
+            const isVi = isViLocale();
+            adjustDraftState.nameError = isVi ? 'Vui lòng nhập tên mục tracking.' : 'Please enter a tracking name.';
             renderAdjustModal();
             const inp = document.getElementById('adjust-tracker-name-input');
             if (inp) inp.focus();
@@ -1173,12 +1296,23 @@ window.TempoSelfCheckWorkspace = (function () {
         }
 
         adjustDraftState.trackerName = cleanName;
+        adjustDraftState.nameError = '';
         adjustDraftState.isSaving = true;
 
+        const isVi = isViLocale();
         const saveBtn = document.getElementById('adjust-save-submit-btn');
         if (saveBtn) {
             saveBtn.disabled = true;
             saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            saveBtn.innerHTML = `
+                <span class="inline-flex items-center space-x-1.5">
+                    <svg class="animate-spin -ml-0.5 mr-1.5 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span>${adjustDraftState.mode === 'create' ? (isVi ? 'Đang thêm...' : 'Adding tracking...') : (isVi ? 'Đang lưu...' : 'Saving...')}</span>
+                </span>
+            `;
         }
 
         const scaleMax = adjustDraftState.scaleRange === '1-10' ? 10 : 5;
@@ -1207,7 +1341,8 @@ window.TempoSelfCheckWorkspace = (function () {
             scale_range: adjustDraftState.scaleRange,
             quantity_unit: adjustDraftState.quantityUnit,
             alert_enabled: adjustDraftState.alertEnabled,
-            alert_config: alertConfig
+            alert_config: alertConfig,
+            linked_note_item_ids: adjustDraftState.linkedNoteItemIds || []
         };
 
         try {
@@ -1235,30 +1370,68 @@ window.TempoSelfCheckWorkspace = (function () {
                 closeAdjustModal();
                 render();
 
+                if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.onTrackerSaved === 'function') {
+                    window.TempoRecoverySetup.onTrackerSaved(newTracker);
+                }
+
+                if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+                    window.TempoMode.refreshStreakCardIfPresent();
+                }
+                try {
+                    window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated', { detail: { tracker: newTracker, action: 'create' } }));
+                } catch (e) {}
+
                 if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                    window.TempoApp.showToast(`"${cleanName}" added to Your Tracking System.`);
+                    const isVi = isViLocale();
+                    window.TempoApp.showToast(isVi ? `"${cleanName}" đã được thêm vào hệ thống tracking của bạn.` : `"${cleanName}" added to your tracking system.`);
                 }
             } else {
                 const trackerId = adjustDraftState.trackerId;
+                let updatedTrk = null;
                 if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.updateTracker === 'function') {
-                    window.TempoRecoverySelfCheck.updateTracker(trackerId, trackerPayload);
+                    try {
+                        updatedTrk = window.TempoRecoverySelfCheck.updateTracker(trackerId, trackerPayload);
+                    } catch (e) {
+                        console.warn('[SelfCheckWorkspace] updateTracker threw:', e);
+                    }
                 }
 
                 closeAdjustModal();
                 render();
 
+                if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.onTrackerSaved === 'function') {
+                    if (!updatedTrk && window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.getTrackerById === 'function') {
+                        updatedTrk = window.TempoRecoverySelfCheck.getTrackerById(trackerId);
+                    }
+                    if (updatedTrk) {
+                        window.TempoRecoverySetup.onTrackerSaved(updatedTrk);
+                    } else {
+                        window.TempoRecoverySetup.onTrackerSaved({ id: trackerId, ...trackerPayload });
+                    }
+                }
+
+                if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+                    window.TempoMode.refreshStreakCardIfPresent();
+                }
+                try {
+                    window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated', { detail: { trackerId, action: 'update' } }));
+                } catch (e) {}
+
                 if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                    window.TempoApp.showToast(`"${cleanName}" updated successfully.`);
+                    const isVi = isViLocale();
+                    window.TempoApp.showToast(isVi ? `"${cleanName}" đã được cập nhật thành công.` : `"${cleanName}" updated successfully.`);
                 }
             }
         } catch (err) {
             console.error("Error saving tracking configuration:", err);
             adjustDraftState.isSaving = false;
+            const isVi = isViLocale();
             if (saveBtn) {
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                saveBtn.textContent = adjustDraftState.mode === 'create' ? (isVi ? 'Thêm tracking' : 'Add tracking') : (isVi ? 'Lưu thay đổi' : 'Save changes');
             }
-            adjustDraftState.nameError = err && err.message ? err.message : 'Failed to save tracker. Please try again.';
+            adjustDraftState.nameError = err && err.message ? err.message : (isVi ? 'Không thể lưu mục tracking. Vui lòng thử lại.' : 'Failed to save tracker. Please try again.');
             renderAdjustModal();
         }
     }
@@ -1267,6 +1440,14 @@ window.TempoSelfCheckWorkspace = (function () {
         const container = document.getElementById('selfcheck-adjust-modal-card');
         if (!container || !adjustDraftState) return;
         const draft = adjustDraftState;
+        const isVi = isViLocale();
+
+        // Sync standard type name with active locale
+        if (draft.typeId === 'stress_sign') {
+            draft.typeName = isVi ? 'Dấu hiệu căng thẳng' : 'Sign of stress';
+        } else if (draft.typeId === 'supportive') {
+            draft.typeName = isVi ? 'Yếu tố hỗ trợ' : 'Supportive';
+        }
 
         const customTypes = getCustomTypes();
         const customTypesHTML = customTypes.map(t => {
@@ -1297,13 +1478,13 @@ window.TempoSelfCheckWorkspace = (function () {
 
         const newTypeFormHTML = draft.showNewTypeForm ? `
             <div class="mt-2.5 p-3.5 bg-white rounded-2xl border border-stone-200/80 space-y-2.5 shadow-2xs">
-                <span class="text-[11px] font-bold text-[#5B5550] block">Create new type</span>
-                <input type="text" id="adjust-new-type-input" placeholder="Type label (e.g. Physical, Habit)..." 
+                <span class="text-[11px] font-bold text-[#5B5550] block">${isVi ? 'Tạo loại mới' : 'Create new type'}</span>
+                <input type="text" id="adjust-new-type-input" placeholder="${isVi ? 'Tên loại (vd: Thể chất, Thói quen)...' : 'Type label (e.g. Physical, Habit)...'}" 
                        value="${escapeHTML(draft.newTypeName || '')}"
                        oninput="if(window.TempoSelfCheckWorkspace.setDraftNewTypeName) window.TempoSelfCheckWorkspace.setDraftNewTypeName(this.value)"
                        class="w-full px-3 py-1.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:border-[#4A6B53]">
                 <div class="space-y-1">
-                    <span class="text-[10px] text-stone-500 font-semibold block">Choose color:</span>
+                    <span class="text-[10px] text-stone-500 font-semibold block">${isVi ? 'Chọn màu:' : 'Choose color:'}</span>
                     <div class="flex items-center space-x-2">
                         <div class="flex items-center space-x-1.5">${colorButtonsHTML}</div>
                         <input type="color" value="${draft.selectedNewColor}" 
@@ -1315,11 +1496,11 @@ window.TempoSelfCheckWorkspace = (function () {
                 <div class="flex items-center space-x-2 pt-1">
                     <button type="button" onclick="window.TempoSelfCheckWorkspace.saveNewType()" 
                             class="px-3.5 py-1 rounded-xl text-xs font-bold bg-[#859B8B] hover:bg-[#748A7A] text-white transition">
-                        Save type
+                        ${isVi ? 'Lưu loại' : 'Save type'}
                     </button>
                     <button type="button" onclick="window.TempoSelfCheckWorkspace.toggleCreateNewTypeForm(false)" 
                             class="px-2 py-1 text-xs text-stone-500 hover:text-stone-800 transition">
-                        Cancel
+                        ${isVi ? 'Hủy' : 'Cancel'}
                     </button>
                 </div>
             </div>
@@ -1331,8 +1512,8 @@ window.TempoSelfCheckWorkspace = (function () {
             methodConfigHTML = `
                 <div class="p-2.5 bg-stone-100/70 rounded-xl space-y-1.5 mt-2 border border-stone-200/60">
                     <div class="flex items-center justify-between">
-                        <span class="text-[11px] font-bold text-[#5B5550]">Configured options:</span>
-                        <span class="text-[10px] text-stone-400">Click ✕ to remove</span>
+                        <span class="text-[11px] font-bold text-[#5B5550]">${isVi ? 'Các lựa chọn thiết lập:' : 'Configured options:'}</span>
+                        <span class="text-[10px] text-stone-400">${isVi ? 'Nhấn ✕ để xóa' : 'Click ✕ to remove'}</span>
                     </div>
                     <div class="flex flex-wrap gap-1.5 items-center">
                         ${draft.options.map(opt => `
@@ -1343,11 +1524,11 @@ window.TempoSelfCheckWorkspace = (function () {
                         `).join('')}
                     </div>
                     <div class="flex items-center space-x-2 pt-1">
-                        <input type="text" id="adjust-new-option-input" placeholder="Add custom option (e.g. Maybe)..." 
+                        <input type="text" id="adjust-new-option-input" placeholder="${isVi ? 'Thêm lựa chọn (vd: Có thể)...' : 'Add custom option (e.g. Maybe)...'}" 
                                class="px-2.5 py-1 rounded-lg border border-stone-300 text-xs w-48 bg-white focus:outline-none">
                         <button type="button" onclick="window.TempoSelfCheckWorkspace.addAdjustOption()" 
                                 class="px-3 py-1 rounded-lg text-xs font-bold bg-[#859B8B] text-white hover:bg-[#748A7A] transition">
-                            Add
+                            ${isVi ? 'Thêm' : 'Add'}
                         </button>
                     </div>
                 </div>
@@ -1355,31 +1536,34 @@ window.TempoSelfCheckWorkspace = (function () {
         } else if (draft.checkMethod === 'scale') {
             methodConfigHTML = `
                 <div class="p-2.5 bg-stone-100/70 rounded-xl flex items-center space-x-3 mt-2 border border-stone-200/60">
-                    <span class="text-[11px] font-bold text-[#5B5550]">Scale range:</span>
+                    <span class="text-[11px] font-bold text-[#5B5550]">${isVi ? 'Khoảng thang đo:' : 'Scale range:'}</span>
                     <button type="button" onclick="window.TempoSelfCheckWorkspace.setAdjustScaleRange('1-5')"
                             class="px-3 py-1 rounded-lg text-xs font-bold transition ${draft.scaleRange === '1-5' ? 'bg-[#859B8B] text-white shadow-2xs' : 'bg-white text-stone-700 border border-stone-300'}">
-                        1 to 5
+                        1 ${isVi ? 'đến' : 'to'} 5
                     </button>
                     <button type="button" onclick="window.TempoSelfCheckWorkspace.setAdjustScaleRange('1-10')"
                             class="px-3 py-1 rounded-lg text-xs font-bold transition ${draft.scaleRange === '1-10' ? 'bg-[#859B8B] text-white shadow-2xs' : 'bg-white text-stone-700 border border-stone-300'}">
-                        1 to 10
+                        1 ${isVi ? 'đến' : 'to'} 10
                     </button>
                 </div>
             `;
         } else if (draft.checkMethod === 'quantity') {
             methodConfigHTML = `
                 <div class="p-2.5 bg-stone-100/70 rounded-xl space-y-1.5 mt-2 border border-stone-200/60">
-                    <span class="text-[11px] font-bold text-[#5B5550]">Measurement unit:</span>
+                    <span class="text-[11px] font-bold text-[#5B5550]">${isVi ? 'Đơn vị đo lường:' : 'Measurement unit:'}</span>
                     <div class="flex flex-wrap gap-1.5 items-center">
-                        ${['minutes', 'steps', 'times', 'hours', 'glasses', 'pages'].map(u => `
-                            <button type="button" onclick="window.TempoSelfCheckWorkspace.setAdjustQuantityUnit('${u}')"
-                                    class="px-2.5 py-0.5 rounded-lg text-xs font-semibold transition ${draft.quantityUnit === u ? 'bg-[#859B8B] text-white shadow-2xs' : 'bg-white text-stone-700 border border-stone-300 hover:bg-stone-50'}">
-                                ${u}
-                            </button>
-                        `).join('')}
+                        ${(() => {
+                            const unitLabelMapVi = { 'minutes': 'phút', 'steps': 'bước', 'times': 'lần', 'hours': 'giờ', 'glasses': 'ly', 'pages': 'trang' };
+                            return ['minutes', 'steps', 'times', 'hours', 'glasses', 'pages'].map(u => `
+                                <button type="button" onclick="window.TempoSelfCheckWorkspace.setAdjustQuantityUnit('${u}')"
+                                        class="px-2.5 py-0.5 rounded-lg text-xs font-semibold transition ${draft.quantityUnit === u ? 'bg-[#859B8B] text-white shadow-2xs' : 'bg-white text-stone-700 border border-stone-300 hover:bg-stone-50'}">
+                                    ${isVi ? (unitLabelMapVi[u] || u) : u}
+                                </button>
+                            `).join('');
+                        })()}
                     </div>
                     <div class="flex items-center space-x-2 pt-1">
-                        <input type="text" id="adjust-custom-unit-input" placeholder="Custom unit (e.g. km, laps)..." 
+                        <input type="text" id="adjust-custom-unit-input" placeholder="${isVi ? 'Đơn vị tùy chỉnh (vd: km)...' : 'Custom unit (e.g. km, laps)...'}" 
                                value="${!['minutes', 'steps', 'times', 'hours', 'glasses', 'pages'].includes(draft.quantityUnit) ? draft.quantityUnit : ''}"
                                class="px-2.5 py-1 rounded-lg border border-stone-300 text-xs w-44 bg-white focus:outline-none"
                                oninput="window.TempoSelfCheckWorkspace.setAdjustQuantityUnit(this.value)">
@@ -1390,10 +1574,10 @@ window.TempoSelfCheckWorkspace = (function () {
 
         const alertTypeSelectorHTML = `
             <div class="flex items-center space-x-2 pt-1 pb-1.5">
-                <span class="text-xs font-semibold text-[#5B5550]">Alert type:</span>
+                <span class="text-xs font-semibold text-[#5B5550]">${isVi ? 'Loại cảnh báo' : 'Alert type'}:</span>
                 <select id="adjust-alert-type" onchange="if(window.TempoSelfCheckWorkspace.readCurrentAlertInputs) window.TempoSelfCheckWorkspace.readCurrentAlertInputs()" class="px-2.5 py-1 text-xs rounded-xl border border-stone-300 bg-white font-bold text-[#284132] focus:outline-none">
-                    <option value="stress_sign" ${draft.alertType === 'stress_sign' ? 'selected' : ''}>Sign of Stress</option>
-                    <option value="supportive_reminder" ${draft.alertType === 'supportive_reminder' ? 'selected' : ''}>Supportive Reminder</option>
+                    <option value="stress_sign" ${draft.alertType === 'stress_sign' ? 'selected' : ''}>${isVi ? 'Dấu hiệu căng thẳng' : 'Sign of Stress'}</option>
+                    <option value="supportive_reminder" ${draft.alertType === 'supportive_reminder' ? 'selected' : ''}>${isVi ? 'Yếu tố hỗ trợ' : 'Supportive Reminder'}</option>
                 </select>
             </div>
         `;
@@ -1404,28 +1588,28 @@ window.TempoSelfCheckWorkspace = (function () {
             alertControlsHTML = `
                 <div class="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm text-[#284132] font-medium pt-1">
                     <select id="adjust-alert-operator" class="px-2.5 py-1.5 rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>More than</option>
-                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>Less than</option>
+                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>${isVi ? 'Lớn hơn' : 'More than'}</option>
+                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>${isVi ? 'Nhỏ hơn' : 'Less than'}</option>
                     </select>
                     <input type="number" id="adjust-alert-threshold" value="${draft.alertThreshold}" min="0" max="100" 
                            class="w-12 px-1.5 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                    <span>% for</span>
+                    <span>${isVi ? '% trong' : '% for'}</span>
                     <input type="number" id="adjust-alert-days" value="${draft.alertDays}" min="1" max="30" 
                            class="w-10 px-1 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                    <span>days in a row.</span>
+                    <span>${isVi ? 'ngày liên tiếp' : 'days in a row'}</span>
                 </div>
             `;
         } else if (draft.checkMethod === 'options') {
             alertControlsHTML = `
                 <div class="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm text-[#284132] font-medium pt-1">
-                    <span>Alert me when I select</span>
+                    <span>${isVi ? 'Cảnh báo khi tôi chọn' : 'Alert me when I select'}</span>
                     <select id="adjust-alert-option-target" class="px-2.5 py-1.5 rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
                         ${draft.options.map(opt => `<option value="${escapeHTML(opt)}" ${opt === draft.alertTargetOption ? 'selected' : ''}>${escapeHTML(opt)}</option>`).join('')}
                     </select>
-                    <span>for</span>
+                    <span>${isVi ? 'trong' : 'for'}</span>
                     <input type="number" id="adjust-alert-days" value="${draft.alertDays}" min="1" max="30" 
                            class="w-10 px-1 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                    <span>days in a row.</span>
+                    <span>${isVi ? 'ngày liên tiếp' : 'days in a row'}</span>
                 </div>
             `;
         } else if (draft.checkMethod === 'scale') {
@@ -1436,16 +1620,16 @@ window.TempoSelfCheckWorkspace = (function () {
             alertControlsHTML = `
                 <div class="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm text-[#284132] font-medium pt-1">
                     <select id="adjust-alert-operator" class="px-2.5 py-1.5 rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>More than</option>
-                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>Less than</option>
+                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>${isVi ? 'Lớn hơn' : 'More than'}</option>
+                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>${isVi ? 'Nhỏ hơn' : 'Less than'}</option>
                     </select>
                     <select id="adjust-alert-threshold" class="px-2 py-1.5 rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
                         ${scaleNumbers.map(n => `<option value="${n}" ${n == draft.alertThreshold ? 'selected' : ''}>${n}</option>`).join('')}
                     </select>
-                    <span>on a scale of ${draft.scaleRange} for</span>
+                    <span>${isVi ? `trên thang đo ${draft.scaleRange} trong` : `on a scale of ${draft.scaleRange} for`}</span>
                     <input type="number" id="adjust-alert-days" value="${draft.alertDays}" min="1" max="30" 
                            class="w-10 px-1 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                    <span>days in a row.</span>
+                    <span>${isVi ? 'ngày liên tiếp' : 'days in a row'}</span>
                 </div>
             `;
         } else if (draft.checkMethod === 'quantity') {
@@ -1453,19 +1637,19 @@ window.TempoSelfCheckWorkspace = (function () {
             alertControlsHTML = `
                 <div class="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm text-[#284132] font-medium pt-1">
                     <select id="adjust-alert-operator" onchange="if(window.TempoSelfCheckWorkspace.onAlertOperatorChanged) window.TempoSelfCheckWorkspace.onAlertOperatorChanged(this.value)" class="px-2.5 py-1.5 rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>More than</option>
-                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>Less than</option>
-                        <option value="didnt_do" ${draft.alertOperator === 'didnt_do' ? 'selected' : ''}>Didn't do</option>
+                        <option value="more_than" ${draft.alertOperator === 'more_than' ? 'selected' : ''}>${isVi ? 'Lớn hơn' : 'More than'}</option>
+                        <option value="less_than" ${draft.alertOperator === 'less_than' ? 'selected' : ''}>${isVi ? 'Nhỏ hơn' : 'Less than'}</option>
+                        <option value="didnt_do" ${draft.alertOperator === 'didnt_do' ? 'selected' : ''}>${isVi ? 'Không thực hiện' : "Didn't do"}</option>
                     </select>
                     ${!isDidntDo ? `
                         <input type="number" id="adjust-alert-threshold" value="${draft.alertThreshold}" min="0" step="any" 
                                class="w-14 px-1.5 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
                         <span id="adjust-alert-unit-label">${escapeHTML(draft.quantityUnit)}</span>
                     ` : ''}
-                    <span>for</span>
+                    <span>${isVi ? 'trong' : 'for'}</span>
                     <input type="number" id="adjust-alert-days" value="${draft.alertDays}" min="1" max="30" 
                            class="w-10 px-1 py-1.5 text-center rounded-xl border border-stone-400 bg-white font-bold text-[#284132] focus:outline-none">
-                    <span>days in a row.</span>
+                    <span>${isVi ? 'ngày liên tiếp' : 'days in a row'}</span>
                 </div>
             `;
         }
@@ -1475,18 +1659,18 @@ window.TempoSelfCheckWorkspace = (function () {
             <button type="button" 
                     onclick="window.TempoSelfCheckWorkspace.closeAdjustModal()" 
                     class="absolute top-4 right-4 text-[#9E9893] hover:text-[#37352F] text-base sm:text-lg transition cursor-pointer p-1 rounded-full hover:bg-stone-200/50" 
-                    title="Close">
+                    title="${isVi ? 'Đóng' : 'Close'}">
                 ✕
             </button>
 
             <!-- 1. Heading & Editable Tracking Item Name -->
             <div class="space-y-1">
-                <span class="text-xs sm:text-sm font-bold text-[#3B5441] tracking-tight block">Your Tracking Item</span>
+                <span class="text-xs sm:text-sm font-bold text-[#3B5441] tracking-tight block">${draft.mode === 'create' ? (isVi ? 'Mục tracking của bạn' : 'Your Tracking Item') : (isVi ? 'Chỉnh sửa mục tracking' : 'Edit Tracking Item')}</span>
                 <div class="relative pt-0.5">
                     <input type="text" 
                            id="adjust-tracker-name-input" 
                            value="${escapeHTML(draft.trackerName || '')}" 
-                           placeholder="Enter tracking name" 
+                           placeholder="${isVi ? 'Nhập tên mục tracking' : 'Enter tracking name'}" 
                            maxlength="50"
                            class="w-full font-heading text-2xl sm:text-3xl font-extrabold text-[#284132] tracking-tight bg-white/70 hover:bg-white focus:bg-white rounded-2xl px-3.5 py-1.5 border ${draft.nameError ? 'border-red-400 focus:border-red-500 ring-1 ring-red-400' : 'border-stone-300/80 focus:border-[#4A6B53]'} focus:outline-none placeholder:text-stone-400 placeholder:font-normal placeholder:text-lg sm:placeholder:text-xl shadow-2xs transition"
                            oninput="if(window.TempoSelfCheckWorkspace.setDraftTrackerName) window.TempoSelfCheckWorkspace.setDraftTrackerName(this.value)" />
@@ -1496,33 +1680,33 @@ window.TempoSelfCheckWorkspace = (function () {
 
             <!-- 2. Type Section -->
             <div class="space-y-1.5 pt-2">
-                <span class="text-xs sm:text-sm font-bold text-[#5B5550] block">Type:</span>
+                <span class="text-xs sm:text-sm font-bold text-[#5B5550] block">${isVi ? 'Loại' : 'Type'}:</span>
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="button" 
-                            onclick="window.TempoSelfCheckWorkspace.setAdjustType('stress_sign', 'Sign of stress', '#C34D2E')"
+                            onclick="window.TempoSelfCheckWorkspace.setAdjustType('stress_sign', '${isVi ? 'Dấu hiệu căng thẳng' : 'Sign of stress'}', '#C34D2E')"
                             class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
                             style="${draft.typeId === 'stress_sign' ? 'background-color: #C34D2E; color: #ffffff; box-shadow: 0 0 0 2px rgba(195,77,46,0.35);' : 'background-color: rgba(195,77,46,0.78); color: #ffffff;'}">
-                        Sign of stress
+                        ${isVi ? 'Dấu hiệu căng thẳng' : 'Sign of stress'}
                     </button>
                     <button type="button" 
-                            onclick="window.TempoSelfCheckWorkspace.setAdjustType('supportive', 'Supportive', '#859B8B')"
+                            onclick="window.TempoSelfCheckWorkspace.setAdjustType('supportive', '${isVi ? 'Yếu tố hỗ trợ' : 'Supportive'}', '#859B8B')"
                             class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shadow-2xs"
                             style="${draft.typeId === 'supportive' ? 'background-color: #859B8B; color: #ffffff; box-shadow: 0 0 0 2px rgba(133,155,139,0.35);' : 'background-color: rgba(133,155,139,0.78); color: #ffffff;'}">
-                        Supportive
+                        ${isVi ? 'Yếu tố hỗ trợ' : 'Supportive'}
                     </button>
                     ${customTypesHTML}
                 </div>
                 <button type="button" 
                         onclick="window.TempoSelfCheckWorkspace.toggleCreateNewTypeForm()"
                         class="text-xs font-bold text-[#D48366] hover:underline transition cursor-pointer pt-0.5 block">
-                    Create new type
+                    ${isVi ? 'Tạo loại mới' : 'Create new type'}
                 </button>
                 ${newTypeFormHTML}
             </div>
 
             <!-- 3. Tracking Method Section -->
             <div class="space-y-1.5 pt-2">
-                <span class="text-xs sm:text-sm font-bold text-[#5B5550] block">Tracking method:</span>
+                <span class="text-xs sm:text-sm font-bold text-[#5B5550] block">${isVi ? 'Hình thức tracking' : 'Tracking method'}:</span>
                 <div class="grid grid-cols-4 gap-2 w-full">
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.setAdjustMethod('percentage')"
@@ -1532,17 +1716,17 @@ window.TempoSelfCheckWorkspace = (function () {
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.setAdjustMethod('options')"
                             class="py-1.5 px-1 rounded-xl text-center text-xs sm:text-sm font-bold transition cursor-pointer shadow-2xs ${draft.checkMethod === 'options' ? 'bg-[#E2EAE4] border border-[#6B8B73] text-[#284132]' : 'bg-white border border-stone-300/80 text-[#3B5441] hover:bg-stone-50'}">
-                        Options
+                        ${isVi ? 'Lựa chọn' : 'Options'}
                     </button>
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.setAdjustMethod('scale')"
                             class="py-1.5 px-1 rounded-xl text-center text-xs sm:text-sm font-bold transition cursor-pointer shadow-2xs ${draft.checkMethod === 'scale' ? 'bg-[#E2EAE4] border border-[#6B8B73] text-[#284132]' : 'bg-white border border-stone-300/80 text-[#3B5441] hover:bg-stone-50'}">
-                        Scale
+                        ${isVi ? 'Thang đo' : 'Scale'}
                     </button>
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.setAdjustMethod('quantity')"
                             class="py-1.5 px-1 rounded-xl text-center text-xs sm:text-sm font-bold transition cursor-pointer shadow-2xs ${draft.checkMethod === 'quantity' ? 'bg-[#E2EAE4] border border-[#6B8B73] text-[#284132]' : 'bg-white border border-stone-300/80 text-[#3B5441] hover:bg-stone-50'}">
-                        Quantity
+                        ${isVi ? 'Số lượng' : 'Quantity'}
                     </button>
                 </div>
                 ${methodConfigHTML}
@@ -1551,19 +1735,19 @@ window.TempoSelfCheckWorkspace = (function () {
             <!-- 4. Alert System Section -->
             <div class="space-y-1.5 pt-2.5">
                 <div class="flex items-center justify-between">
-                    <span class="text-xs sm:text-sm font-bold text-[#5B5550]">Alert system</span>
+                    <span class="text-xs sm:text-sm font-bold text-[#5B5550]">${isVi ? 'Cơ chế cảnh báo' : 'Alert system'}</span>
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs font-semibold ${draft.alertEnabled ? 'text-[#37352F]' : 'text-stone-400'}">On</span>
+                        <span class="text-xs font-semibold ${draft.alertEnabled ? 'text-[#37352F]' : 'text-stone-400'}">${isVi ? 'Bật' : 'On'}</span>
                         <button type="button" 
                                 onclick="window.TempoSelfCheckWorkspace.toggleAdjustAlertSystem()"
                                 class="w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition ${draft.alertEnabled ? 'bg-[#859B8B] justify-end' : 'bg-stone-300 justify-start'}"
-                                title="Toggle alert system">
+                                title="${isVi ? 'Bật/tắt cơ chế cảnh báo' : 'Toggle alert system'}">
                             <div class="bg-white w-4 h-4 rounded-full shadow-md"></div>
                         </button>
-                        <span class="text-xs font-semibold ${!draft.alertEnabled ? 'text-[#37352F]' : 'text-stone-400'}">Off</span>
+                        <span class="text-xs font-semibold ${!draft.alertEnabled ? 'text-[#37352F]' : 'text-stone-400'}">${isVi ? 'Tắt' : 'Off'}</span>
                     </div>
                 </div>
-                <p class="text-xs text-[#6F6B68]">Notice me if my checks are</p>
+                <p class="text-xs text-[#6F6B68]">${isVi ? 'Cảnh báo khi kết quả tracking của tôi' : 'Notice me if my checks are'}</p>
                 <div id="adjust-alert-controls-container" class="${draft.alertEnabled ? '' : 'opacity-40 pointer-events-none'} transition">
                     ${alertTypeSelectorHTML}
                     ${alertControlsHTML}
@@ -1575,13 +1759,13 @@ window.TempoSelfCheckWorkspace = (function () {
                 <button type="button" 
                         onclick="window.TempoSelfCheckWorkspace.closeAdjustModal()" 
                         class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 transition cursor-pointer">
-                    Cancel
+                    ${isVi ? 'Hủy' : 'Cancel'}
                 </button>
                 <button type="button" 
                         id="adjust-save-submit-btn"
                         onclick="window.TempoSelfCheckWorkspace.saveAdjustTracker()" 
                         class="px-5 py-2 rounded-xl text-xs font-bold bg-[#859B8B] hover:bg-[#728878] text-white transition cursor-pointer shadow-xs">
-                    ${draft.mode === 'create' ? 'Add tracking' : 'Save changes'}
+                    ${draft.mode === 'create' ? (isVi ? 'Thêm tracking' : 'Add tracking') : (isVi ? 'Lưu thay đổi' : 'Save changes')}
                 </button>
             </div>
         `;
@@ -1706,10 +1890,16 @@ window.TempoSelfCheckWorkspace = (function () {
 
         const dotColor = tracker.type_color || (tracker.category === 'stress_sign' ? '#D48366' : (tracker.category === 'supportive' ? '#166545' : '#1E40AF'));
 
-        const monthNames = [
+        const isVi = isViLocale();
+        const monthNamesEn = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ];
+        const monthNamesVi = [
+            'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+            'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+        ];
+        const monthNames = isVi ? monthNamesVi : monthNamesEn;
         const monthName = monthNames[month];
 
         // Available years (2024 up to current year)
@@ -1826,17 +2016,17 @@ window.TempoSelfCheckWorkspace = (function () {
             <button type="button" 
                     onclick="window.TempoSelfCheckWorkspace.closeFullCheckPlaceholder()" 
                     class="absolute top-4 right-4 text-[#9E9893] hover:text-[#37352F] text-base sm:text-lg transition cursor-pointer p-1 rounded-full hover:bg-stone-200/50" 
-                    title="Close">
+                    title="${window.t ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close') : (isVi ? 'Đóng' : 'Close')}">
                 ✕
             </button>
 
             <!-- 1. Small Heading -->
-            <span class="text-xs sm:text-sm font-bold text-[#3B5441] tracking-tight block">Your full check</span>
+            <span class="text-xs sm:text-sm font-bold text-[#3B5441] tracking-tight block">${window.t ? window.t('selfCheckWorkspace.yourFullCheck', {}, isVi ? 'Full-check' : 'Your full check') : (isVi ? 'Full-check' : 'Your full check')}</span>
 
             <!-- 2. Tracking Header: Dot + Name -->
             <div class="flex items-center space-x-2.5 sm:space-x-3 pt-1">
                 <span class="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full inline-block shrink-0 shadow-2xs" style="background-color: ${dotColor};"></span>
-                <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#284132] tracking-tight truncate">${escapeHTML(tracker.name)}</h2>
+                <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#284132] tracking-tight truncate">${escapeHTML(formatTrackerDisplayName(tracker.name))}</h2>
             </div>
 
             <!-- 3. Current Month & Year Selector -->
@@ -1847,7 +2037,7 @@ window.TempoSelfCheckWorkspace = (function () {
                             id="fullcheck-prev-month-btn"
                             onclick="window.TempoSelfCheckWorkspace.prevMonthFullCheck()"
                             class="w-6 h-6 rounded-lg bg-stone-100 hover:bg-stone-200 text-[#5B5550] flex items-center justify-center transition cursor-pointer text-xs font-bold shadow-2xs" 
-                            title="Previous month">
+                            title="${isVi ? 'Tháng trước' : 'Previous month'}">
                         ‹
                     </button>
 
@@ -1876,7 +2066,7 @@ window.TempoSelfCheckWorkspace = (function () {
                     <button type="button" 
                             id="fullcheck-next-month-btn"
                             onclick="window.TempoSelfCheckWorkspace.nextMonthFullCheck()"
-                            ${isCurrentMonth ? 'disabled title="Cannot navigate into future months"' : 'title="Next month"'}
+                            ${isCurrentMonth ? `disabled title="${isVi ? 'Không thể xem các tháng trong tương lai' : 'Cannot navigate into future months'}"` : `title="${isVi ? 'Tháng sau' : 'Next month'}"`}
                             class="w-6 h-6 rounded-lg flex items-center justify-center transition text-xs font-bold shadow-2xs ${isCurrentMonth ? 'bg-stone-100/50 text-stone-300 cursor-not-allowed' : 'bg-stone-100 hover:bg-stone-200 text-[#5B5550] cursor-pointer'}">
                         ›
                     </button>
@@ -1888,7 +2078,7 @@ window.TempoSelfCheckWorkspace = (function () {
                             id="fullcheck-return-current-btn"
                             onclick="window.TempoSelfCheckWorkspace.jumpToCurrentMonthFullCheck()"
                             class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA] hover:bg-[#DDF0E5] transition cursor-pointer shadow-2xs">
-                        Current month
+                        ${window.t ? window.t('selfCheckWorkspace.currentMonthPill', {}, isVi ? 'Tháng hiện tại' : 'Current month') : (isVi ? 'Tháng hiện tại' : 'Current month')}
                     </button>
                 ` : ''}
             </div>
@@ -1897,13 +2087,13 @@ window.TempoSelfCheckWorkspace = (function () {
             <div class="pt-2 sm:pt-2.5">
                 <!-- Weekday Columns -->
                 <div class="grid grid-cols-7 gap-1 text-center pt-2 pb-1.5 w-full">
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Mon</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Tue</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Wed</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Thus</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Fri</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Sat</span>
-                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">Sun</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckMon', {}, isVi ? 'T2' : 'Mon') : (isVi ? 'T2' : 'Mon')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckTue', {}, isVi ? 'T3' : 'Tue') : (isVi ? 'T3' : 'Tue')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckWed', {}, isVi ? 'T4' : 'Wed') : (isVi ? 'T4' : 'Wed')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckThu', {}, isVi ? 'T5' : 'Thurs') : (isVi ? 'T5' : 'Thurs')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckFri', {}, isVi ? 'T6' : 'Fri') : (isVi ? 'T6' : 'Fri')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckSat', {}, isVi ? 'T7' : 'Sat') : (isVi ? 'T7' : 'Sat')}</span>
+                    <span class="text-xs font-bold text-[#6F6B68] select-none text-center">${window.t ? window.t('selfCheckWorkspace.fullCheckSun', {}, isVi ? 'CN' : 'Sun') : (isVi ? 'CN' : 'Sun')}</span>
                 </div>
 
                 <!-- Calendar Days Grid -->
@@ -1917,7 +2107,7 @@ window.TempoSelfCheckWorkspace = (function () {
                 <button type="button" 
                         onclick="window.TempoSelfCheckWorkspace.onMonthlyOverviewClick('${tracker.id}')"
                         class="px-8 sm:px-10 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#859B8B] hover:bg-[#748A7A] text-white transition shadow-2xs cursor-pointer tracking-normal">
-                    Monthly Overview
+                    ${window.t ? window.t('selfCheckWorkspace.monthlyOverview', {}, isVi ? 'Tổng quan tháng' : 'Monthly Overview') : (isVi ? 'Tổng quan tháng' : 'Monthly Overview')}
                 </button>
             </div>
         `;
@@ -2037,10 +2227,16 @@ window.TempoSelfCheckWorkspace = (function () {
         const now = new Date();
         const isCurrentMonthAndYear = (year === now.getFullYear() && month === now.getMonth());
 
-        const monthNames = [
+        const isVi = isViLocale();
+        const monthNamesEn = [
             'January', 'February', 'March', 'April', 'May', 'June',
             'July', 'August', 'September', 'October', 'November', 'December'
         ];
+        const monthNamesVi = [
+            'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+            'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+        ];
+        const monthNames = isVi ? monthNamesVi : monthNamesEn;
         const monthName = monthNames[month];
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -2164,14 +2360,14 @@ window.TempoSelfCheckWorkspace = (function () {
                 <button type="button" 
                         onclick="window.TempoSelfCheckWorkspace.closeMonthlyOverview()" 
                         class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-bold text-[#4A6B5D] hover:text-[#166545] transition cursor-pointer"
-                        title="Back to Calendar">
+                        title="${window.t ? window.t('selfCheckWorkspace.backToCalendar', {}, isVi ? 'Quay lại lịch' : 'Back to calendar') : (isVi ? 'Quay lại lịch' : 'Back to calendar')}">
                     <span class="text-base leading-none">←</span>
-                    <span>Back to calendar</span>
+                    <span>${window.t ? window.t('selfCheckWorkspace.backToCalendar', {}, isVi ? 'Quay lại lịch' : 'Back to calendar') : (isVi ? 'Quay lại lịch' : 'Back to calendar')}</span>
                 </button>
                 <button type="button" 
                         onclick="window.TempoSelfCheckWorkspace.closeMonthlyOverview(true)" 
                         class="text-[#9E9893] hover:text-[#37352F] text-base sm:text-lg transition cursor-pointer p-1 rounded-full hover:bg-stone-200/50" 
-                        title="Close">
+                        title="${window.t ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close') : (isVi ? 'Đóng' : 'Close')}">
                     ✕
                 </button>
             </div>
@@ -2179,10 +2375,10 @@ window.TempoSelfCheckWorkspace = (function () {
             <!-- Tracker Header & Month Navigator -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3">
                 <div>
-                    <span class="text-xs font-bold text-[#3B5441] tracking-tight block">Monthly Overview</span>
+                    <span class="text-xs font-bold text-[#3B5441] tracking-tight block">${window.t ? window.t('selfCheckWorkspace.monthlyOverview', {}, isVi ? 'Tổng quan tháng' : 'Monthly Overview') : (isVi ? 'Tổng quan tháng' : 'Monthly Overview')}</span>
                     <div class="flex items-center space-x-2.5 pt-0.5">
                         <span class="w-3.5 h-3.5 rounded-full inline-block shrink-0 shadow-2xs" style="background-color: ${dotColor};"></span>
-                        <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#284132] tracking-tight">${escapeHTML(tracker.name)}</h2>
+                        <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#284132] tracking-tight">${escapeHTML(formatTrackerDisplayName(tracker.name))}</h2>
                         <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#E2EAE4] text-[#284132] border border-[#6B8B73]/40">${methodBadge}</span>
                     </div>
                 </div>
@@ -2192,21 +2388,21 @@ window.TempoSelfCheckWorkspace = (function () {
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.prevMonthOverview()"
                             class="w-8 h-8 rounded-xl bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold flex items-center justify-center transition cursor-pointer shadow-2xs"
-                            title="Previous month">
+                            title="${isVi ? 'Tháng trước' : 'Previous month'}">
                         ‹
                     </button>
                     <span class="text-xs sm:text-sm font-extrabold text-[#C87D55] px-2 min-w-[110px] sm:min-w-[130px] text-center select-none">${monthName} ${year}</span>
                     <button type="button" 
                             onclick="window.TempoSelfCheckWorkspace.nextMonthOverview()"
                             class="w-8 h-8 rounded-xl bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold flex items-center justify-center transition cursor-pointer shadow-2xs ${isCurrentMonthAndYear ? 'opacity-35 pointer-events-none' : ''}"
-                            title="Next month">
+                            title="${isVi ? 'Tháng sau' : 'Next month'}">
                         ›
                     </button>
                     ${!isCurrentMonthAndYear ? `
                         <button type="button" 
                                 onclick="window.TempoSelfCheckWorkspace.jumpToCurrentMonthOverview()"
                                 class="px-2.5 py-1 rounded-xl bg-[#859B8B]/15 hover:bg-[#859B8B]/25 text-[#284132] text-[11px] font-bold transition cursor-pointer ml-1">
-                            Current
+                            ${window.t ? window.t('selfCheckWorkspace.currentMonthPill', {}, isVi ? 'Hiện tại' : 'Current') : (isVi ? 'Hiện tại' : 'Current')}
                         </button>
                     ` : ''}
                 </div>
@@ -2355,7 +2551,7 @@ window.TempoSelfCheckWorkspace = (function () {
             <!-- Stats Cards Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-3">
                 <div class="bg-white/80 border border-stone-200/80 rounded-2xl p-3 shadow-2xs space-y-0.5">
-                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">Monthly Avg</span>
+                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">${isVi ? 'Mức trung bình' : 'Average level'}</span>
                     <span class="text-xl sm:text-2xl font-extrabold text-[#284132] block">${avg}%</span>
                     <span class="text-[10px] text-stone-400 font-medium block">from ${count} checks</span>
                 </div>
@@ -2485,7 +2681,7 @@ window.TempoSelfCheckWorkspace = (function () {
             <div class="bg-white rounded-2xl border border-stone-200/80 p-4 sm:p-5 shadow-2xs mt-3.5 space-y-4">
                 <div>
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-bold text-[#284132]">Selection Distribution</span>
+                        <span class="text-xs font-bold text-[#284132]">${isVi ? 'Tỷ lệ lựa chọn' : 'Option distribution'}</span>
                         <span class="text-[10px] text-stone-400 font-medium">${total} recorded selections</span>
                     </div>
                     <div class="w-full h-3.5 rounded-full overflow-hidden flex bg-stone-100">
@@ -2523,7 +2719,7 @@ window.TempoSelfCheckWorkspace = (function () {
             <!-- Stats Cards Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-3">
                 <div class="bg-white/80 border border-stone-200/80 rounded-2xl p-3 shadow-2xs space-y-0.5">
-                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">Avg Score</span>
+                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">${isVi ? 'Điểm trung bình' : 'Average score'}</span>
                     <span class="text-xl sm:text-2xl font-extrabold text-[#284132] block">${avg} <span class="text-xs text-stone-500 font-medium">/ ${scaleMax}</span></span>
                     <span class="text-[10px] text-stone-400 font-medium block">from ${count} checks</span>
                 </div>
@@ -2585,7 +2781,7 @@ window.TempoSelfCheckWorkspace = (function () {
             <!-- Stats Cards Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-3">
                 <div class="bg-white/80 border border-stone-200/80 rounded-2xl p-3 shadow-2xs space-y-0.5">
-                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">Total Logged</span>
+                    <span class="text-[10px] sm:text-[11px] font-bold text-stone-500 uppercase tracking-wide block">${isVi ? 'Tổng lượng ghi nhận' : 'Total recorded'}</span>
                     <span class="text-xl sm:text-2xl font-extrabold text-[#284132] block truncate">${displayTotal} <span class="text-xs text-stone-500 font-medium">${escapeHTML(unit)}</span></span>
                     <span class="text-[10px] text-stone-400 font-medium block">in ${monthName}</span>
                 </div>
@@ -2621,6 +2817,15 @@ window.TempoSelfCheckWorkspace = (function () {
     function render() {
         const root = document.getElementById('self-check-workspace-root');
         if (!root) return;
+
+        const fcModalBefore = document.getElementById('modal-selfcheck-fullcheck');
+        const wasFullCheckOpen = !!(fcModalBefore && !fcModalBefore.classList.contains('hidden') && fullCheckTrackerId);
+        const moModalBefore = document.getElementById('modal-selfcheck-monthly-overview');
+        const wasOverviewOpen = !!(moModalBefore && !moModalBefore.classList.contains('hidden') && monthlyOverviewTrackerId);
+
+        ensureAdjustModalMounted();
+
+        const isVi = isViLocale();
 
         // Ensure soft sage-green background matching reference screenshot
         document.body.style.backgroundColor = '#E6EDE7';
@@ -2681,13 +2886,13 @@ window.TempoSelfCheckWorkspace = (function () {
         if (activeTrackers.length === 0) {
             rightColumnItemsHTML = `
                 <div class="p-8 sm:p-10 text-center rounded-3xl border-2 border-dashed border-[#8E9F92]/40 bg-white/40 space-y-3 my-2" data-tempo-ui="selfcheck-empty-state">
-                    <h3 class="font-heading text-lg font-bold text-[#1B4332]">No tracking items yet</h3>
-                    <p class="text-xs sm:text-sm text-[#5B5550] max-w-sm mx-auto leading-relaxed">Add a tracking item to start recording your daily check-ins.</p>
+                    <h3 class="font-heading text-lg font-bold text-[#1B4332]">${isVi ? 'Chưa có mục theo dõi nào' : 'No tracking items yet'}</h3>
+                    <p class="text-xs sm:text-sm text-[#5B5550] max-w-sm mx-auto leading-relaxed">${isVi ? 'Thêm mục theo dõi để bắt đầu ghi nhận check-in hằng ngày.' : 'Add a tracking item to start recording your daily check-ins.'}</p>
                     <div class="pt-2">
                         <button type="button" 
                                 onclick="window.TempoSelfCheckWorkspace.openAddTracking()"
                                 class="px-4 py-2 rounded-xl text-xs font-bold bg-[#7B9688] hover:bg-[#6D8475] text-white transition cursor-pointer shadow-2xs inline-flex items-center space-x-1.5">
-                            <span>+ Add Tracking</span>
+                            <span>+ ${window.t ? window.t('selfCheckWorkspace.addTracking', {}, isVi ? 'Thêm mục tracking' : 'Add Tracking') : (isVi ? 'Thêm mục tracking' : 'Add Tracking')}</span>
                         </button>
                     </div>
                 </div>
@@ -2718,13 +2923,13 @@ window.TempoSelfCheckWorkspace = (function () {
                         <div class="flex items-center justify-between w-full">
                             <div class="flex items-center space-x-2.5 min-w-0">
                                 <span class="w-2.5 h-2.5 rounded-full shrink-0 inline-block" style="background-color: ${dotColor};"></span>
-                                <h3 class="font-bold text-base sm:text-lg text-[#37352F] tracking-tight truncate">${escapeHTML(t.name)}</h3>
-                                ${alertStatus.triggered ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#C34D2E] border border-[#FFD2BA] whitespace-nowrap">Alert</span>` : ''}
+                                <h3 class="font-bold text-base sm:text-lg text-[#37352F] tracking-tight truncate">${escapeHTML(formatTrackerDisplayName(t.name))}</h3>
+                                ${alertStatus.triggered ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FFE9DC] text-[#C34D2E] border border-[#FFD2BA] whitespace-nowrap">${isVi ? 'Cảnh báo' : 'Alert'}</span>` : ''}
                             </div>
                             <button type="button" 
                                     onclick="window.TempoSelfCheckWorkspace.openAdjustTracker('${t.id}')"
                                     class="px-3.5 py-1 rounded-xl text-xs font-bold bg-[#8E9F92] hover:bg-[#7D8F81] text-white transition cursor-pointer shadow-2xs shrink-0">
-                                Adjust
+                                ${isVi ? 'Chỉnh sửa' : 'Adjust'}
                             </button>
                         </div>
 
@@ -2736,9 +2941,9 @@ window.TempoSelfCheckWorkspace = (function () {
                         <!-- Summary Section: Average Row + Right-Aligned View Full Check Row -->
                         <div class="pt-2 text-xs sm:text-sm text-[#5B5550] space-y-2">
                             <!-- Row 1: Average Label on Left, Average Value on Right -->
-                            <div class="flex items-center justify-between text-xs sm:text-sm text-[#5B5550]">
+                            <div class="flex items-start justify-between gap-2 text-xs sm:text-sm text-[#5B5550]">
                                 <span class="font-medium text-[#5B5550] leading-snug">${summary.metricLabel}</span>
-                                <span class="font-bold text-xs sm:text-sm text-[#37352F] text-right whitespace-nowrap">${summary.metricValue}</span>
+                                <span class="font-bold text-xs sm:text-sm text-[#37352F] text-right">${escapeHTML(summary.metricValue)}</span>
                             </div>
 
                             <!-- Row 2: View my full check Button Aligned to Right Edge -->
@@ -2746,7 +2951,7 @@ window.TempoSelfCheckWorkspace = (function () {
                                 <button type="button" 
                                         onclick="window.TempoSelfCheckWorkspace.openFullCheckPlaceholder('${t.id}')"
                                         class="px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold bg-white/90 hover:bg-white border border-[#99A99D] text-[#202124] transition shadow-2xs cursor-pointer whitespace-nowrap">
-                                    View my full check
+                                    ${isVi ? 'Xem full-check' : 'View my full check'}
                                 </button>
                             </div>
                         </div>
@@ -2831,6 +3036,20 @@ window.TempoSelfCheckWorkspace = (function () {
             }).join('');
         }
 
+        // Determine return destination label based on originating source context
+        const originMode = (window.TempoMode && typeof window.TempoMode.getOriginatingMode === 'function') 
+            ? window.TempoMode.getOriginatingMode() 
+            : ((window.TempoMode && typeof window.TempoMode.getSourceContext === 'function') ? window.TempoMode.getSourceContext() : null);
+        let returnLabel = isVi ? 'Quay lại trang chủ' : 'Return Home';
+        if (originMode === 'emergency') {
+            returnLabel = isVi ? (window.t ? window.t('selfCheckWorkspace.returnUrgent', {}, 'Quay lại Chế độ khẩn cấp') : 'Quay lại Chế độ khẩn cấp') : 'Return to Urgent Mode';
+        } else if (originMode === 'recovery') {
+            returnLabel = isVi ? (window.t ? window.t('selfCheckWorkspace.returnRecovery', {}, 'Quay lại Dashboard') : 'Quay lại Dashboard') : 'Return to Recovery Mode';
+        } else if (originMode === 'unclear') {
+            returnLabel = isVi ? (window.t ? window.t('selfCheckWorkspace.returnUnclear', {}, 'Quay lại Chế độ mơ hồ') : 'Quay lại Chế độ mơ hồ') : 'Return to Unclear Mode';
+        }
+        const returnTitle = isVi ? (originMode === 'emergency' ? '← Quay lại Chế độ khẩn cấp' : (returnLabel.startsWith('←') ? returnLabel : `← ${returnLabel}`)) : returnLabel;
+
         // Master Layout HTML matching reference screenshot
         root.innerHTML = `
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-6">
@@ -2843,16 +3062,16 @@ window.TempoSelfCheckWorkspace = (function () {
                                 data-tempo-action="return-home"
                                 onclick="window.TempoSelfCheckWorkspace.returnHome()" 
                                 class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-[#4A6B5D] hover:text-[#166545] transition cursor-pointer" 
-                                title="Return Home">
+                                title="${returnTitle}">
                             <span class="text-base leading-none">←</span>
-                            <span>Return Home</span>
+                            <span id="selfcheck-return-home-text">${returnLabel}</span>
                         </button>
                     </div>
 
                     <!-- Centered Title -->
                     <div class="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none">
                         <h1 class="font-heading text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#234E3B] tracking-tight">
-                            Tempo Self-check
+                            ${window.t ? window.t('selfCheckWorkspace.title', {}, 'Tempo Self-check') : 'Tempo Self-check'}
                         </h1>
                     </div>
 
@@ -2864,21 +3083,21 @@ window.TempoSelfCheckWorkspace = (function () {
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
                     <!-- LEFT COLUMN (col-span-5): Summary Card + Action Buttons -->
                     <div class="lg:col-span-5 space-y-4 lg:sticky lg:top-20">
-                        <!-- Card: Today's self-check -->
+                        <!-- Card: Điểm danh hôm nay -->
                         <div class="bg-[#FEFAF4] rounded-3xl p-6 sm:p-7 shadow-xs border border-white/80 space-y-4">
                             <!-- Category, Title, Streak -->
                             <div class="space-y-1">
-                                <span class="text-xs sm:text-sm font-extrabold text-[#4A6B5D] uppercase tracking-wide block">Your daily check-in</span>
-                                <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#37352F] tracking-tight leading-snug">Today’s self-check</h2>
-                                <p class="text-xs italic text-[#787570] font-medium">${streak}-day streak</p>
+                                <span class="text-xs sm:text-sm font-extrabold text-[#4A6B5D] uppercase tracking-wide block">${isVi ? 'CHECK-IN HẰNG NGÀY' : 'YOUR DAILY CHECK-IN'}</span>
+                                <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#37352F] tracking-tight leading-snug">${isVi ? 'Check-in hôm nay' : "Today's Check-in"}</h2>
+                                <p class="text-xs italic text-[#787570] font-medium">${isVi ? `Chuỗi ${streak} ngày` : `${streak}-day streak`}</p>
                             </div>
 
                             <!-- Interactive Trackers -->
                             <div class="space-y-3.5 pt-1">
                                 ${activeTrackers.length === 0 ? `
                                     <div class="py-5 text-center space-y-1.5 text-stone-500">
-                                        <p class="text-xs font-semibold text-[#5B5550]">No tracking items yet</p>
-                                        <p class="text-[11px] text-[#787570]">Add a tracking item to start recording your daily check-ins.</p>
+                                        <p class="text-xs font-semibold text-[#5B5550]">${isVi ? 'Chưa có mục theo dõi nào' : 'No tracking items yet'}</p>
+                                        <p class="text-[11px] text-[#787570]">${isVi ? 'Thêm mục theo dõi để bắt đầu ghi nhận check-in hằng ngày.' : 'Add a tracking item to start recording your daily check-ins.'}</p>
                                     </div>
                                 ` : `
                                     <!-- Tension -->
@@ -2886,7 +3105,7 @@ window.TempoSelfCheckWorkspace = (function () {
                                         <div class="space-y-1.5">
                                             <div class="flex items-center space-x-2 text-sm font-bold text-[#37352F]">
                                                 <span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color: ${tensionTrk.type_color || '#D48366'};"></span>
-                                                <span>${escapeHTML(tensionTrk.name || 'Tension')}</span>
+                                                <span>${escapeHTML(formatTrackerDisplayName(tensionTrk.name || 'Tension'))}</span>
                                             </div>
                                             <div class="space-y-1">
                                                 <input type="range" min="0" max="100" value="${hasTensionAnswered ? tensionVal : 0}"
@@ -2905,19 +3124,19 @@ window.TempoSelfCheckWorkspace = (function () {
                                         <div class="space-y-1.5">
                                             <div class="flex items-center space-x-2 text-sm font-bold text-[#37352F]">
                                                 <span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color: ${sleepTrk.type_color || '#166545'};"></span>
-                                                <span>${escapeHTML(sleepTrk.name || 'Sleep')}</span>
+                                                <span>${escapeHTML(formatTrackerDisplayName(sleepTrk.name || 'Sleep'))}</span>
                                             </div>
-                                            <p class="text-xs text-[#5B5550]">How was your sleep last night?</p>
+                                            <p class="text-xs text-[#5B5550]">${isVi ? 'Bạn ngủ thế nào vào tối qua?' : 'How was your sleep last night?'}</p>
                                             <div class="flex items-center space-x-3 pt-0.5">
                                                 <button type="button" 
                                                         onclick="window.TempoSelfCheckWorkspace.setSleepValue('good')"
-                                                        class="px-5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${sleepVal === 'good' ? 'bg-[#EDF7F1] border-[#166545] text-[#166545] font-bold shadow-2xs' : 'bg-white border-stone-200 text-[#5B5550] hover:bg-stone-50'}">
-                                                    Good
+                                                        class="px-5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${(sleepVal === 'good' || sleepVal === 'tốt' || sleepVal === 'yes') ? 'bg-[#EDF7F1] border-[#166545] text-[#166545] font-bold shadow-2xs' : 'bg-white border-stone-200 text-[#5B5550] hover:bg-stone-50'}">
+                                                    ${isVi ? 'Tốt' : 'Good'}
                                                 </button>
                                                 <button type="button" 
                                                         onclick="window.TempoSelfCheckWorkspace.setSleepValue('not_good')"
-                                                        class="px-5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${sleepVal === 'not_good' ? 'bg-[#FCEEE8] border-[#D48366] text-[#B83D08] font-bold shadow-2xs' : 'bg-white border-stone-200 text-[#5B5550] hover:bg-stone-50'}">
-                                                    Not good
+                                                        class="px-5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${(sleepVal === 'not_good' || sleepVal === 'not good' || sleepVal === 'chưa tốt' || sleepVal === 'no') ? 'bg-[#FCEEE8] border-[#D48366] text-[#B83D08] font-bold shadow-2xs' : 'bg-white border-stone-200 text-[#5B5550] hover:bg-stone-50'}">
+                                                    ${isVi ? 'Chưa tốt' : 'Not good'}
                                                 </button>
                                             </div>
                                         </div>
@@ -2935,17 +3154,17 @@ window.TempoSelfCheckWorkspace = (function () {
                                     <button type="button" 
                                             onclick="window.TempoSelfCheckWorkspace.toggleNoteInput()"
                                             class="text-xs font-semibold text-[#D05A3F] hover:underline transition cursor-pointer flex items-center space-x-1">
-                                        <span>Create a note for today</span>
+                                        <span>${isVi ? 'Tạo ghi chú hôm nay' : 'Create a note for today'}</span>
                                     </button>
                                     <div id="selfcheck-today-note-box" class="${showNoteInput ? '' : 'hidden'} pt-2 space-y-2">
                                         <textarea id="selfcheck-today-note-textarea" 
                                                   rows="2" 
-                                                  placeholder="How are you feeling today?" 
+                                                  placeholder="${isVi ? 'Hôm nay bạn cảm thấy thế nào?' : 'How are you feeling today?'}" 
                                                   class="w-full p-2.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:border-[#4A6B5D] bg-white resize-none">${escapeHTML(todayNote)}</textarea>
                                         <div class="flex justify-end space-x-2">
                                             <button type="button" onclick="window.TempoSelfCheckWorkspace.saveTodayNote()" 
                                                     class="px-3 py-1 rounded-lg text-xs font-bold bg-[#7B9688] text-white hover:bg-[#6D8475] transition cursor-pointer">
-                                                Save note
+                                                ${isVi ? 'Lưu ghi chú' : 'Save note'}
                                             </button>
                                         </div>
                                     </div>
@@ -2953,7 +3172,7 @@ window.TempoSelfCheckWorkspace = (function () {
 
                                 <!-- Status line -->
                                 <p class="text-xs text-[#5B5550] pt-1">
-                                    You checked in on ${answeredTodayCount} of ${activeTrackers.length} things.
+                                    ${isVi ? `Bạn đã check-in ${answeredTodayCount}/${activeTrackers.length} mục hôm nay.` : `You checked in on ${answeredTodayCount} of ${activeTrackers.length} things.`}
                                 </p>
                             </div>
                         </div>
@@ -2964,7 +3183,7 @@ window.TempoSelfCheckWorkspace = (function () {
                             <button type="button" 
                                     onclick="window.TempoSelfCheckWorkspace.openWeeklyReport()"
                                     class="p-4 sm:p-5 rounded-2xl bg-[#E8EFF3] hover:bg-[#DEE7EC] border border-[#D0DDE5] text-left transition cursor-pointer shadow-2xs flex flex-col justify-center space-y-1">
-                                <span class="text-sm sm:text-base font-extrabold text-[#202124] block leading-tight">My weekly report</span>
+                                <span class="text-sm sm:text-base font-extrabold text-[#202124] block leading-tight">${isVi ? 'Báo cáo tuần của tôi' : 'My weekly report'}</span>
                                 <span class="text-[11px] sm:text-xs text-[#6F6B68] font-medium block">${weekDateRangeStr}</span>
                             </button>
 
@@ -2972,28 +3191,28 @@ window.TempoSelfCheckWorkspace = (function () {
                             <button type="button" 
                                     onclick="window.TempoSelfCheckWorkspace.openRecoveryNotice()"
                                     class="p-4 sm:p-5 rounded-2xl bg-[#7E9685] hover:bg-[#728A79] text-white text-center transition cursor-pointer shadow-xs flex items-center justify-center">
-                                <span class="text-sm sm:text-base font-extrabold block leading-tight">My Recovery notice</span>
+                                <span class="text-sm sm:text-base font-extrabold block leading-tight">${isVi ? 'Lời nhắn phục hồi' : 'My Recovery notice'}</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- RIGHT COLUMN (col-span-7): Your Tracking System (Independently Scrollable) -->
+                    <!-- RIGHT COLUMN (col-span-7): Hệ thống tracking của bạn (Independently Scrollable) -->
                     <div class="lg:col-span-7 flex flex-col space-y-4">
                         <!-- Header: Title + Add Tracking + Clear all -->
                         <div class="flex items-center justify-between gap-3 pb-1">
                             <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#1B4332]">
-                                Your Tracking System
+                                ${window.t ? window.t('selfCheckWorkspace.yourTrackingSystem', {}, isVi ? 'Các mục tracking của bạn' : 'Your Tracking System') : (isVi ? 'Các mục tracking của bạn' : 'Your Tracking System')}
                             </h2>
                             <div class="flex items-center space-x-2">
                                 <button type="button" 
                                         onclick="window.TempoSelfCheckWorkspace.openAddTracking()"
                                         class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#7B9688] hover:bg-[#6D8475] text-white transition cursor-pointer shadow-2xs">
-                                    Add Tracking
+                                    ${window.t ? window.t('selfCheckWorkspace.addTracking', {}, isVi ? 'Thêm mục tracking' : 'Add Tracking') : (isVi ? 'Thêm mục tracking' : 'Add Tracking')}
                                 </button>
                                 <button type="button" 
                                         onclick="window.TempoSelfCheckWorkspace.promptClearAll()"
                                         class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#C8322B] hover:bg-[#B32B25] text-white transition cursor-pointer shadow-2xs">
-                                    Clear all
+                                    ${window.t ? window.t('selfCheckWorkspace.clearAll', {}, isVi ? 'Xóa tất cả' : 'Clear all') : (isVi ? 'Xóa tất cả' : 'Clear all')}
                                 </button>
                             </div>
                         </div>
@@ -3018,19 +3237,6 @@ window.TempoSelfCheckWorkspace = (function () {
                 </div>
             </div>
 
-            <!-- MODAL: Adjust Tracking Configuration (matches reference UI) -->
-            <div id="modal-selfcheck-adjust" 
-                 class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" 
-                 role="dialog" 
-                 aria-modal="true"
-                 onclick="if (event.target === this) window.TempoSelfCheckWorkspace.closeAdjustModal()">
-                <div id="selfcheck-adjust-modal-card" 
-                     class="max-w-[390px] sm:max-w-[420px] w-full p-6 sm:p-7 bg-[#FEFAF4] rounded-3xl shadow-2xl relative border border-[#EAE4DF]/80 max-h-[92vh] overflow-y-auto"
-                     style="background-color: #FEFAF4;">
-                    <!-- Rendered dynamically by renderAdjustModal -->
-                </div>
-            </div>
-
             <!-- MODAL: Monthly Overview Analytics (matches reference UI) -->
             <div id="modal-selfcheck-monthly-overview" 
                  class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" 
@@ -3048,19 +3254,19 @@ window.TempoSelfCheckWorkspace = (function () {
             <div id="modal-selfcheck-clear-confirm" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" role="dialog" aria-modal="true">
                 <div class="tempo-card max-w-md w-full p-6 space-y-5 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF]">
                     <div class="space-y-2">
-                        <h3 class="font-heading text-lg font-bold text-[#202124]">Clear all tracking items?</h3>
+                        <h3 class="font-heading text-lg font-bold text-[#202124]">${isVi ? 'Xóa tất cả mục theo dõi?' : 'Clear all tracking items?'}</h3>
                         <p class="text-xs text-[#6F6B68] leading-relaxed">
-                            This will remove active items from your tracking system. Your past check-in history will be preserved safely.
+                            ${isVi ? 'Hành động này sẽ xóa các mục đang hoạt động khỏi hệ thống theo dõi của bạn. Lịch sử check-in trước đây vẫn được lưu an toàn.' : 'This will remove active items from your tracking system. Your past check-in history will be preserved safely.'}
                         </p>
                     </div>
                     <div class="flex items-center justify-end space-x-3 pt-2">
                         <button type="button" onclick="window.TempoSelfCheckWorkspace.closeClearConfirm()" 
                                 class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 transition cursor-pointer">
-                            Cancel
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button type="button" onclick="window.TempoSelfCheckWorkspace.executeClearAll()" 
                                 class="px-4 py-2 rounded-xl text-xs font-bold bg-[#C8322B] hover:bg-[#B32B25] text-white transition cursor-pointer shadow-xs">
-                            Clear all
+                            ${isVi ? 'Xóa tất cả' : 'Clear all'}
                         </button>
                     </div>
                 </div>
@@ -3070,26 +3276,78 @@ window.TempoSelfCheckWorkspace = (function () {
             <div id="modal-selfcheck-weekly-report" class="fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4 hidden" role="dialog" aria-modal="true">
                 <div class="tempo-card max-w-xl w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF] max-h-[90vh] overflow-y-auto">
                     <button type="button" onclick="window.TempoSelfCheckWorkspace.closeWeeklyReport()" 
-                            class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
+                            class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="${isVi ? 'Đóng' : 'Close'}">✕</button>
                     <div class="space-y-1">
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4A6B5D]">WEEKLY SUMMARY</span>
-                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">My Weekly Report</h3>
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4A6B5D]">${isVi ? 'TỔNG KẾT TUẦN' : 'WEEKLY SUMMARY'}</span>
+                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">${isVi ? 'Báo cáo tuần của tôi' : 'My weekly report'}</h3>
                         <p id="selfcheck-weekly-report-dates" class="text-xs text-[#6F6B68] font-medium"></p>
                     </div>
                     <div id="selfcheck-weekly-report-content" class="space-y-4"></div>
                     <div class="flex justify-between items-center pt-3 border-t border-stone-100">
                         <button type="button" onclick="if (window.TempoWeeklyReview && typeof window.TempoWeeklyReview.open === 'function') { window.TempoSelfCheckWorkspace.closeWeeklyReport(); window.TempoWeeklyReview.open(); }" 
                                 class="text-xs font-bold text-[#166545] hover:underline transition cursor-pointer">
-                            Open full weekly reflection →
+                            ${isVi ? 'Mở đánh giá tuần đầy đủ →' : 'Open full weekly reflection →'}
                         </button>
                         <button type="button" onclick="window.TempoSelfCheckWorkspace.closeWeeklyReport()" 
                                 class="px-5 py-2 rounded-xl text-xs font-bold bg-[#7B9688] hover:bg-[#6D8475] text-white transition cursor-pointer shadow-xs">
-                            Close
+                            ${isVi ? 'Đóng' : 'Close'}
                         </button>
                     </div>
                 </div>
             </div>
         `;
+
+        if (wasFullCheckOpen && fullCheckTrackerId) {
+            const fcModal = document.getElementById('modal-selfcheck-fullcheck');
+            if (fcModal) fcModal.classList.remove('hidden');
+            renderFullCheckModal(fullCheckTrackerId, fullCheckYear, fullCheckMonth);
+        }
+        if (wasOverviewOpen && monthlyOverviewTrackerId) {
+            const moModal = document.getElementById('modal-selfcheck-monthly-overview');
+            if (moModal) moModal.classList.remove('hidden');
+            renderMonthlyOverview(monthlyOverviewTrackerId);
+        }
+    }
+
+    if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+        window.TempoI18n.onLanguageChange(() => {
+            const screenEl = document.getElementById('screen-stress-check');
+            const root = document.getElementById('self-check-workspace-root');
+            if (root && screenEl && !screenEl.classList.contains('hidden')) {
+                render();
+            }
+            const fullCheckModal = document.getElementById('modal-selfcheck-fullcheck');
+            if (fullCheckModal && !fullCheckModal.classList.contains('hidden') && fullCheckTrackerId) {
+                renderFullCheckModal(fullCheckTrackerId, fullCheckYear, fullCheckMonth);
+            }
+            const overviewModal = document.getElementById('modal-selfcheck-monthly-overview');
+            if (overviewModal && !overviewModal.classList.contains('hidden') && monthlyOverviewTrackerId) {
+                renderMonthlyOverview(monthlyOverviewTrackerId);
+            }
+            const modal = document.getElementById('modal-selfcheck-adjust');
+            if (modal && !modal.classList.contains('hidden') && adjustDraftState) {
+                const activeId = document.activeElement ? document.activeElement.id : null;
+                const selStart = (activeId && document.getElementById(activeId) && typeof document.getElementById(activeId).selectionStart === 'number')
+                    ? document.getElementById(activeId).selectionStart
+                    : null;
+                const selEnd = (activeId && document.getElementById(activeId) && typeof document.getElementById(activeId).selectionEnd === 'number')
+                    ? document.getElementById(activeId).selectionEnd
+                    : null;
+
+                readCurrentDraftInputs();
+                renderAdjustModal();
+
+                if (activeId && document.getElementById(activeId)) {
+                    const el = document.getElementById(activeId);
+                    el.focus();
+                    if (selStart !== null && selEnd !== null && typeof el.setSelectionRange === 'function') {
+                        try {
+                            el.setSelectionRange(selStart, selEnd);
+                        } catch (e) {}
+                    }
+                }
+            }
+        });
     }
 
     return {
@@ -3110,6 +3368,7 @@ window.TempoSelfCheckWorkspace = (function () {
         openWeeklyReport,
         closeWeeklyReport,
         openRecoveryNotice,
+        ensureAdjustModalMounted,
         openAddTracking,
         openAdjustTracker,
         closeAdjustModal,

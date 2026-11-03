@@ -120,6 +120,11 @@ window.TempoPersonalSpace = (function() {
         if (tabId === 'account' && window.TempoAuth && typeof window.TempoAuth.getCurrentProfile === 'function') {
             syncProfile(window.TempoAuth.getCurrentProfile());
         }
+
+        // 6. Re-sync Appearance settings if viewing settings
+        if (tabId === 'settings' && window.TempoTheme && typeof window.TempoTheme.syncSettingsUI === 'function') {
+            window.TempoTheme.syncSettingsUI();
+        }
     }
 
     /**

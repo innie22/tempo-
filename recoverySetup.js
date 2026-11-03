@@ -127,6 +127,29 @@
         return 'local_user';
     }
 
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        try {
+            const stored = localStorage.getItem('tempo_language') || localStorage.getItem('tempo_lang');
+            if (stored === 'vi' || stored === 'en') return stored === 'vi';
+        } catch (e) {}
+        return false;
+    }
+
+    function t(path, params = {}, fallback = '') {
+        if (typeof params === 'string') {
+            fallback = params;
+            params = {};
+        }
+        if (typeof window.t === 'function') {
+            const res = window.t(path, params, fallback);
+            if (res) return res;
+        }
+        return fallback || '';
+    }
+
     function isIntroSeen() {
         const uid = getUserId();
         return localStorage.getItem(`tempo_recovery_intro_seen_${uid}`) === 'true';
@@ -153,6 +176,104 @@
         localStorage.removeItem(`tempo_recovery_setup_status_${uid}`);
         localStorage.removeItem(`tempo_recovery_intro_seen_${uid}`);
         localStorage.removeItem(`tempo_recovery_setup_draft_${uid}`);
+        try {
+            sessionStorage.removeItem(`tempo_rmode_session_welcomed_${uid}`);
+            sessionStorage.removeItem(`tempo_recovery_setup_open_${uid}`);
+        } catch (e) {}
+    }
+
+    /**
+     * Determines the user's tracking status based on ACTUAL saved tracking items and history.
+     * Edge case handling:
+     * - Graceful fallback on loading/database error: defaults safely to returning user so data is never wiped.
+     * - Recognizes users with tracking history even if active trackers were archived.
+     */
+    function checkUserTrackingStatus() {
+        try {
+            const uid = getUserId();
+            let activeTrackers = [];
+            let allTrackers = [];
+            let checkins = [];
+            let setups = [];
+
+            if (window.TempoRecoverySelfCheck) {
+                if (typeof window.TempoRecoverySelfCheck.getActiveTrackers === 'function') {
+                    activeTrackers = window.TempoRecoverySelfCheck.getActiveTrackers() || [];
+                }
+                if (typeof window.TempoRecoverySelfCheck.getTrackers === 'function') {
+                    allTrackers = window.TempoRecoverySelfCheck.getTrackers(true) || [];
+                }
+                if (typeof window.TempoRecoverySelfCheck.getDailyCheckins === 'function') {
+                    checkins = window.TempoRecoverySelfCheck.getDailyCheckins() || [];
+                }
+                if (typeof window.TempoRecoverySelfCheck.getSetups === 'function') {
+                    setups = window.TempoRecoverySelfCheck.getSetups() || [];
+                }
+            }
+
+            // Fallback: direct localStorage inspection for robustness
+            if (allTrackers.length === 0) {
+                try {
+                    const raw = localStorage.getItem(`tempo_selfcheck_trackers_${uid}`) || (uid === 'local_user' ? localStorage.getItem('tempo_selfcheck_trackers') : null);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            allTrackers = parsed;
+                            activeTrackers = parsed.filter(t => !t.is_archived);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            if (checkins.length === 0) {
+                try {
+                    const raw = localStorage.getItem(`tempo_selfcheck_checkins_${uid}`) || (uid === 'local_user' ? localStorage.getItem('tempo_selfcheck_checkins') : null);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            checkins = parsed;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            if (setups.length === 0) {
+                try {
+                    const raw = localStorage.getItem(`tempo_recovery_setups_${uid}`) || localStorage.getItem(`tempo_selfcheck_setups_${uid}`);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            setups = parsed;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            const hasActive = activeTrackers.length > 0;
+            const hasHistory = allTrackers.length > 0 || checkins.length > 0 || setups.length > 0;
+            const isReturning = hasActive || hasHistory;
+
+            return {
+                isReturning,
+                hasActive,
+                hasHistory,
+                activeTrackers,
+                allTrackers,
+                activeCount: activeTrackers.length,
+                checkinsCount: checkins.length
+            };
+        } catch (err) {
+            console.error("[TempoRecoverySetup] checkUserTrackingStatus error (defaulting to returning user):", err);
+            return {
+                isReturning: true,
+                hasActive: false,
+                hasHistory: true,
+                activeTrackers: [],
+                allTrackers: [],
+                activeCount: 0,
+                checkinsCount: 0
+            };
+        }
     }
 
     // In-memory setup session draft
@@ -212,15 +333,10 @@
         return false;
     }
 
-    // Determine if first-time Recovery visitor (Case 1 vs Case 2 & 3)
+    // Determine if first-time Recovery visitor based on actual Tracking System data
     function shouldShowFirstTimeWelcome() {
-        if (hasCompletedRmodeSetup()) return false;
-        if (isIntroSeen()) return false;
-        // If setup draft is in progress, allow it to continue
-        if (setupDraft && setupDraft.currentStage > 1) {
-            return true;
-        }
-        return true;
+        const status = checkUserTrackingStatus();
+        return !status.isReturning;
     }
 
     // =========================================================================
@@ -237,13 +353,34 @@
         modal.setAttribute('aria-modal', 'true');
         modal.innerHTML = `
             <div class="tempo-card max-w-2xl w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF] max-h-[92vh] overflow-y-auto">
-                <button type="button" onclick="window.TempoRecoverySetup.exploreFirst()"
-                        class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Exit">✕</button>
+                <button type="button" onclick="window.TempoRecoverySetup.handleModalClose()"
+                        class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
                 <div id="recovery-setup-stage-container"></div>
             </div>
         `;
+
+        // Outside-click dismissal for modal-recovery-setup backdrop
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                handleModalClose();
+            }
+        });
+
         document.body.appendChild(containerPlanConfirmModal());
         document.body.appendChild(modal);
+    }
+
+    function handleModalClose() {
+        if (setupDraft && (setupDraft.currentStage === 'case1_welcome' || setupDraft.currentStage === 1)) {
+            handleCase1Later();
+        } else if (setupDraft && (setupDraft.currentStage === 'case2_welcome' || setupDraft.currentStage === 'case2_review' || setupDraft.currentStage === 'returning_welcome' || setupDraft.currentStage === 'review_system')) {
+            handleCase2GoToDashboard();
+        } else {
+            close();
+            if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+                window.TempoMode.renderRmodeHome();
+            }
+        }
     }
 
     function containerPlanConfirmModal() {
@@ -275,24 +412,44 @@
     }
 
     function isReturningUser() {
-        return hasCompletedRmodeSetup();
+        return checkUserTrackingStatus().isReturning;
     }
 
-    function open(stage = 1) {
-        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('setup', { stage });
-            }
+    /**
+     * Entry handler triggered when switching to Rmode.
+     * Prevents duplicate modals if already welcomed in the current session.
+     */
+    function handleRmodeEntry(options = {}) {
+        const uid = getUserId();
+        const sessionKey = `tempo_rmode_session_welcomed_${uid}`;
+        const isSessionWelcomed = sessionStorage.getItem(sessionKey) === 'true';
+
+        if (!options.force && isSessionWelcomed) {
             return;
         }
+
+        // Set session guard to prevent duplicate modals within same Rmode session
+        sessionStorage.setItem(sessionKey, 'true');
+
+        const status = checkUserTrackingStatus();
+        if (status.isReturning) {
+            open('case2_welcome', options);
+        } else {
+            open('case1_welcome', options);
+        }
+    }
+
+    function open(stage = null, options = {}) {
         ensureModalMounted();
         loadDraftFromStorage();
 
-        if (stage === 1 && isReturningUser()) {
-            goToStage('hub');
-        } else {
-            goToStage(stage);
+        let targetStage = stage;
+        if (!targetStage || targetStage === 1 || targetStage === 'auto') {
+            const status = checkUserTrackingStatus();
+            targetStage = status.isReturning ? 'case2_welcome' : 'case1_welcome';
         }
+
+        goToStage(targetStage);
 
         const modal = document.getElementById('modal-recovery-setup');
         if (modal) {
@@ -305,7 +462,34 @@
         }
     }
 
+    function updateRecoveryCardTheme(isWarmTheme) {
+        const modal = document.getElementById('modal-recovery-setup');
+        if (!modal) return;
+        const card = modal.querySelector('.tempo-card');
+        const closeBtn = modal.querySelector('button[title="Close"]');
+        if (!card) return;
+
+        if (isWarmTheme) {
+            // Updated palette: soft Warm Blush tint background (not pure-white!), subtle Warm Blush border
+            card.style.backgroundColor = '#FAF4F0';
+            card.style.borderColor = '#ECC9BA';
+            card.setAttribute('data-tempo-theme', 'warm-blush');
+            if (closeBtn) {
+                closeBtn.className = 'absolute top-5 right-5 text-[#6F6B68] hover:text-[#202124] hover:bg-[#ECC9BA]/40 p-2 rounded-xl text-lg transition cursor-pointer';
+            }
+        } else {
+            // Restore default styles for other stages
+            card.style.backgroundColor = '';
+            card.style.borderColor = '';
+            card.removeAttribute('data-tempo-theme');
+            if (closeBtn) {
+                closeBtn.className = 'absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer';
+            }
+        }
+    }
+
     function close() {
+        updateRecoveryCardTheme(false);
         const modal = document.getElementById('modal-recovery-setup');
         if (modal) modal.classList.add('hidden');
         document.body.classList.remove('overflow-hidden');
@@ -316,28 +500,27 @@
     }
 
     function exploreFirst() {
-        markIntroSeen();
-        close();
-        if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
-            window.TempoMode.returnToSourceContext();
-        } else if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
-            window.TempoMode.renderRmodeHome();
-        }
+        handleCase1Later();
     }
 
     function goToStage(stageNum) {
         setupDraft.currentStage = stageNum;
         saveDraftToStorage();
 
+        const isWarmStage = (stageNum === 'case2_welcome' || stageNum === 'returning_welcome' || stageNum === 'case2_review' || stageNum === 'review_system' || stageNum === 'adjust_trackers' || stageNum === 'adjust_note' || stageNum === 'adjust_review');
+        updateRecoveryCardTheme(isWarmStage);
+
         const container = document.getElementById('recovery-setup-stage-container');
         if (!container) return;
 
-        if (stageNum === 'hub') renderReturningHub(container);
+        if (stageNum === 'case1_welcome' || stageNum === 1) renderCase1Welcome(container);
+        else if (stageNum === 'case2_welcome' || stageNum === 'returning_welcome') renderCase2Welcome(container);
+        else if (stageNum === 'case2_review' || stageNum === 'review_system') renderCase2ReviewSystem(container);
+        else if (stageNum === 'hub') renderReturningHub(container);
         else if (stageNum === 'confirm_new_setup') renderCreateNewSetupConfirm(container);
         else if (stageNum === 'adjust_trackers') renderStageAdjustTrackers(container);
         else if (stageNum === 'adjust_note') renderStageAdjustNote(container);
         else if (stageNum === 'adjust_review') renderStageAdjustReview(container);
-        else if (stageNum === 1) renderStage1Welcome(container);
         else if (stageNum === 2) renderStage2LookingBack(container);
         else if (stageNum === 3) renderStage3WhatHelped(container);
         else if (stageNum === 4) renderStage4RecoveryNote(container);
@@ -448,7 +631,7 @@
                             </div>
                             <h3 class="font-heading text-lg font-bold text-[#202124]">Adjust my current setup</h3>
                             <p class="text-xs text-[#6F6B68] leading-relaxed">
-                                Keep or stop items, change tracking methods (effective today), edit names and units, add new trackers, and review your Recovery Note. All past records remain completely safe.
+                                Keep or stop items, change tracking methods (effective today), edit names and units, add new trackers, and review your Recovery Notice. All past records remain completely safe.
                             </p>
                         </div>
                         <button type="button" onclick="window.TempoRecoverySetup.startAdjustmentFlow()"
@@ -540,149 +723,145 @@
     }
 
     function openEditTrackerInAdjustment(idx, isNew = false) {
-        adjustmentDraft.editingTrackerIndex = idx;
-        adjustmentDraft.editingIsNew = isNew;
-        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+        const target = isNew ? adjustmentDraft.newTrackers[idx] : adjustmentDraft.trackers[idx];
+        if (!target) return;
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAdjustTracker === 'function') {
+            window.TempoSelfCheckWorkspace.openAdjustTracker(target.id ? target.id : target);
+        } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openTrackerModal === 'function') {
+            window.TempoRecoverySelfCheck.openTrackerModal(target.id ? target.id : target);
+        }
     }
 
     function closeTrackerEditInAdjustment() {
-        adjustmentDraft.editingTrackerIndex = null;
-        adjustmentDraft.editingIsNew = false;
-        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.closeAdjustModal === 'function') {
+            window.TempoSelfCheckWorkspace.closeAdjustModal();
+        }
     }
 
     function saveTrackerEditInAdjustment(idx, isNew) {
-        const nameInput = document.getElementById('adjust-edit-name');
-        const methodSelect = document.getElementById('adjust-edit-method');
-        const unitInput = document.getElementById('adjust-edit-unit');
-        const optionsInput = document.getElementById('adjust-edit-options');
-        const scaleRangeSelect = document.getElementById('adjust-edit-scale-range');
-        const alertToggle = document.getElementById('adjust-edit-alert-toggle');
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.saveAdjustTracker === 'function') {
+            window.TempoSelfCheckWorkspace.saveAdjustTracker();
+        }
+    }
 
-        if (!nameInput || !nameInput.value.trim()) {
-            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("Tracking name cannot be empty.");
-            }
-            return;
+    function openAddTrackerInAdjustment() {
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') {
+            window.TempoSelfCheckWorkspace.openAddTracking();
+        } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openTrackerModal === 'function') {
+            window.TempoRecoverySelfCheck.openTrackerModal();
         }
-
-        const target = isNew ? adjustmentDraft.newTrackers[idx] : adjustmentDraft.trackers[idx];
-        if (!target) return;
-
-        target.name = nameInput.value.trim();
-        const newMethod = methodSelect ? methodSelect.value : target.check_method;
-        if (newMethod !== target.check_method) {
-            target.check_method = newMethod;
-            target.wasEdited = true;
-        }
-        if (unitInput) {
-            target.quantity_unit = unitInput.value.trim();
-        }
-        if (optionsInput && (newMethod === 'options' || newMethod === 'yes_no')) {
-            const rawOpts = optionsInput.value.split(',').map(s => s.trim()).filter(Boolean);
-            if (rawOpts.length > 0) target.options = rawOpts;
-        }
-        if (scaleRangeSelect && newMethod === 'scale') {
-            target.scale_range = scaleRangeSelect.value;
-            target.scale_max = scaleRangeSelect.value === '1-10' ? 10 : 5;
-        }
-        if (alertToggle) {
-            target.alert_enabled = alertToggle.checked;
-        }
-
-        target.wasEdited = true;
-        closeTrackerEditInAdjustment();
     }
 
     function promptAddNewTrackerInAdjustment() {
-        const name = prompt("Enter a name for the new tracking item:");
-        if (!name || !name.trim()) return;
+        openAddTrackerInAdjustment();
+    }
 
-        const cleanName = name.trim();
-        adjustmentDraft.newTrackers.push({
-            name: cleanName,
-            category: 'stress_sign',
-            check_method: 'percentage',
-            scale_min: 1,
-            scale_max: 5,
-            quantity_unit: '',
-            options: null,
-            type_id: 'stress_sign',
-            type_label: 'Sign of stress',
-            type_color: '#D48366',
-            alert_enabled: false,
-            isKept: true,
-            isNew: true
-        });
-
-        renderStageAdjustTrackers(document.getElementById('recovery-setup-stage-container'));
+    function handleAdjustBack() {
+        handleCase2GoToDashboard();
     }
 
     function renderStageAdjustTrackers(container) {
-        const editingIdx = adjustmentDraft.editingTrackerIndex;
-        const editingIsNew = adjustmentDraft.editingIsNew;
-        const editingTracker = editingIdx !== null
-            ? (editingIsNew ? adjustmentDraft.newTrackers[editingIdx] : adjustmentDraft.trackers[editingIdx])
-            : null;
+        const isVi = isViLocale();
+        updateRecoveryCardTheme(true);
+
+        const stepBadge = t('modes.recovery.onboarding.adjustStep1Badge', {}, isVi ? 'BƯỚC 1/3 · HỆ THỐNG TRACKING' : 'STEP 1 OF 3 · TRACKING SYSTEM');
+        const setupAdjustmentLabel = t('modes.recovery.onboarding.adjustStep1Tag', {}, isVi ? 'Thiết lập điều chỉnh' : 'Setup Adjustment');
+        const title = t('modes.recovery.onboarding.adjustStep1Title', {}, isVi ? 'Điều chỉnh các mục tracking' : 'Adjust your tracking items');
+        const desc = t('modes.recovery.onboarding.adjustStep1Desc', {}, isVi ? 'Chọn các mục bạn muốn giữ lại, thay đổi cách tracking hoặc ngừng tracking. Các mục đã ngừng sẽ được lưu trữ và dữ liệu trước đó vẫn được giữ nguyên.' : 'Choose which items to keep, update tracking methods, or stop tracking items. Stopped items are archived and past data is preserved.');
+
+        const editLabel = t('modes.recovery.onboarding.adjustEditBtn', {}, isVi ? 'Chỉnh sửa' : 'Edit');
+        const stopLabel = t('modes.recovery.onboarding.adjustStopBtn', {}, isVi ? 'Ngừng tracking' : 'Stop tracking');
+        const keepLabel = t('modes.recovery.onboarding.adjustKeepBtn', {}, isVi ? 'Tiếp tục tracking' : 'Keep tracking');
+        const addLabel = t('modes.recovery.onboarding.adjustAddBtn', {}, isVi ? '+ Thêm mục tracking mới' : '+ Add new tracking item');
+        const backLabel = t('modes.recovery.onboarding.adjustBackBtn', {}, isVi ? '← Quay lại Dashboard' : '← Back to Hub');
+        const continueLabel = t('modes.recovery.onboarding.adjustContinueBtn', {}, isVi ? 'Tiếp tục đến Lời nhắn phục hồi →' : 'Continue to Recovery Notice →');
+        const activeLabel = t('modes.recovery.onboarding.adjustActiveBadge', {}, isVi ? 'Đang tracking' : 'Active');
 
         const trackersListHTML = adjustmentDraft.trackers.map((t, idx) => {
-            const dotColor = t.type_color || (t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#166545' : '#1E40AF'));
+            const dotColor = t.type_color || (t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#8EA28F' : '#93AFBC'));
             const isKept = t.isKept !== false;
             const methodChanged = t.wasEdited && t.check_method !== t.originalMethod;
 
             let methodDesc = t.check_method;
-            if (t.check_method === 'percentage') methodDesc = 'Percentage (%)';
-            else if (t.check_method === 'quantity') methodDesc = `Quantity (${t.quantity_unit || 'units'})`;
-            else if (t.check_method === 'scale') methodDesc = `Scale 1–${t.scale_max || 5}`;
-            else if (t.check_method === 'options' || t.check_method === 'yes_no') {
-                methodDesc = `Options (${(t.options || ['Good', 'Not good']).join(', ')})`;
+            if (t.check_method === 'percentage') {
+                methodDesc = isVi ? 'Phần trăm (%)' : 'Percentage (%)';
+            } else if (t.check_method === 'quantity') {
+                const rawUnit = t.quantity_unit || '';
+                if (isVi) {
+                    const unitStr = (rawUnit === 'min' || rawUnit === 'minutes' || rawUnit === 'phút' || !rawUnit) ? 'phút' : rawUnit;
+                    methodDesc = `Thời lượng (${unitStr})`;
+                } else {
+                    const unitStr = (rawUnit === 'phút' || rawUnit === 'min' || rawUnit === 'minutes' || !rawUnit) ? 'minutes' : rawUnit;
+                    methodDesc = `Quantity (${unitStr})`;
+                }
+            } else if (t.check_method === 'scale') {
+                methodDesc = isVi ? `Thang đo 1–${t.scale_max || 5}` : `Scale 1–${t.scale_max || 5}`;
+            } else if (t.check_method === 'options' || t.check_method === 'yes_no') {
+                let optStr = '';
+                if (t.options && Array.isArray(t.options) && t.options.length > 0) {
+                    optStr = t.options.join(', ');
+                } else {
+                    const isSleep = (t.name || '').toLowerCase().includes('sleep') || (t.name || '').toLowerCase().includes('giấc ngủ');
+                    const defaultOpts = isSleep 
+                        ? (isVi ? ['Tốt', 'Chưa tốt'] : ['Good', 'Not good']) 
+                        : (isVi ? ['Có', 'Không'] : ['Yes', 'No']);
+                    optStr = defaultOpts.join(', ');
+                }
+                methodDesc = isVi ? `Lựa chọn (${optStr})` : `Options (${optStr})`;
+            }
+
+            let catLabel = t.type_label;
+            if (!catLabel || catLabel === 'Tracker' || catLabel === 'Mục') {
+                catLabel = t.category === 'stress_sign'
+                    ? (isVi ? 'Chỉ số căng thẳng' : 'Sign of stress')
+                    : (t.category === 'supportive' ? (isVi ? 'Chỉ số hỗ trợ' : 'Supportive') : (isVi ? 'Chung' : 'General'));
             }
 
             return `
-                <div class="p-3.5 rounded-2xl border ${isKept ? 'border-[#CDE9DA] bg-[#FBFDFB]' : 'border-stone-200 bg-stone-50/70 opacity-75'} space-y-2 transition">
+                <div class="p-3.5 sm:p-4 rounded-2xl border ${isKept ? 'border-[#ECC9BA] bg-white/85 shadow-2xs' : 'border-[#ECC9BA]/60 bg-[#93AFBC]/10 opacity-75'} space-y-2.5 transition">
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-3">
                             <span class="w-3 h-3 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
                             <div>
                                 <div class="flex items-center space-x-2">
                                     <h4 class="text-xs sm:text-sm font-bold text-[#202124]">${escapeHTML(t.name)}</h4>
-                                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isKept ? 'bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA]' : 'bg-stone-200 text-stone-600'}">
-                                        ${isKept ? 'Active' : 'Stopping (Archived)'}
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isKept ? 'bg-[#8EA28F]/15 text-[#25422D] border border-[#8EA28F]/40' : 'bg-stone-200/80 text-stone-600'}">
+                                        ${isKept ? escapeHTML(activeLabel) : (isVi ? 'Đã ngừng tracking (Lưu trữ)' : 'Stopping (Archived)')}
                                     </span>
                                 </div>
-                                <span class="text-[11px] text-stone-500">${escapeHTML(t.type_label || 'Tracker')} · ${escapeHTML(methodDesc)}</span>
+                                <span class="text-[11px] text-[#5F5B58]">${escapeHTML(catLabel)} · ${escapeHTML(methodDesc)}</span>
                             </div>
                         </div>
 
                         <div class="flex items-center space-x-2">
                             ${isKept ? `
                                 <button type="button" onclick="window.TempoRecoverySetup.openEditTrackerInAdjustment(${idx}, false)"
-                                        class="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white transition cursor-pointer">
-                                    Edit
+                                        class="px-3 py-1.5 rounded-xl text-xs font-semibold text-[#202124] hover:text-[#000] border border-[#93AFBC]/50 bg-white hover:bg-[#93AFBC]/15 transition cursor-pointer shadow-2xs">
+                                    ${escapeHTML(editLabel)}
                                 </button>
                                 <button type="button" onclick="window.TempoRecoverySetup.toggleTrackerKept(${idx})"
-                                        class="px-2.5 py-1 rounded-lg text-xs font-semibold text-[#B83D08] hover:bg-[#FFE9DC]/50 border border-[#FFD2BA] bg-white transition cursor-pointer">
-                                    Stop tracking
+                                        class="px-3 py-1.5 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300/80 bg-white hover:bg-stone-100 transition cursor-pointer shadow-2xs">
+                                    ${escapeHTML(stopLabel)}
                                 </button>
                             ` : `
                                 <button type="button" onclick="window.TempoRecoverySetup.toggleTrackerKept(${idx})"
-                                        class="px-2.5 py-1 rounded-lg text-xs font-bold text-[#166545] hover:bg-[#EDF7F1] border border-[#CDE9DA] bg-white transition cursor-pointer">
-                                    Keep tracking
+                                        class="px-3 py-1.5 rounded-xl text-xs font-bold text-[#25422D] hover:bg-[#8EA28F]/20 border border-[#8EA28F]/50 bg-white transition cursor-pointer shadow-2xs">
+                                    ${escapeHTML(keepLabel)}
                                 </button>
                             `}
                         </div>
                     </div>
 
                     ${!isKept ? `
-                        <p class="text-[11px] text-[#B83D08] italic">
-                            ✓ This item will be removed from daily check-ins. Its past check-in records will remain preserved in your archive.
+                        <p class="text-[11px] text-[#5F5B58] italic">
+                            ${isVi ? '✓ Mục này sẽ được chuyển vào lưu trữ. Dữ liệu trước đó vẫn được giữ nguyên.' : '✓ This item will be removed from daily check-ins. Its past check-in records will remain preserved in your archive.'}
                         </p>
                     ` : ''}
 
                     ${methodChanged ? `
-                        <div class="p-2 rounded-xl bg-[#FFF8F3] border border-[#FFD2BA] text-[11px] text-[#B83D08] flex items-center space-x-1.5">
+                        <div class="p-2.5 rounded-xl bg-[#93AFBC]/15 border border-[#93AFBC]/40 text-[11px] text-[#2C4857] flex items-center space-x-1.5">
                             <span>⚡</span>
-                            <span>Method changed from <strong>${escapeHTML(t.originalMethod)}</strong> to <strong>${escapeHTML(t.check_method)}</strong>. This change will take effect starting today; historical check-ins remain in their original format.</span>
+                            <span>${isVi ? 'Cách tracking đã đổi — dữ liệu check-in mới sẽ dùng định dạng mới.' : 'Method changed — new check-ins will use the newly recorded format.'}</span>
                         </div>
                     ` : ''}
                 </div>
@@ -690,156 +869,75 @@
         }).join('');
 
         const newTrackersHTML = adjustmentDraft.newTrackers.map((t, idx) => `
-            <div class="p-3.5 rounded-2xl border border-dashed border-[#166545]/40 bg-[#F4F9F6] flex items-center justify-between">
-                <div class="flex items-center space-x-2.5">
-                    <span class="text-sm">✨</span>
+            <div class="p-3.5 sm:p-4 rounded-2xl border-2 border-dashed border-[#8EA28F]/60 bg-[#8EA28F]/10 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <span class="w-3 h-3 rounded-full inline-block shrink-0 bg-[#8EA28F]"></span>
                     <div>
                         <div class="flex items-center space-x-2">
-                            <h4 class="text-xs sm:text-sm font-bold text-[#166545]">${escapeHTML(t.name)} (New)</h4>
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#EDF7F1] text-[#166545]">To be added</span>
+                            <h4 class="text-xs sm:text-sm font-bold text-[#25422D]">${escapeHTML(t.name)} ${isVi ? '(Mới)' : '(New)'}</h4>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8EA28F]/20 text-[#25422D] border border-[#8EA28F]/40">${isVi ? 'Sắp thêm' : 'To be added'}</span>
                         </div>
-                        <span class="text-[11px] text-stone-500">${escapeHTML(t.check_method)}</span>
+                        <span class="text-[11px] text-[#5F5B58]">${escapeHTML(t.check_method)}</span>
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
                     <button type="button" onclick="window.TempoRecoverySetup.openEditTrackerInAdjustment(${idx}, true)"
-                            class="px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-200 bg-white cursor-pointer">
-                        Edit
+                            class="px-3 py-1.5 rounded-xl text-xs font-semibold text-[#202124] hover:text-[#000] border border-[#93AFBC]/50 bg-white hover:bg-[#93AFBC]/15 cursor-pointer shadow-2xs">
+                        ${escapeHTML(editLabel)}
                     </button>
                     <button type="button" onclick="window.TempoRecoverySetup.removeNewTracker(${idx})"
-                            class="text-stone-400 hover:text-red-500 text-xs font-bold px-1 cursor-pointer">
+                            class="text-stone-400 hover:text-red-500 text-xs font-bold px-1.5 cursor-pointer">
                         ✕
                     </button>
                 </div>
             </div>
         `).join('');
 
-        // Modal for editing tracker
-        let editModalHTML = '';
-        if (editingTracker) {
-            const isScale = editingTracker.check_method === 'scale';
-            const isQuantity = editingTracker.check_method === 'quantity';
-            const isOptions = editingTracker.check_method === 'options' || editingTracker.check_method === 'yes_no';
-            const isPct = editingTracker.check_method === 'percentage';
-
-            editModalHTML = `
-                <div class="fixed inset-0 z-[70] flex items-center justify-center modal-backdrop p-4">
-                    <div class="tempo-card max-w-md w-full p-6 space-y-4 bg-white rounded-3xl shadow-2xl relative border border-stone-300">
-                        <div class="flex items-center justify-between border-b pb-2">
-                            <h4 class="font-heading text-lg font-bold text-[#202124]">Edit Tracking Configuration</h4>
-                            <button type="button" onclick="window.TempoRecoverySetup.closeTrackerEditInAdjustment()"
-                                    class="text-stone-400 hover:text-stone-700 text-base font-bold cursor-pointer">✕</button>
-                        </div>
-
-                        <div class="space-y-3 text-xs">
-                            <div class="space-y-1">
-                                <label class="font-bold text-stone-700">Tracking Name</label>
-                                <input type="text" id="adjust-edit-name" value="${escapeHTML(editingTracker.name)}"
-                                       class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs text-[#202124]">
-                            </div>
-
-                            <div class="space-y-1">
-                                <label class="font-bold text-stone-700">Tracking Method</label>
-                                <select id="adjust-edit-method" onchange="window.TempoRecoverySetup.onAdjustmentMethodSelectChange()"
-                                        class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs text-[#202124] bg-white">
-                                    <option value="percentage" ${isPct ? 'selected' : ''}>Percentage (%)</option>
-                                    <option value="options" ${isOptions ? 'selected' : ''}>Options</option>
-                                    <option value="scale" ${isScale ? 'selected' : ''}>Scale</option>
-                                    <option value="quantity" ${isQuantity ? 'selected' : ''}>Quantity</option>
-                                </select>
-                            </div>
-
-                            <div id="adjust-edit-method-details" class="space-y-2 pt-1">
-                                <div id="adjust-edit-unit-row" class="${isQuantity ? '' : 'hidden'} space-y-1">
-                                    <label class="font-bold text-stone-700">Unit (e.g. min, steps, hrs)</label>
-                                    <input type="text" id="adjust-edit-unit" value="${escapeHTML(editingTracker.quantity_unit || '')}" placeholder="min"
-                                           class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs">
-                                </div>
-
-                                <div id="adjust-edit-options-row" class="${isOptions ? '' : 'hidden'} space-y-1">
-                                    <label class="font-bold text-stone-700">Options (comma-separated)</label>
-                                    <input type="text" id="adjust-edit-options" value="${escapeHTML((editingTracker.options || ['Good', 'Not good']).join(', '))}" placeholder="Good, Not good"
-                                           class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs">
-                                </div>
-
-                                <div id="adjust-edit-scale-row" class="${isScale ? '' : 'hidden'} space-y-1">
-                                    <label class="font-bold text-stone-700">Scale Range</label>
-                                    <select id="adjust-edit-scale-range" class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white">
-                                        <option value="1-5" ${editingTracker.scale_max === 5 || editingTracker.scale_range === '1-5' ? 'selected' : ''}>1 to 5</option>
-                                        <option value="1-10" ${editingTracker.scale_max === 10 || editingTracker.scale_range === '1-10' ? 'selected' : ''}>1 to 10</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="pt-1 flex items-center space-x-2">
-                                <input type="checkbox" id="adjust-edit-alert-toggle" ${editingTracker.alert_enabled ? 'checked' : ''} class="rounded text-[#166545]">
-                                <label for="adjust-edit-alert-toggle" class="font-semibold text-stone-700">Enable Alert System</label>
-                            </div>
-
-                            <div class="p-2.5 rounded-xl bg-[#FFF8F3] border border-[#FFD2BA] text-[11px] text-[#B83D08]">
-                                ℹ️ Method changes take effect starting today. Historical check-ins remain in their original recorded format.
-                            </div>
-                        </div>
-
-                        <div class="pt-3 border-t flex items-center justify-end space-x-2">
-                            <button type="button" onclick="window.TempoRecoverySetup.closeTrackerEditInAdjustment()"
-                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 cursor-pointer">
-                                Cancel
-                            </button>
-                            <button type="button" onclick="window.TempoRecoverySetup.saveTrackerEditInAdjustment(${editingIdx}, ${editingIsNew})"
-                                    class="btn-primary px-5 py-2 rounded-xl text-xs font-bold shadow-xs cursor-pointer">
-                                Done
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
         container.innerHTML = `
-            <div class="space-y-5">
-                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
-                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 1 OF 3 · TRACKING SYSTEM</span>
-                    <span>Setup Adjustment</span>
+            <div class="space-y-5" data-tempo-ui="rmode-adjust-trackers">
+                <div class="flex items-center justify-between text-xs text-[#5F5B58]">
+                    <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#8EA28F]/15 text-[#25422D] border border-[#8EA28F]/40 font-extrabold uppercase tracking-wider text-[11px]">
+                        <span>🌱</span>
+                        <span>${escapeHTML(stepBadge)}</span>
+                    </span>
+                    <span class="font-semibold text-xs text-[#5F5B58]">${escapeHTML(setupAdjustmentLabel)}</span>
                 </div>
 
                 <div class="space-y-1">
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        Adjust your tracking items
+                        ${escapeHTML(title)}
                     </h3>
-                    <p class="text-xs text-[#6F6B68]">
-                        Choose which items to keep, update tracking methods, or stop tracking items. Stopped items are archived and past data is preserved.
+                    <p class="text-xs text-[#5F5B58] leading-relaxed">
+                        ${escapeHTML(desc)}
                     </p>
                 </div>
 
                 <!-- Items list -->
-                <div class="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
+                <div class="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1" data-tempo-section="adjust-items-list">
                     ${trackersListHTML}
                     ${newTrackersHTML}
                 </div>
 
                 <!-- Add Button -->
                 <div class="pt-1">
-                    <button type="button" onclick="window.TempoRecoverySetup.promptAddNewTrackerInAdjustment()"
-                            class="px-4 py-2 rounded-xl border border-stone-300 hover:border-stone-400 text-xs font-bold text-[#202124] transition cursor-pointer flex items-center space-x-1.5 bg-white shadow-2xs">
-                        <span>+ Add new tracking item</span>
+                    <button type="button" onclick="window.TempoRecoverySetup.openAddTrackerInAdjustment()"
+                            class="px-4 py-2.5 rounded-xl border border-[#93AFBC]/60 hover:border-[#93AFBC] text-xs font-bold text-[#2C4857] transition cursor-pointer flex items-center space-x-1.5 bg-white/90 hover:bg-[#93AFBC]/15 shadow-2xs">
+                        <span>${escapeHTML(addLabel)}</span>
                     </button>
                 </div>
 
                 <!-- Nav footer -->
-                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
-                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('hub')"
-                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                        ← Back to Hub
+                <div class="pt-4 border-t border-[#ECC9BA]/60 flex items-center justify-between">
+                    <button type="button" onclick="window.TempoRecoverySetup.handleAdjustBack()"
+                            class="px-4 py-2 rounded-xl text-xs font-semibold text-[#5F5B58] hover:text-[#202124] transition cursor-pointer">
+                        ${escapeHTML(backLabel)}
                     </button>
                     <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_note')"
-                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                        <span>Continue to Recovery Note</span>
-                        <span>→</span>
+                            class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#8EA28F] hover:bg-[#7D917E] text-white border border-[#7D917E]/30">
+                        <span>${escapeHTML(continueLabel)}</span>
                     </button>
                 </div>
 
-                ${editModalHTML}
             </div>
         `;
     }
@@ -862,105 +960,161 @@
     // =========================================================================
 
     function renderStageAdjustNote(container) {
+        const isVi = isViLocale();
+        updateRecoveryCardTheme(true);
+
         const warningSigns = adjustmentDraft.noteItems.filter(i => i.type === 'warning_sign');
         const helpers = adjustmentDraft.noteItems.filter(i => i.type === 'helper');
         const reminders = adjustmentDraft.noteItems.filter(i => i.type === 'reminder');
         const people = adjustmentDraft.noteItems.filter(i => i.type === 'support_person');
 
+        const stepBadge = isVi ? 'BƯỚC 2/3 · LỜI NHẮN PHỤC HỒI' : 'STEP 2 OF 3 · RECOVERY NOTICE';
+        const tagLabel = isVi ? 'Xem lại Lời nhắn phục hồi' : 'Review Recovery Notice';
+        const title = isVi ? 'Xem lại Lời nhắn phục hồi' : 'Review your Recovery Notice';
+        const desc = isVi
+            ? 'Xem lại dấu hiệu cảnh báo, những điều giúp ích, lời nhắc và liên hệ hỗ trợ.'
+            : 'Review warning signs, things that help, reminders, and support contacts.';
+
+        const sec1Title = isVi ? 'Khi tôi bắt đầu quá tải' : 'When I start getting overwhelmed';
+        const sec2Title = isVi ? 'Những điều giúp ích' : 'Things that seem to help';
+        const sec3Title = isVi ? 'Lời nhắc nhở nhẹ nhàng' : 'Gentle reminders';
+        const sec4Title = isVi ? 'Người tôi có thể liên hệ' : 'People I can reach out to';
+
+        const addLabel = isVi ? 'Thêm' : 'Add';
+        const backBtnLabel = isVi ? 'Quay lại mục tracking' : 'Back to Trackers';
+        const reviewBtnLabel = isVi ? 'Xem lại các thay đổi' : 'Review Proposed Changes';
+
         container.innerHTML = `
-            <div class="space-y-5">
-                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
-                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 2 OF 3 · RECOVERY NOTE</span>
-                    <span>Review Recovery Note</span>
+            <div class="space-y-5" data-tempo-ui="adjust-recovery-note">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="font-extrabold uppercase tracking-wider text-[#4F6851] text-[11px]">${escapeHTML(stepBadge)}</span>
+                    <span class="text-[#6F6B68] font-medium">${escapeHTML(tagLabel)}</span>
                 </div>
 
                 <div class="space-y-1">
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        Review your Recovery Note
+                        ${escapeHTML(title)}
                     </h3>
                     <p class="text-xs text-[#6F6B68]">
-                        Review warning signs, things that help, reminders, and support contacts.
+                        ${escapeHTML(desc)}
                     </p>
                 </div>
 
-                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1">
-                    <!-- Warning Signs -->
-                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#B83D08]">
-                            1. When I start getting overwhelmed (${warningSigns.length})
-                        </span>
-                        <div class="space-y-1">
+                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1.5 recovery-note-scroll">
+                    <!-- SECTION 1: Warning Signs (Warm Blush Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/80 space-y-3 shadow-2xs transition">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#ECC9BA] shrink-0"></span>
+                                <h4 class="text-xs font-bold uppercase tracking-wide text-[#202124]">
+                                    1. ${escapeHTML(sec1Title)}
+                                </h4>
+                            </div>
+                            <span class="text-[11px] font-semibold text-[#6F6B68]">(${warningSigns.length})</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            ${warningSigns.length === 0 ? `<p class="text-[11px] text-[#6F6B68] italic py-0.5">${isVi ? 'Chưa có mục nào được lưu.' : 'No items added yet.'}</p>` : ''}
                             ${warningSigns.map((w, idx) => `
-                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
-                                    <span>${escapeHTML(w.text)}</span>
+                                <div class="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] text-xs text-[#202124] shadow-2xs hover:border-[#ECC9BA] transition">
+                                    <span class="font-medium">${escapeHTML(w.text)}</span>
                                     <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('warning_sign', ${idx})"
-                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                            class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#ECC9BA]/30 p-1 rounded-lg text-xs transition cursor-pointer ml-2" title="${isVi ? 'Xóa' : 'Remove'}">✕</button>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="flex items-center space-x-2 pt-1">
-                            <input type="text" id="input-adjust-custom-sign" placeholder="+ Add warning sign..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                        <div class="flex items-center space-x-2 pt-0.5">
+                            <input type="text" id="input-adjust-custom-sign" placeholder="${isVi ? '+ Thêm dấu hiệu cảnh báo...' : '+ Add warning sign...'}"
+                                   class="flex-1 px-3.5 py-2 rounded-xl border border-[#EAE4DF] text-xs text-[#202124] bg-white placeholder-[#6F6B68]/60 focus:outline-none focus:border-[#8EA28F] focus:ring-1 focus:ring-[#8EA28F]/30 transition shadow-2xs">
                             <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('warning_sign')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                                    class="px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs flex items-center space-x-1 shrink-0">
+                                <span>+</span>
+                                <span>${escapeHTML(addLabel)}</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Helpers -->
-                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">
-                            2. Things that seem to help (${helpers.length})
-                        </span>
-                        <div class="space-y-1">
+                    <!-- SECTION 2: Helpers (Sage Green Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#8EA28F]/40 space-y-3 shadow-2xs transition">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#8EA28F] shrink-0"></span>
+                                <h4 class="text-xs font-bold uppercase tracking-wide text-[#202124]">
+                                    2. ${escapeHTML(sec2Title)}
+                                </h4>
+                            </div>
+                            <span class="text-[11px] font-semibold text-[#6F6B68]">(${helpers.length})</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            ${helpers.length === 0 ? `<p class="text-[11px] text-[#6F6B68] italic py-0.5">${isVi ? 'Chưa có mục nào được lưu.' : 'No items added yet.'}</p>` : ''}
                             ${helpers.map((h, idx) => `
-                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
-                                    <span>${escapeHTML(h.text)}</span>
+                                <div class="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] text-xs text-[#202124] shadow-2xs hover:border-[#8EA28F]/60 transition">
+                                    <span class="font-medium">${escapeHTML(h.text)}</span>
                                     <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('helper', ${idx})"
-                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                            class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#8EA28F]/20 p-1 rounded-lg text-xs transition cursor-pointer ml-2" title="${isVi ? 'Xóa' : 'Remove'}">✕</button>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="flex items-center space-x-2 pt-1">
-                            <input type="text" id="input-adjust-custom-helper" placeholder="+ Add helpful thing..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                        <div class="flex items-center space-x-2 pt-0.5">
+                            <input type="text" id="input-adjust-custom-helper" placeholder="${isVi ? '+ Thêm điều giúp ích...' : '+ Add helpful thing...'}"
+                                   class="flex-1 px-3.5 py-2 rounded-xl border border-[#EAE4DF] text-xs text-[#202124] bg-white placeholder-[#6F6B68]/60 focus:outline-none focus:border-[#8EA28F] focus:ring-1 focus:ring-[#8EA28F]/30 transition shadow-2xs">
                             <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('helper')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                                    class="px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs flex items-center space-x-1 shrink-0">
+                                <span>+</span>
+                                <span>${escapeHTML(addLabel)}</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Reminders -->
-                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#1E40AF]">
-                            3. Gentle reminders (${reminders.length})
-                        </span>
-                        <div class="space-y-1">
+                    <!-- SECTION 3: Reminders (Dusty Blue Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#93AFBC]/50 space-y-3 shadow-2xs transition">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#93AFBC] shrink-0"></span>
+                                <h4 class="text-xs font-bold uppercase tracking-wide text-[#202124]">
+                                    3. ${escapeHTML(sec3Title)}
+                                </h4>
+                            </div>
+                            <span class="text-[11px] font-semibold text-[#6F6B68]">(${reminders.length})</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            ${reminders.length === 0 ? `<p class="text-[11px] text-[#6F6B68] italic py-0.5">${isVi ? 'Chưa có mục nào được lưu.' : 'No items added yet.'}</p>` : ''}
                             ${reminders.map((r, idx) => `
-                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
-                                    <span>"${escapeHTML(r.text)}"</span>
+                                <div class="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] text-xs text-[#202124] shadow-2xs hover:border-[#93AFBC]/60 transition">
+                                    <span class="font-medium italic">"${escapeHTML(r.text)}"</span>
                                     <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('reminder', ${idx})"
-                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                            class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#93AFBC]/20 p-1 rounded-lg text-xs transition cursor-pointer ml-2" title="${isVi ? 'Xóa' : 'Remove'}">✕</button>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="flex items-center space-x-2 pt-1">
-                            <input type="text" id="input-adjust-custom-reminder" placeholder="+ Add reminder..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs bg-white">
+                        <div class="flex items-center space-x-2 pt-0.5">
+                            <input type="text" id="input-adjust-custom-reminder" placeholder="${isVi ? '+ Thêm lời nhắc...' : '+ Add reminder...'}"
+                                   class="flex-1 px-3.5 py-2 rounded-xl border border-[#EAE4DF] text-xs text-[#202124] bg-white placeholder-[#6F6B68]/60 focus:outline-none focus:border-[#8EA28F] focus:ring-1 focus:ring-[#8EA28F]/30 transition shadow-2xs">
                             <button type="button" onclick="window.TempoRecoverySetup.addAdjustmentNoteItem('reminder')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700">Add</button>
+                                    class="px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs flex items-center space-x-1 shrink-0">
+                                <span>+</span>
+                                <span>${escapeHTML(addLabel)}</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Support People -->
-                    <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#7C3AED]">
-                            4. People I can reach out to (${people.length})
-                        </span>
-                        <div class="space-y-1">
+                    <!-- SECTION 4: Support People -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/60 space-y-3 shadow-2xs transition">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#ECC9BA] shrink-0"></span>
+                                <h4 class="text-xs font-bold uppercase tracking-wide text-[#202124]">
+                                    4. ${escapeHTML(sec4Title)}
+                                </h4>
+                            </div>
+                            <span class="text-[11px] font-semibold text-[#6F6B68]">(${people.length})</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            ${people.length === 0 ? `<p class="text-[11px] text-[#6F6B68] italic py-0.5">${isVi ? 'Chưa có người liên hệ nào.' : 'None added yet.'}</p>` : ''}
                             ${people.map((p, idx) => `
-                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-white border border-stone-200 text-xs">
-                                    <span><strong>${escapeHTML(p.text)}</strong> ${p.metadata && p.metadata.relationship ? `<span class="text-stone-400">(${escapeHTML(p.metadata.relationship)})</span>` : ''}</span>
+                                <div class="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white border border-[#EAE4DF] text-xs text-[#202124] shadow-2xs hover:border-[#ECC9BA] transition">
+                                    <span><strong>${escapeHTML(p.text)}</strong> ${p.metadata && p.metadata.relationship ? `<span class="text-[#6F6B68]">(${escapeHTML(p.metadata.relationship)})</span>` : ''}</span>
                                     <button type="button" onclick="window.TempoRecoverySetup.removeAdjustmentNoteItem('support_person', ${idx})"
-                                            class="text-stone-400 hover:text-red-500 font-bold ml-2">✕</button>
+                                            class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#ECC9BA]/30 p-1 rounded-lg text-xs transition cursor-pointer ml-2" title="${isVi ? 'Xóa' : 'Remove'}">✕</button>
                                 </div>
                             `).join('')}
                         </div>
@@ -968,14 +1122,15 @@
                 </div>
 
                 <!-- Nav footer -->
-                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                <div class="pt-4 border-t border-[#ECC9BA]/60 flex items-center justify-between">
                     <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_trackers')"
-                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                        ← Back to Trackers
+                            class="px-4 py-2.5 rounded-xl text-xs font-bold text-[#6F6B68] hover:text-[#202124] hover:bg-[#ECC9BA]/20 transition cursor-pointer flex items-center space-x-1.5">
+                        <span>←</span>
+                        <span>${escapeHTML(backBtnLabel)}</span>
                     </button>
                     <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_review')"
-                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                        <span>Review Proposed Changes</span>
+                            class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#8EA28F] hover:bg-[#7D937E] text-white">
+                        <span>${escapeHTML(reviewBtnLabel)}</span>
                         <span>→</span>
                     </button>
                 </div>
@@ -1020,53 +1175,102 @@
     // =========================================================================
 
     function renderStageAdjustReview(container) {
+        const isVi = isViLocale();
+        updateRecoveryCardTheme(true);
+
         const keptTrackers = adjustmentDraft.trackers.filter(t => t.isKept !== false);
         const stoppedTrackers = adjustmentDraft.trackers.filter(t => t.isKept === false);
         const newTrackers = adjustmentDraft.newTrackers;
+        const noteItemsCount = adjustmentDraft.noteItems.length;
+
+        const stepBadge = isVi ? 'BƯỚC 3/3 · XÁC NHẬN CUỐI CÙNG' : 'STEP 3 OF 3 · FINAL CONFIRMATION';
+        const tagLabel = isVi ? 'Xem lại & xác nhận' : 'Review & Confirm';
+        const title = isVi ? 'Xem lại các thay đổi thiết lập' : 'Review proposed setup changes';
+        const desc = isVi
+            ? 'Vui lòng kiểm tra và xác nhận các thay đổi. Thiết lập chỉ được lưu sau khi bạn xác nhận.'
+            : 'Please confirm your updates. Changes will be saved only after explicit confirmation.';
+
+        const activeTrackersHeader = isVi
+            ? `CÁC MỤC TRACKING ĐANG HOẠT ĐỘNG (${keptTrackers.length + newTrackers.length})`
+            : `ACTIVE TRACKING ITEMS (${keptTrackers.length + newTrackers.length})`;
+
+        const activeLabel = isVi ? 'Đang tracking' : 'Active';
+        const newLabel = isVi ? 'Mục mới' : 'New item';
+        const stoppedTrackersHeader = isVi
+            ? `CÁC MỤC NGỪNG TRACKING (${stoppedTrackers.length})`
+            : `ITEMS TO STOP TRACKING (${stoppedTrackers.length})`;
+        const stoppedPreservedNote = isVi
+            ? '✓ Dữ liệu tracking trước đó vẫn được giữ nguyên an toàn'
+            : '✓ Past check-in records safely preserved';
+
+        const recoveryNoticeHeader = isVi ? 'LỜI NHẮN PHỤC HỒI' : 'RECOVERY NOTICE';
+        const recoveryNoticeText = noteItemsCount === 0
+            ? (isVi ? 'Chưa có nội dung chia sẻ cá nhân nào được lưu.' : '0 personal reflection items saved.')
+            : (isVi ? `${noteItemsCount} nội dung chia sẻ cá nhân đã lưu.` : `${noteItemsCount} personal reflection ${noteItemsCount === 1 ? 'item' : 'items'} saved.`);
+
+        const backBtnLabel = isVi ? 'Quay lại chỉnh sửa' : 'Back to Edit';
+        const confirmBtnLabel = isVi ? 'Xác nhận & lưu thiết lập ✓' : 'Confirm & Save Setup ✓';
+
+        function getMethodDesc(method, t) {
+            if (method === 'percentage') return isVi ? 'Phần trăm (%)' : 'Percentage (%)';
+            if (method === 'scale') return isVi ? `Thang đo 1–${t.scale_max || 5}` : `Scale 1–${t.scale_max || 5}`;
+            if (method === 'quantity') {
+                const unit = t.quantity_unit || (isVi ? 'phút' : 'minutes');
+                return isVi ? `Số lượng (${unit})` : `Quantity (${unit})`;
+            }
+            if (method === 'options' || method === 'yes_no') return isVi ? 'Lựa chọn' : 'Options';
+            return method;
+        }
 
         container.innerHTML = `
-            <div class="space-y-5">
-                <div class="flex items-center justify-between text-xs text-[#6F6B68]">
-                    <span class="font-bold uppercase tracking-wider text-[#166545]">STEP 3 OF 3 · FINAL CONFIRMATION</span>
-                    <span>Review & Confirm</span>
+            <div class="space-y-5" data-tempo-ui="adjust-review-confirm">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="font-extrabold uppercase tracking-wider text-[#4F6851] text-[11px]">${escapeHTML(stepBadge)}</span>
+                    <span class="text-[#6F6B68] font-medium">${escapeHTML(tagLabel)}</span>
                 </div>
 
                 <div class="space-y-1">
                     <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">
-                        Review proposed setup changes
+                        ${escapeHTML(title)}
                     </h3>
                     <p class="text-xs text-[#6F6B68]">
-                        Please confirm your updates. Changes will be saved only after explicit confirmation.
+                        ${escapeHTML(desc)}
                     </p>
                 </div>
 
-                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1 text-xs">
+                <div class="space-y-4 max-h-[46vh] overflow-y-auto pr-1.5 recovery-note-scroll text-xs">
                     <!-- Kept Trackers -->
-                    <div class="p-3.5 rounded-2xl bg-white border border-[#CDE9DA] space-y-2">
-                        <span class="font-extrabold uppercase tracking-wider text-[#166545] text-[11px] block">
-                            Active Tracking Items (${keptTrackers.length + newTrackers.length})
-                        </span>
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/80 space-y-3 shadow-2xs transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#8EA28F] shrink-0"></span>
+                            <span class="font-extrabold uppercase tracking-wider text-[#202124] text-[11px] block">
+                                ${escapeHTML(activeTrackersHeader)}
+                            </span>
+                        </div>
                         <div class="space-y-1.5">
                             ${keptTrackers.map(t => {
                                 const methodChanged = t.wasEdited && t.check_method !== t.originalMethod;
+                                const curMethodLabel = getMethodDesc(t.check_method, t);
                                 return `
-                                    <div class="flex items-center justify-between p-2 rounded-xl bg-[#F7FCF9] border border-[#CDE9DA]/60">
+                                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-white border border-[#EAE4DF] text-xs shadow-2xs">
                                         <div class="flex items-center space-x-2">
                                             <span class="font-bold text-[#202124]">${escapeHTML(t.name)}</span>
-                                            <span class="text-stone-500">(${escapeHTML(t.check_method)})</span>
+                                            <span class="text-[#6F6B68]">(${escapeHTML(curMethodLabel)})</span>
                                         </div>
                                         ${methodChanged ? `
-                                            <span class="text-[10px] font-bold text-[#B83D08] bg-[#FFE9DC] px-2 py-0.5 rounded-full border border-[#FFD2BA]">
-                                                Method: ${escapeHTML(t.originalMethod)} → ${escapeHTML(t.check_method)} (effective today)
+                                            <span class="text-[10px] font-bold text-[#8EA28F] bg-[#8EA28F]/10 px-2.5 py-0.5 rounded-full border border-[#8EA28F]/30">
+                                                ${isVi
+                                                    ? `Hình thức: ${escapeHTML(getMethodDesc(t.originalMethod, t))} → ${escapeHTML(curMethodLabel)} (áp dụng từ hôm nay)`
+                                                    : `Method: ${escapeHTML(t.originalMethod)} → ${escapeHTML(t.check_method)} (effective today)`}
                                             </span>
-                                        ` : '<span class="text-[10px] font-bold text-[#166545]">Active</span>'}
+                                        ` : `<span class="text-[10px] font-bold text-[#25422D] bg-[#8EA28F]/15 border border-[#8EA28F]/40 px-2 py-0.5 rounded-full">${escapeHTML(activeLabel)}</span>`}
                                     </div>
                                 `;
                             }).join('')}
                             ${newTrackers.map(t => `
-                                <div class="flex items-center justify-between p-2 rounded-xl bg-[#F4F9F6] border border-dashed border-[#166545]/40">
-                                    <span class="font-bold text-[#166545]">${escapeHTML(t.name)} (${escapeHTML(t.check_method)})</span>
-                                    <span class="text-[10px] font-bold text-[#166545] bg-[#EDF7F1] px-2 py-0.5 rounded-full">New item</span>
+                                <div class="flex items-center justify-between p-2.5 rounded-xl bg-[#FFF9F4] border border-dashed border-[#8EA28F]/60 text-xs shadow-2xs">
+                                    <span class="font-bold text-[#4F6851]">${escapeHTML(t.name)} (${escapeHTML(getMethodDesc(t.check_method, t))})</span>
+                                    <span class="text-[10px] font-bold text-[#25422D] bg-[#8EA28F]/15 border border-[#8EA28F]/40 px-2 py-0.5 rounded-full">${escapeHTML(newLabel)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -1074,42 +1278,48 @@
 
                     <!-- Stopped Trackers -->
                     ${stoppedTrackers.length > 0 ? `
-                        <div class="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2">
-                            <span class="font-extrabold uppercase tracking-wider text-[#B83D08] text-[11px] block">
-                                Items to Stop Tracking (${stoppedTrackers.length})
-                            </span>
+                        <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/60 space-y-3 shadow-2xs transition">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#ECC9BA] shrink-0"></span>
+                                <span class="font-extrabold uppercase tracking-wider text-[#6F6B68] text-[11px] block">
+                                    ${escapeHTML(stoppedTrackersHeader)}
+                                </span>
+                            </div>
                             <div class="space-y-1.5">
                                 ${stoppedTrackers.map(t => `
-                                    <div class="p-2 rounded-xl bg-white border border-stone-200 flex items-center justify-between">
+                                    <div class="p-2.5 rounded-xl bg-white/80 border border-[#EAE4DF] flex items-center justify-between text-xs shadow-2xs">
                                         <span class="font-medium text-[#202124]">${escapeHTML(t.name)}</span>
-                                        <span class="text-[11px] text-stone-500">✓ Past check-in records safely preserved</span>
+                                        <span class="text-[11px] text-[#6F6B68]">${escapeHTML(stoppedPreservedNote)}</span>
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
                     ` : ''}
 
-                    <!-- Recovery Note summary -->
-                    <div class="p-3.5 rounded-2xl bg-[#FEFAF4] border border-[#F0EBE6] space-y-1">
-                        <span class="font-extrabold uppercase tracking-wider text-[#484541] text-[11px] block">
-                            Recovery Note
-                        </span>
-                        <p class="text-stone-600">
-                            ${adjustmentDraft.noteItems.length} personal reflection items saved.
+                    <!-- Recovery Notice summary -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/80 space-y-1.5 shadow-2xs transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#93AFBC] shrink-0"></span>
+                            <span class="font-extrabold uppercase tracking-wider text-[#202124] text-[11px] block">
+                                ${escapeHTML(recoveryNoticeHeader)}
+                            </span>
+                        </div>
+                        <p class="text-xs text-[#6F6B68] pl-4.5">
+                            ${escapeHTML(recoveryNoticeText)}
                         </p>
                     </div>
                 </div>
 
                 <!-- Footer Nav with Explicit Save Confirmation -->
-                <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                <div class="pt-4 border-t border-[#ECC9BA]/60 flex items-center justify-between">
                     <button type="button" onclick="window.TempoRecoverySetup.goToStage('adjust_trackers')"
-                            class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                        ← Back to Edit
+                            class="px-4 py-2.5 rounded-xl text-xs font-bold text-[#6F6B68] hover:text-[#202124] hover:bg-[#ECC9BA]/20 transition cursor-pointer flex items-center space-x-1.5">
+                        <span>←</span>
+                        <span>${escapeHTML(backBtnLabel)}</span>
                     </button>
                     <button type="button" onclick="window.TempoRecoverySetup.executeAdjustSetupConfirm()"
-                            class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#166545] hover:bg-[#0E4A32] text-white">
-                        <span>Confirm & Save Setup</span>
-                        <span>✓</span>
+                            class="btn-primary px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#8EA28F] hover:bg-[#7D937E] text-white">
+                        <span>${escapeHTML(confirmBtnLabel)}</span>
                     </button>
                 </div>
             </div>
@@ -1188,8 +1398,14 @@
                 window.TempoSelfCheckWorkspace.render();
             }
 
+            // Case 2 Option B requirement: Navigate to Self-check tool after saving adjustments
+            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+                window.TempoMode.openStrack('tool', { sourceContext: 'recovery' });
+            }
+
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("✓ Setup changes saved successfully.");
+                const isVi = isViLocale();
+                window.TempoApp.showToast(isVi ? "✓ Đã lưu thay đổi hệ thống theo dõi." : "✓ Setup changes saved successfully.");
             }
         } catch (err) {
             console.error("Error confirming setup adjustments:", err);
@@ -1198,42 +1414,326 @@
     }
 
 
-    // STAGE 1: WELCOME
+    // =========================================================================
+    // CASE 1: NEW USER WELCOME MODAL & FLOW
     // =========================================================================
 
-    function renderStage1Welcome(container) {
+    function renderCase1Welcome(container) {
+        const isVi = isViLocale();
+        const badge = t('modes.recovery.onboarding.badge', {}, isVi ? 'CHẾ ĐỘ HỒI PHỤC' : 'RECOVERY MODE');
+        const title = t('modes.recovery.onboarding.case1Title', {}, isVi ? 'Chào mừng bạn đến với Chế độ Hồi phục' : 'Welcome to Rmode');
+        const purpose = t('modes.recovery.onboarding.case1Purpose', {}, isVi ? 'Dành cho bản thân không gian để xả hơi và phục hồi.' : 'Give yourself some space to decompress and recover.');
+        const benefits = t('modes.recovery.onboarding.case1Benefits', {}, isVi ? 'Chế độ Hồi phục giúp bạn giảm bớt áp lực, nhận diện những điều hữu ích và tái tạo lại nhịp điệu sinh hoạt bền vững.' : 'Rmode helps you slow down, notice what supports your nervous system, and rebuild a sustainable daily rhythm.');
+        const question = t('modes.recovery.onboarding.case1Question', {}, isVi ? 'Bạn đã sẵn sàng thiết lập Hệ thống Theo dõi của mình chưa?' : 'Are you ready to set up your Tracking System?');
+        const questionSub = t('modes.recovery.onboarding.case1QuestionSub', {}, isVi ? 'Chọn một vài điều bạn muốn quan sát mỗi ngày. Bạn có thể thay đổi bất cứ lúc nào.' : 'Choose a few things that feel useful to observe. You can adjust them anytime.');
+        const btnYes = t('modes.recovery.onboarding.case1Yes', {}, isVi ? 'Có, hãy thiết lập ngay →' : "Yes, let's set it up →");
+        const btnLater = t('modes.recovery.onboarding.case1Later', {}, isVi ? 'Để sau' : 'Later');
+
         container.innerHTML = `
-            <div class="space-y-6 text-center py-4">
+            <div class="space-y-6 text-center py-4" data-tempo-ui="rmode-case1-welcome">
                 <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#EDF7F1] text-[#166545] border border-[#CDE9DA] text-xs font-extrabold uppercase tracking-wider">
                     <span>🌱</span>
-                    <span>RECOVERY MODE</span>
+                    <span>${escapeHTML(badge)}</span>
                 </div>
 
                 <div class="space-y-3 max-w-lg mx-auto">
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Give yourself some space to recover.
+                        ${escapeHTML(title)}
                     </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        Things may have slowed down, but you might still be carrying some of the stress.
+                    <p class="text-xs sm:text-sm text-[#484541] font-medium leading-relaxed">
+                        ${escapeHTML(purpose)}
                     </p>
                     <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        Recovery Mode gives you some space to slow down, look back, and notice what might help from here.
+                        ${escapeHTML(benefits)}
                     </p>
                 </div>
 
-                <div class="pt-4 flex flex-col items-center space-y-3 max-w-xs mx-auto">
-                    <button type="button" onclick="window.TempoRecoverySetup.goToStage(2)"
-                            class="btn-primary w-full px-6 py-3 rounded-xl font-bold text-sm shadow-xs inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                        <span>Start my recovery check-in</span>
-                        <span>→</span>
+                <!-- Callout Question Box -->
+                <div class="p-4 rounded-2xl bg-[#FBF9F6] border border-[#EAE4DF] max-w-md mx-auto text-center space-y-1.5 shadow-2xs">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">
+                        ${isVi ? 'HỆ THỐNG THEO DÕI' : 'TRACKING SYSTEM'}
+                    </span>
+                    <h3 class="font-heading text-sm sm:text-base font-bold text-[#202124]">
+                        ${escapeHTML(question)}
+                    </h3>
+                    <p class="text-xs text-[#6F6B68] leading-relaxed">
+                        ${escapeHTML(questionSub)}
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <div class="pt-2 flex flex-col items-center space-y-3 max-w-xs mx-auto">
+                    <button type="button" onclick="window.TempoRecoverySetup.startNewUserSetupFlow()"
+                            class="btn-primary w-full px-6 py-3 rounded-xl font-bold text-sm shadow-xs inline-flex items-center justify-center space-x-2 transition cursor-pointer bg-[#166545] hover:bg-[#0E4A32] text-white">
+                        <span>${escapeHTML(btnYes)}</span>
                     </button>
-                    <button type="button" onclick="window.TempoRecoverySetup.exploreFirst()"
-                            class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
-                        I'll explore first
+                    <button type="button" onclick="window.TempoRecoverySetup.handleCase1Later()"
+                            class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer py-1">
+                        ${escapeHTML(btnLater)}
                     </button>
                 </div>
             </div>
         `;
+    }
+
+    function renderStage1Welcome(container) {
+        renderCase1Welcome(container);
+    }
+
+    function handleCase1Later() {
+        const uid = getUserId();
+        // Session guard: suppress duplicate modals during this Rmode session
+        sessionStorage.setItem(`tempo_rmode_session_welcomed_${uid}`, 'true');
+        // Do NOT mark setup completed. Do NOT create empty tracking system.
+        close();
+        if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+            window.TempoMode.renderRmodeHome();
+        }
+    }
+
+    function startNewUserSetupFlow() {
+        // Navigate directly to Tracking System configuration (Stage 5)
+        goToStage(5);
+    }
+
+    function saveNewUserSetupAndGoToSelfCheck() {
+        markSetupCompleted();
+        close();
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            const isVi = isViLocale();
+            window.TempoApp.showToast(isVi ? "✓ Đã thiết lập hệ thống theo dõi." : "✓ Tracking system configured.");
+        }
+        if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+            window.TempoMode.openStrack('tool', { sourceContext: 'recovery' });
+        } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('stress-check');
+        }
+    }
+
+    // =========================================================================
+    // CASE 2: RETURNING USER WELCOME-BACK MODAL & REVIEW FLOW
+    // =========================================================================
+
+    function renderCase2Welcome(container) {
+        const isVi = isViLocale();
+        const status = checkUserTrackingStatus();
+        const count = status.activeCount;
+
+        const badge = t('modes.recovery.onboarding.badgeReturning', {}, isVi ? 'CHẾ ĐỘ HỒI PHỤC · CHÀO MỪNG QUAY LẠI' : 'RECOVERY MODE · WELCOME BACK');
+        const title = t('modes.recovery.onboarding.case2Title', {}, isVi ? 'Chào mừng bạn quay lại!' : 'Welcome back!');
+        const question = t('modes.recovery.onboarding.case2Question', {}, isVi ? 'Bạn có muốn xem lại Hệ thống tracking của mình không?' : 'Would you like to review your Tracking System?');
+        const summary = count > 0
+            ? t('modes.recovery.onboarding.case2Summary', { count, s: count === 1 ? '' : 's' }, isVi ? `Bạn hiện có ${count} mục đang tracking.` : `You currently have ${count} active tracking item${count === 1 ? '' : 's'}.`)
+            : t('modes.recovery.onboarding.case2SummaryEmpty', {}, isVi ? 'Bạn hiện không có mục tracking nào. Lịch sử tracking trước đây được lưu trữ an toàn trong kho lưu trữ.' : 'You currently have 0 active items. Your past tracking records are safely preserved in archive.');
+
+        const btnYes = t('modes.recovery.onboarding.case2Yes', {}, isVi ? 'Có, xem lại hệ thống →' : 'Yes, review my system →');
+        const btnNo = t('modes.recovery.onboarding.case2No', {}, isVi ? 'Không, về Dashboard' : 'No, go to dashboard');
+        const trackingStatusLabel = t('modes.recovery.onboarding.case2TrackingStatus', {}, isVi ? 'TRACKING HIỆN TẠI' : 'CURRENT TRACKING');
+
+        // Apply updated palette: soft Warm Blush tint background (not pure-white!), subtle Warm Blush border
+        updateRecoveryCardTheme(true);
+
+        container.innerHTML = `
+            <div class="space-y-6 text-center py-4" data-tempo-ui="rmode-case2-welcome">
+                <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#8EA28F] text-white text-xs font-extrabold uppercase tracking-wider shadow-2xs">
+                    <span>🌱</span>
+                    <span>${escapeHTML(badge)}</span>
+                </div>
+
+                <div class="space-y-3 max-w-lg mx-auto">
+                    <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
+                        ${escapeHTML(title)}
+                    </h2>
+                    <p class="text-sm font-semibold text-[#484541]">
+                        ${escapeHTML(question)}
+                    </p>
+                </div>
+
+                <!-- Active tracking status card: Dusty Blue tint with subtle Warm Blush border -->
+                <div class="p-4 sm:p-5 rounded-2xl bg-[#93AFBC]/15 border border-[#ECC9BA] max-w-md mx-auto text-center space-y-1.5 shadow-2xs">
+                    <div class="inline-flex items-center space-x-1.5 text-xs font-extrabold uppercase tracking-wider text-[#355B6C]">
+                        <span>📊</span>
+                        <span>${escapeHTML(trackingStatusLabel)}</span>
+                    </div>
+                    <p class="text-xs sm:text-sm text-[#374151] leading-relaxed font-medium">
+                        ${escapeHTML(summary)}
+                    </p>
+                </div>
+
+                <!-- Actions -->
+                <div class="pt-2 flex flex-col items-center space-y-3 max-w-xs mx-auto">
+                    <button type="button" onclick="window.TempoRecoverySetup.openTrackingSystemReview()"
+                            class="btn-primary w-full px-6 py-3.5 rounded-xl font-bold text-sm shadow-xs inline-flex items-center justify-center space-x-2 transition cursor-pointer bg-[#8EA28F] hover:bg-[#7D917E] text-white border border-[#7D917E]/30">
+                        <span>${escapeHTML(btnYes)}</span>
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.handleCase2GoToDashboard()"
+                            class="w-full px-5 py-2.5 rounded-xl border border-[#93AFBC]/45 hover:bg-[#93AFBC]/25 text-[#355464] hover:text-[#18313F] text-xs sm:text-sm font-semibold transition cursor-pointer text-center"
+                            style="background-color: rgba(147, 175, 188, 0.15);">
+                        ${escapeHTML(btnNo)}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function handleCase2GoToDashboard() {
+        const uid = getUserId();
+        // Session guard: prevent duplicate modals within same Rmode session
+        sessionStorage.setItem(`tempo_rmode_session_welcomed_${uid}`, 'true');
+        close();
+        if (window.TempoMode && typeof window.TempoMode.renderRmodeHome === 'function') {
+            window.TempoMode.renderRmodeHome();
+        }
+    }
+
+    function openTrackingSystemReview() {
+        goToStage('case2_review');
+    }
+
+    // =========================================================================
+    // CASE 2: TRACKING SYSTEM REVIEW INTERFACE
+    // =========================================================================
+
+    function renderCase2ReviewSystem(container) {
+        const isVi = isViLocale();
+        const status = checkUserTrackingStatus();
+        const activeTrackers = status.activeTrackers;
+
+        const badge = t('modes.recovery.onboarding.badgeReview', {}, isVi ? 'CHẾ ĐỘ HỒI PHỤC · XEM LẠI HỆ THỐNG TRACKING' : 'RECOVERY MODE · TRACKING SYSTEM REVIEW');
+        const title = t('modes.recovery.onboarding.reviewTitle', {}, isVi ? 'Hệ thống tracking của bạn' : 'Your Tracking System');
+        const subtitle = t('modes.recovery.onboarding.reviewSubtitle', {}, isVi ? 'Xem lại các mục tracking hiện tại của bạn bên dưới. Bạn có thể giữ nguyên hệ thống hoặc điều chỉnh từng mục.' : 'Review your active tracking items below. You can keep your system as is, or adjust individual items.');
+
+        const optionABtn = t('modes.recovery.onboarding.optionABtn', {}, isVi ? 'Giữ nguyên hệ thống' : 'Keep current system');
+        const optionBBtn = t('modes.recovery.onboarding.optionBBtn', {}, isVi ? 'Điều chỉnh hệ thống' : 'Adjust my system');
+
+        const backLabel = t('modes.recovery.onboarding.back', {}, isVi ? '← Quay lại' : '← Back');
+        const dashboardLabel = t('modes.recovery.onboarding.backToDashboard', {}, isVi ? 'Quay lại Dashboard' : 'Return to Dashboard');
+
+        // Apply updated palette: soft Warm Blush tint background (not pure-white!), subtle Warm Blush border
+        updateRecoveryCardTheme(true);
+
+        // Trackers list HTML
+        let itemsListHTML = '';
+        if (activeTrackers.length > 0) {
+            itemsListHTML = activeTrackers.map(t => {
+                const dotColor = t.type_color || (t.category === 'stress_sign' ? '#D48366' : (t.category === 'supportive' ? '#8EA28F' : '#93AFBC'));
+                let methodDesc = t.check_method;
+                if (t.check_method === 'percentage') methodDesc = isVi ? 'Phần trăm (%)' : 'Percentage (%)';
+                else if (t.check_method === 'quantity') methodDesc = `${isVi ? 'Số lượng' : 'Quantity'} (${t.quantity_unit || (isVi ? 'đơn vị' : 'units')})`;
+                else if (t.check_method === 'scale') methodDesc = `${isVi ? 'Thang đo' : 'Scale'} 1–${t.scale_max || 5}`;
+                else if (t.check_method === 'options' || t.check_method === 'yes_no') {
+                    let optStr = '';
+                    if (t.options && Array.isArray(t.options) && t.options.length > 0) {
+                        optStr = t.options.join(', ');
+                    } else {
+                        const isSleep = (t.name || '').toLowerCase().includes('sleep') || (t.name || '').toLowerCase().includes('giấc ngủ');
+                        const defaultOpts = isSleep 
+                            ? (isVi ? ['Tốt', 'Chưa tốt'] : ['Good', 'Not good']) 
+                            : (isVi ? ['Có', 'Không'] : ['Yes', 'No']);
+                        optStr = defaultOpts.join(', ');
+                    }
+                    methodDesc = isVi ? `Tùy chọn (${optStr})` : `Options (${optStr})`;
+                }
+
+                let catLabel = t.type_label || (t.category === 'stress_sign' ? (isVi ? 'Dấu hiệu căng thẳng' : 'Sign of stress') : (t.category === 'supportive' ? (isVi ? 'Thói quen hỗ trợ' : 'Supportive habit') : (isVi ? 'Chung' : 'General')));
+
+                return `
+                    <div class="p-3 sm:p-3.5 rounded-2xl bg-white/80 border border-[#ECC9BA] flex items-center justify-between shadow-2xs transition">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-3 h-3 rounded-full inline-block shrink-0" style="background-color: ${dotColor};"></span>
+                            <div>
+                                <h4 class="text-xs sm:text-sm font-bold text-[#202124]">${escapeHTML(t.name)}</h4>
+                                <span class="text-[11px] text-[#5F5B58]">${escapeHTML(catLabel)} · ${escapeHTML(methodDesc)}</span>
+                            </div>
+                        </div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#8EA28F]/15 text-[#25422D] border border-[#8EA28F]/40 shrink-0">
+                            ● ${isVi ? 'Đang tracking' : 'Active'}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            itemsListHTML = `
+                <div class="p-5 rounded-2xl bg-white/80 border border-[#ECC9BA] text-center space-y-1">
+                    <p class="text-xs font-semibold text-[#202124]">${isVi ? 'Chưa có mục tracking nào đang hoạt động.' : 'No tracking items currently active.'}</p>
+                    <p class="text-[11px] text-[#5F5B58]">${isVi ? 'Lịch sử check-in và các mục trước đây trong kho lưu trữ vẫn được bảo toàn an toàn.' : 'Past check-in records and items remain safely preserved in archive.'}</p>
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="space-y-5 py-1" data-tempo-ui="rmode-case2-review">
+                <!-- Header -->
+                <div class="space-y-1.5 text-center max-w-lg mx-auto">
+                    <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#8EA28F] text-white text-xs font-extrabold uppercase tracking-wider shadow-2xs">
+                        <span>🌱</span>
+                        <span>${escapeHTML(badge)}</span>
+                    </div>
+                    <h2 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124] tracking-tight">
+                        ${escapeHTML(title)}
+                    </h2>
+                    <p class="text-xs sm:text-sm text-[#5F5B58] leading-relaxed">
+                        ${escapeHTML(subtitle)}
+                    </p>
+                </div>
+
+                <!-- Active Trackers List -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between text-xs font-extrabold tracking-wider text-[#355B6C] uppercase">
+                        <span>📊 ${escapeHTML(isVi ? `CÁC MỤC TRACKING HIỆN TẠI (${activeTrackers.length})` : `CURRENT TRACKING ITEMS (${activeTrackers.length})`)}</span>
+                    </div>
+                    <div class="space-y-2 max-h-[36vh] overflow-y-auto pr-1">
+                        ${itemsListHTML}
+                    </div>
+                </div>
+
+                <!-- Two Simplified Actions -->
+                <div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button type="button" onclick="window.TempoRecoverySetup.executeKeepCurrentSystem()"
+                            class="btn-primary w-full sm:flex-1 py-3 px-5 rounded-xl font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer bg-[#8EA28F] hover:bg-[#7D917E] text-white border border-[#7D917E]/30 text-center inline-flex items-center justify-center space-x-1.5">
+                        <span>✓</span>
+                        <span>${escapeHTML(optionABtn)}</span>
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.startAdjustmentFlowFromReview()"
+                            class="w-full sm:flex-1 py-3 px-5 rounded-xl border border-[#93AFBC]/45 hover:bg-[#93AFBC]/25 text-[#2D4D5C] hover:text-[#18313F] text-xs sm:text-sm font-semibold transition cursor-pointer text-center inline-flex items-center justify-center space-x-1.5"
+                            style="background-color: rgba(147, 175, 188, 0.15);">
+                        <span>⚙️</span>
+                        <span>${escapeHTML(optionBBtn)}</span>
+                    </button>
+                </div>
+
+                <!-- Footer Navigation -->
+                <div class="pt-3 border-t border-[#ECC9BA]/60 flex items-center justify-between text-xs">
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage('case2_welcome')"
+                            class="font-semibold text-[#5F5B58] hover:text-[#202124] transition cursor-pointer">
+                        ${escapeHTML(backLabel)}
+                    </button>
+                    <button type="button" onclick="window.TempoRecoverySetup.handleCase2GoToDashboard()"
+                            class="font-semibold text-[#5F5B58] hover:text-[#202124] transition cursor-pointer">
+                        ${escapeHTML(dashboardLabel)}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function executeKeepCurrentSystem() {
+        const uid = getUserId();
+        sessionStorage.setItem(`tempo_rmode_session_welcomed_${uid}`, 'true');
+        close();
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            const isVi = isViLocale();
+            window.TempoApp.showToast(isVi ? "✓ Đã giữ nguyên hệ thống tracking." : "✓ Current tracking system preserved.");
+        }
+        if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
+            window.TempoMode.openStrack('tool', { sourceContext: 'recovery' });
+        } else if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') {
+            window.TempoApp.navigateTo('stress-check');
+        }
+    }
+
+    function startAdjustmentFlowFromReview() {
+        startAdjustmentFlow();
     }
 
     // =========================================================================
@@ -1291,7 +1791,7 @@
                     <!-- Add Custom Input -->
                     <div class="pt-2 flex items-center space-x-2">
                         <input type="text" id="input-custom-looking-back" placeholder="Add something you noticed..."
-                               class="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#166545]">
+                               class="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                         <button type="button" onclick="window.TempoRecoverySetup.addCustomLookingBack()"
                                 class="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-xs font-bold text-[#202124] transition cursor-pointer">
                             + Add
@@ -1393,7 +1893,7 @@
                     <!-- Add Custom Input -->
                     <div class="pt-2 flex items-center space-x-2">
                         <input type="text" id="input-custom-what-helped" placeholder="Add something that helped you..."
-                               class="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#166545]">
+                               class="flex-1 px-3 py-2 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                         <button type="button" onclick="window.TempoRecoverySetup.addCustomWhatHelped()"
                                 class="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-xs font-bold text-[#202124] transition cursor-pointer">
                             + Add
@@ -1458,7 +1958,7 @@
         container.innerHTML = `
             <div class="space-y-5">
                 <div class="flex items-center justify-between text-xs text-[#6F6B68]">
-                    <span class="font-bold uppercase tracking-wider text-[#FF6B2C]">STEP 3 OF 5 · RECOVERY NOTE (OPTIONAL)</span>
+                    <span class="font-bold uppercase tracking-wider text-[#FF6B2C]">STEP 3 OF 5 · RECOVERY NOTICE (OPTIONAL)</span>
                     <button type="button" onclick="window.TempoRecoverySetup.goToStage(5)"
                             class="text-xs text-stone-400 hover:text-stone-700 transition cursor-pointer">
                         Skip this step
@@ -1466,18 +1966,21 @@
                 </div>
 
                 <div class="space-y-1">
-                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">Create your Recovery Note</h3>
+                    <h3 class="font-heading text-xl sm:text-2xl font-extrabold text-[#202124]">Create your Recovery Notice</h3>
                     <p class="text-xs text-[#6F6B68]">
                         Keep a few things you'd like Tempo to remind you of when things feel heavy.
                     </p>
                 </div>
 
                 <div class="space-y-5 pt-1">
-                    <!-- SECTION 1: WARNING SIGNS -->
-                    <div class="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-2.5">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#B83D08]">
-                            1. When I start getting overwhelmed...
-                        </span>
+                    <!-- SECTION 1: WARNING SIGNS (Warm Blush Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/80 space-y-3 shadow-2xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#ECC9BA] shrink-0"></span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-[#202124]">
+                                1. When I start getting overwhelmed...
+                            </span>
+                        </div>
                         <p class="text-[11px] text-stone-500">Suggested from what you noticed:</p>
                         <div class="space-y-1.5" id="note-warning-signs-list">
                             ${candidateWarningSigns.map(item => {
@@ -1485,7 +1988,7 @@
                                 return `
                                     <label class="flex items-center space-x-2.5 text-xs text-[#202124] cursor-pointer">
                                         <input type="checkbox" onchange="window.TempoRecoverySetup.toggleNoteItem('warning_sign', '${escapeHTML(item)}')"
-                                               ${isChecked ? 'checked' : ''} class="rounded text-[#B83D08] focus:ring-[#B83D08]">
+                                               ${isChecked ? 'checked' : ''} class="rounded text-[#8EA28F] focus:ring-[#8EA28F]">
                                         <span>${escapeHTML(item)}</span>
                                     </label>
                                 `;
@@ -1493,19 +1996,22 @@
                         </div>
                         <div class="flex items-center space-x-2 pt-1">
                             <input type="text" id="input-note-custom-sign" placeholder="+ Add my own warning sign..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#B83D08]">
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                             <button type="button" onclick="window.TempoRecoverySetup.addCustomNoteItem('warning_sign')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700 transition cursor-pointer">
-                                Add
+                                    class="px-3.5 py-1.5 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs">
+                                + Add
                             </button>
                         </div>
                     </div>
 
-                    <!-- SECTION 2: HELPERS -->
-                    <div class="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-2.5">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#166545]">
-                            2. Things that seem to help...
-                        </span>
+                    <!-- SECTION 2: HELPERS (Sage Green Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#8EA28F]/40 space-y-3 shadow-2xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#8EA28F] shrink-0"></span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-[#202124]">
+                                2. Things that seem to help...
+                            </span>
+                        </div>
                         <p class="text-[11px] text-stone-500">Suggested from what helped you:</p>
                         <div class="space-y-1.5" id="note-helpers-list">
                             ${candidateHelpers.map(item => {
@@ -1513,7 +2019,7 @@
                                 return `
                                     <label class="flex items-center space-x-2.5 text-xs text-[#202124] cursor-pointer">
                                         <input type="checkbox" onchange="window.TempoRecoverySetup.toggleNoteItem('helper', '${escapeHTML(item)}')"
-                                               ${isChecked ? 'checked' : ''} class="rounded text-[#166545] focus:ring-[#166545]">
+                                               ${isChecked ? 'checked' : ''} class="rounded text-[#8EA28F] focus:ring-[#8EA28F]">
                                         <span>${escapeHTML(item)}</span>
                                     </label>
                                 `;
@@ -1521,26 +2027,29 @@
                         </div>
                         <div class="flex items-center space-x-2 pt-1">
                             <input type="text" id="input-note-custom-helper" placeholder="+ Add my own helpful thing..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#166545]">
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                             <button type="button" onclick="window.TempoRecoverySetup.addCustomNoteItem('helper')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700 transition cursor-pointer">
-                                Add
+                                    class="px-3.5 py-1.5 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs">
+                                + Add
                             </button>
                         </div>
                     </div>
 
-                    <!-- SECTION 3: REMINDERS -->
-                    <div class="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-2.5">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#1E40AF]">
-                            3. What I want to remind myself...
-                        </span>
+                    <!-- SECTION 3: REMINDERS (Dusty Blue Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#93AFBC]/50 space-y-3 shadow-2xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#93AFBC] shrink-0"></span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-[#202124]">
+                                3. What I want to remind myself...
+                            </span>
+                        </div>
                         <div class="space-y-1.5">
                             ${GENTLE_REMINDER_SUGGESTIONS.map(rem => {
                                 const isChecked = setupDraft.noteReminders.includes(rem);
                                 return `
                                     <label class="flex items-center space-x-2.5 text-xs text-[#202124] cursor-pointer">
                                         <input type="checkbox" onchange="window.TempoRecoverySetup.toggleNoteItem('reminder', '${escapeHTML(rem)}')"
-                                               ${isChecked ? 'checked' : ''} class="rounded text-[#1E40AF] focus:ring-[#1E40AF]">
+                                               ${isChecked ? 'checked' : ''} class="rounded text-[#8EA28F] focus:ring-[#8EA28F]">
                                         <span>"${escapeHTML(rem)}"</span>
                                     </label>
                                 `;
@@ -1548,19 +2057,22 @@
                         </div>
                         <div class="flex items-center space-x-2 pt-1">
                             <input type="text" id="input-note-custom-reminder" placeholder="+ Write my own reminder..."
-                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#1E40AF]">
+                                   class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                             <button type="button" onclick="window.TempoRecoverySetup.addCustomNoteItem('reminder')"
-                                    class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700 transition cursor-pointer">
-                                Add
+                                    class="px-3.5 py-1.5 rounded-xl bg-white border border-[#EAE4DF] hover:border-[#8EA28F] text-xs font-bold text-[#202124] hover:bg-[#8EA28F]/10 transition cursor-pointer shadow-2xs">
+                                + Add
                             </button>
                         </div>
                     </div>
 
-                    <!-- SECTION 4: SUPPORT PEOPLE -->
-                    <div class="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-2.5">
-                        <span class="text-xs font-extrabold uppercase tracking-wider text-[#7C3AED]">
-                            4. People I can reach out to...
-                        </span>
+                    <!-- SECTION 4: SUPPORT PEOPLE (Warm Blush Accent) -->
+                    <div class="p-4 rounded-2xl bg-[#FFF9F4] border border-[#ECC9BA]/60 space-y-3 shadow-2xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block bg-[#ECC9BA] shrink-0"></span>
+                            <span class="text-xs font-bold uppercase tracking-wider text-[#202124]">
+                                4. People I can reach out to...
+                            </span>
+                        </div>
                         <p class="text-[11px] text-stone-500">Add someone you may want to reach out to when things feel like a lot:</p>
                         ${setupDraft.noteSupportPeople.length > 0 ? `
                             <div class="space-y-1">
@@ -1574,10 +2086,10 @@
                         ` : ''}
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                             <input type="text" id="input-setup-person-name" placeholder="Name (e.g. Nhung)"
-                                   class="px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#7C3AED]">
+                                   class="px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                             <div class="flex items-center space-x-2">
                                 <input type="text" id="input-setup-person-rel" placeholder="Relationship (e.g. Friend)"
-                                       class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#7C3AED]">
+                                       class="flex-1 px-3 py-1.5 rounded-xl border border-stone-200 text-xs text-[#202124] focus:outline-none focus:border-[#8EA28F]">
                                 <button type="button" onclick="window.TempoRecoverySetup.addSupportPersonFromSetup()"
                                         class="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700 transition cursor-pointer">
                                     + Add
@@ -1743,9 +2255,32 @@
         }
         saveDraftToStorage();
 
+        if (adjustmentDraft && Array.isArray(adjustmentDraft.trackers)) {
+            const existingIdx = adjustmentDraft.trackers.findIndex(t => t.id === savedTracker.id);
+            if (existingIdx >= 0) {
+                adjustmentDraft.trackers[existingIdx] = {
+                    ...adjustmentDraft.trackers[existingIdx],
+                    ...savedTracker,
+                    isKept: true
+                };
+            } else {
+                adjustmentDraft.trackers.push({
+                    ...savedTracker,
+                    isKept: true,
+                    isNew: true,
+                    originalMethod: savedTracker.check_method,
+                    originalName: savedTracker.name,
+                    originalUnit: savedTracker.quantity_unit || '',
+                    wasEdited: false
+                });
+            }
+        }
+
         const container = document.getElementById('recovery-setup-stage-container');
         if (container) {
-            if (setupDraft.currentStage === 5) {
+            if (setupDraft.currentStage === 'adjust_trackers') {
+                renderStageAdjustTrackers(container);
+            } else if (setupDraft.currentStage === 5) {
                 renderStage5BuildSelfCheck(container);
             } else if (setupDraft.currentStage === 6) {
                 renderStage6FirstSelfCheck(container);
@@ -1922,7 +2457,7 @@
 
                 <!-- Custom Add Button -->
                 <div class="pt-1 flex items-center space-x-3">
-                    <button type="button" onclick="window.TempoRecoverySelfCheck.openTrackerModal()"
+                    <button type="button" onclick="if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') { window.TempoSelfCheckWorkspace.openAddTracking(); } else if (window.TempoRecoverySelfCheck && typeof window.TempoRecoverySelfCheck.openTrackerModal === 'function') { window.TempoRecoverySelfCheck.openTrackerModal(); }"
                             class="px-4 py-2 rounded-xl border border-stone-300 hover:border-stone-400 text-xs font-bold text-[#202124] transition cursor-pointer flex items-center space-x-1.5">
                         <span>+ Add custom tracker</span>
                     </button>
@@ -1930,18 +2465,18 @@
 
                 <!-- Footer Nav -->
                 <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
-                    <button type="button" onclick="window.TempoRecoverySetup.goToStage(4)"
+                    <button type="button" onclick="window.TempoRecoverySetup.goToStage(setupDraft.lookingBackSelections.length > 0 ? 4 : 'case1_welcome')"
                             class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer">
                         ← Back
                     </button>
-                    <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-2.5">
                         <button type="button" onclick="window.TempoRecoverySetup.goToStage(6)"
                                 class="text-xs font-semibold text-stone-400 hover:text-stone-700 transition cursor-pointer">
-                            ${activeTrackers.length === 0 ? 'Skip for now' : 'Continue'}
+                            ${activeTrackers.length === 0 ? 'Skip for now' : 'Continue to First Check-in →'}
                         </button>
-                        <button type="button" onclick="window.TempoRecoverySetup.goToStage(6)"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
-                            <span>Continue</span>
+                        <button type="button" onclick="window.TempoRecoverySetup.saveNewUserSetupAndGoToSelfCheck()"
+                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer bg-[#166545] hover:bg-[#0E4A32] text-white">
+                            <span>Save & go to Self-check</span>
                             <span>→</span>
                         </button>
                     </div>
@@ -2304,24 +2839,52 @@
         init();
     }
 
+    // Register language change listener for instant modal re-render on locale switch
+    if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+        window.TempoI18n.onLanguageChange(() => {
+            const modal = document.getElementById('modal-recovery-setup');
+            if (modal && !modal.classList.contains('hidden') && setupDraft) {
+                goToStage(setupDraft.currentStage || 1);
+            }
+        });
+    }
+
     window.TempoRecoverySetup = {
         init,
+        isViLocale,
+        t,
         isIntroSeen,
         markIntroSeen,
         isSetupCompleted,
         hasCompletedRmodeSetup,
         markSetupCompleted,
         resetSetupState,
+        checkUserTrackingStatus,
         shouldShowFirstTimeWelcome,
         isReturningUser,
+        handleRmodeEntry,
+        handleModalClose,
+        renderCase1Welcome,
+        handleCase1Later,
+        startNewUserSetupFlow,
+        saveNewUserSetupAndGoToSelfCheck,
+        renderCase2Welcome,
+        handleCase2GoToDashboard,
+        openTrackingSystemReview,
+        renderCase2ReviewSystem,
+        executeKeepCurrentSystem,
+        startAdjustmentFlowFromReview,
         startAdjustmentFlow,
+        getAdjustmentDraft: () => adjustmentDraft,
         promptCreateNewSetup,
         confirmCreateNewSetup,
         toggleTrackerKept,
         removeNewTracker,
         openEditTrackerInAdjustment,
         closeTrackerEditInAdjustment,
+        handleAdjustBack,
         saveTrackerEditInAdjustment,
+        openAddTrackerInAdjustment,
         promptAddNewTrackerInAdjustment,
         onAdjustmentMethodSelectChange,
         addAdjustmentNoteItem,

@@ -55,14 +55,50 @@ window.TempoUrmodeFlow = (function() {
             .replace(/'/g, '&#039;');
     }
 
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        try {
+            const saved = localStorage.getItem('tempo_language');
+            if (saved) return saved === 'vi';
+        } catch (e) {}
+        return false;
+    }
+
     // Helper: Format duration minutes into human-readable label
     function formatDuration(mins) {
-        if (!mins || mins <= 0) return '30 min';
+        if (!mins || mins <= 0) mins = 30;
         const h = Math.floor(mins / 60);
         const m = mins % 60;
+        if (isViLocale()) {
+            if (h > 0 && m > 0) return `${h} giờ ${m} phút`;
+            if (h > 0) return `${h} giờ`;
+            return `${m} phút`;
+        }
         if (h > 0 && m > 0) return `${h} hr ${m} min`;
         if (h > 0) return `${h} hr`;
         return `${m} min`;
+    }
+
+    function formatTaskDuration(t) {
+        let mins = 0;
+        if (typeof t.durationMinutes === 'number' && t.durationMinutes > 0) {
+            mins = t.durationMinutes;
+        } else if (typeof t.duration === 'number' && t.duration > 0) {
+            mins = t.duration;
+        } else if (typeof t.estimateMinutes === 'number' && t.estimateMinutes > 0) {
+            mins = t.estimateMinutes;
+        } else if (typeof t.durationLabel === 'string') {
+            const str = t.durationLabel.trim().toLowerCase();
+            const hMatch = str.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hour|giờ)/);
+            const mMatch = str.match(/(\d+)\s*(?:m|min|minute|phút)/);
+            if (hMatch) mins += parseFloat(hMatch[1]) * 60;
+            if (mMatch) mins += parseInt(mMatch[1], 10);
+            if (mins > 0) mins = Math.round(mins);
+        }
+        if (!mins || mins <= 0) mins = 30;
+        return formatDuration(mins);
     }
 
     // Helper: Human deadline
@@ -156,36 +192,193 @@ window.TempoUrmodeFlow = (function() {
         return items;
     }
 
-    function isTaskOverdue(task, plan) {
-        if (!task || task.completed === true) return false;
+    function getLocalTodayISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTodayISO === 'function') {
+            return window.TempoI18n.getLocalTodayISO();
+        }
+        try {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (e) {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+    }
 
-        const now = new Date();
+    function getLocalTomorrowISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTomorrowISO === 'function') {
+            return window.TempoI18n.getLocalTomorrowISO();
+        }
+        const todayStr = getLocalTodayISO();
+        const parts = todayStr.split('-').map(Number);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            const nextDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1));
+            const pad = n => String(n).padStart(2, '0');
+            return `${nextDate.getUTCFullYear()}-${pad(nextDate.getUTCMonth() + 1)}-${pad(nextDate.getUTCDate())}`;
+        }
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
         const pad = n => String(n).padStart(2, '0');
-        const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-        const currentTimeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
 
-        // 1. Fixed deadline passed
-        if (task.hasDeadline && task.deadlineDate) {
-            if (task.deadlineDate < todayStr) return true;
-            if (task.deadlineDate === todayStr && task.deadlineTime && task.deadlineTime < currentTimeStr) {
-                return true;
+    function getLocalCurrentTimeStr() {
+        try {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(new Date());
+        } catch (e) {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+    }
+
+    function formatScheduledDateLabel(dateStr, isVi = false) {
+        if (window.TempoI18n && typeof window.TempoI18n.formatScheduledDateLabel === 'function') {
+            return window.TempoI18n.formatScheduledDateLabel(dateStr, isVi);
+        }
+        if (!dateStr || typeof dateStr !== 'string') return '';
+        const cleanDate = dateStr.split(/[T ]/)[0].trim();
+        if (!cleanDate || cleanDate === 'unscheduled') return '';
+
+        const isViBool = (typeof isVi === 'boolean') ? isVi : (isVi === 'vi');
+        const targetLang = isViBool ? 'vi' : 'en';
+
+        let calDate = '';
+        if (window.TempoI18n && typeof window.TempoI18n.formatCalendarDate === 'function') {
+            calDate = window.TempoI18n.formatCalendarDate(cleanDate, targetLang);
+        } else {
+            const parts = cleanDate.split('-');
+            if (parts.length === 3) {
+                const pad = n => String(n).padStart(2, '0');
+                const day = pad(parts[2]);
+                const month = pad(parts[1]);
+                const year = parts[0];
+                const enMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const mIdx = parseInt(parts[1], 10) - 1;
+                calDate = isViBool ? `${day}/${month}/${year}` : `${enMonths[mIdx] || ''} ${day}, ${year}`;
+            } else {
+                calDate = cleanDate;
             }
         }
 
-        // 2. Scheduled date in plan passed without completion
-        if (task._dayDate && task._dayDate < todayStr) {
-            return true;
+        const todayStr = getLocalTodayISO();
+        const tomorrowStr = getLocalTomorrowISO();
+
+        if (cleanDate === todayStr) {
+            return isViBool ? `Hôm nay · ${calDate}` : `Today · ${calDate}`;
+        }
+        if (cleanDate === tomorrowStr) {
+            return isViBool ? `Ngày mai · ${calDate}` : `Tomorrow · ${calDate}`;
         }
 
-        // Check plan.plannedTasks matching this task
-        if (plan && Array.isArray(plan.plannedTasks)) {
-            const pt = plan.plannedTasks.find(p => p.task && p.task.id === task.id);
-            if (pt && pt.dayDate && pt.dayDate < todayStr) {
+        return calDate;
+    }
+
+    function isTaskOverdue(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task || task.completed === true || task.isCompleted === true || task.status === 'completed') return false;
+
+        const hasDeadline = task.hasDeadline !== false && Boolean(task.deadlineDate || task.deadline);
+        if (!hasDeadline) return false;
+
+        const deadlineDate = task.deadlineDate || (typeof task.deadline === 'string' ? task.deadline.split(/[T ]/)[0] : null);
+        if (!deadlineDate) return false;
+
+        const todayStr = getLocalTodayISO();
+        if (deadlineDate < todayStr) return true;
+        if (deadlineDate > todayStr) return false;
+
+        // Deadline is today -> check time
+        const deadlineTime = task.deadlineTime || (typeof task.deadline === 'string' && task.deadline.includes(' ') ? task.deadline.split(' ')[1] : null);
+        if (!deadlineTime) return false;
+
+        const currentTimeStr = getLocalCurrentTimeStr();
+        return deadlineTime.substring(0, 5) < currentTimeStr.substring(0, 5);
+    }
+
+    function isTaskMissedSchedule(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task || task.completed === true || task.isCompleted === true || task.status === 'completed') return false;
+        if (isTaskOverdue(task, plan)) return false;
+
+        // Resolve scheduled date and time
+        let dayDate = null;
+        let endTime = null;
+
+        if (taskOrPt && taskOrPt.dayDate) {
+            dayDate = taskOrPt.dayDate;
+            endTime = taskOrPt.endTime || taskOrPt.scheduledEndTime;
+        } else if (task._dayDate || task.dayDate || task.scheduledDate) {
+            dayDate = task._dayDate || task.dayDate || task.scheduledDate;
+            endTime = task._endTime || task.endTime;
+        } else if (plan && Array.isArray(plan.plannedTasks)) {
+            const pt = plan.plannedTasks.find(p => p.task && (p.task.id === task.id || p.id === task.id));
+            if (pt && pt.dayDate) {
+                dayDate = pt.dayDate;
+                endTime = pt.endTime || pt.scheduledEndTime;
+            }
+        }
+
+        if (!dayDate || dayDate === 'unscheduled') return false;
+
+        const todayStr = getLocalTodayISO();
+        if (dayDate < todayStr) return true;
+        if (dayDate > todayStr) return false;
+
+        // Today: check if scheduled end time has passed
+        if (endTime) {
+            let time24 = endTime;
+            if (typeof endTime === 'string') {
+                const lower = endTime.toLowerCase().trim();
+                if (lower.includes('am') || lower.includes('pm')) {
+                    const isPm = lower.includes('pm');
+                    const clean = lower.replace(/am|pm/g, '').trim();
+                    const [hStr, mStr] = clean.split(':');
+                    let h = parseInt(hStr, 10);
+                    const m = mStr ? mStr.padStart(2, '0') : '00';
+                    if (isPm && h < 12) h += 12;
+                    if (!isPm && h === 12) h = 0;
+                    time24 = `${String(h).padStart(2, '0')}:${m}`;
+                }
+            }
+            const currentTimeStr = getLocalCurrentTimeStr();
+            if (time24.substring(0, 5) < currentTimeStr.substring(0, 5)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    function getTaskState(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task) return 'UNKNOWN';
+        if (task.completed === true || task.isCompleted === true || task.status === 'completed') {
+            return 'Done';
+        }
+        if (isTaskOverdue(taskOrPt, plan)) {
+            return 'Overdue';
+        }
+        if (isTaskMissedSchedule(taskOrPt, plan)) {
+            return 'Missed Schedule';
+        }
+        const dayDate = (taskOrPt && taskOrPt.dayDate) || task.dayDate || task._dayDate || task.scheduledDate;
+        const todayStr = getLocalTodayISO();
+        if (dayDate) {
+            if (dayDate === todayStr) return 'Today';
+            if (dayDate > todayStr) return 'Upcoming';
+        }
+        return 'Upcoming';
     }
 
     function determinePlanCase() {
@@ -247,6 +440,7 @@ window.TempoUrmodeFlow = (function() {
         modal.classList.add('hidden');
         document.body.classList.remove('overflow-hidden');
         activeModalView = null;
+        currentResetCase = null;
         isSubmitting = false;
         aiHelpLoading = false;
         aiHelpError = null;
@@ -286,27 +480,76 @@ window.TempoUrmodeFlow = (function() {
     // 1. RESET POPUP (On Explicit Entry)
     // -------------------------------------------------------------------------
 
-    function showResetPopup() {
-        const caseType = determinePlanCase();
+    let currentResetCase = null;
+
+    function showResetPopup(forcedCase) {
+        const caseType = forcedCase || currentResetCase || determinePlanCase();
+        currentResetCase = caseType;
         activeModalView = 'reset';
 
-        let badgeText = 'GROUNDED START';
-        let titleText = 'Take a moment to reset?';
-        let bodyText = "Urgent situations feel much lighter when you pause first. Would you like a 2-minute reset to calm your nervous system before organizing your tasks?";
-        let primaryBtnText = 'Yes, take a quick reset';
-        let secondaryBtnText = 'Build my plan';
+        const isVi = isViLocale();
+
+        let badgeText = '';
+        let titleText = '';
+        let bodyText = '';
+        let primaryBtnText = window.t
+            ? window.t('workspace.yesTakeQuickResetBtn', {}, isVi ? 'Có, tôi muốn lấy lại bình tĩnh một chút →' : 'Yes, take a quick reset →')
+            : (isVi ? 'Có, tôi muốn lấy lại bình tĩnh một chút →' : 'Yes, take a quick reset →');
+        let secondaryBtnText = '';
 
         if (caseType === 'PLAN_NO_OVERDUE') {
-            badgeText = 'WORKING PLAN ACTIVE';
-            titleText = 'Review and reset your Working Plan';
-            bodyText = 'You already have an active Working Plan saved. Take a 2-minute reset to ground your focus, or review and keep your existing plan.';
-            secondaryBtnText = 'Review your plan';
+            badgeText = window.t
+                ? window.t('workspace.workingPlanActiveBadge', {}, isVi ? 'PLAN ĐANG HOẠT ĐỘNG' : 'WORKING PLAN ACTIVE')
+                : (isVi ? 'PLAN ĐANG HOẠT ĐỘNG' : 'WORKING PLAN ACTIVE');
+            titleText = window.t
+                ? window.t('workspace.reviewAndResetWorkingPlanTitle', {}, isVi ? 'Xem lại và điều chỉnh plan của bạn' : 'Review and reset your Working Plan')
+                : (isVi ? 'Xem lại và điều chỉnh plan của bạn' : 'Review and reset your Working Plan');
+            bodyText = window.t
+                ? window.t('workspace.workingPlanActiveBody', {}, isVi ? 'Bạn đã có một plan đang hoạt động. Hãy dành 2 phút tập thở để lấy lại sự tập trung, hoặc xem lại và tiếp tục kế hoạch hiện tại của bạn.' : 'You already have an active Working Plan saved. Take a 2-minute reset to ground your focus, or review and keep your existing plan.')
+                : (isVi ? 'Bạn đã có một plan đang hoạt động. Hãy dành 2 phút tập thở để lấy lại sự tập trung, hoặc xem lại và tiếp tục kế hoạch hiện tại của bạn.' : 'You already have an active Working Plan saved. Take a 2-minute reset to ground your focus, or review and keep your existing plan.');
+            secondaryBtnText = window.t
+                ? window.t('workspace.reviewYourPlanBtn', {}, isVi ? 'Xem lại plan' : 'Review your plan')
+                : (isVi ? 'Xem lại plan' : 'Review your plan');
         } else if (caseType === 'PLAN_WITH_OVERDUE') {
-            badgeText = 'PLAN UPDATE NEEDED';
-            titleText = 'Review and reset your Working Plan';
-            bodyText = 'You have tasks with overdue deadlines that need your attention. Take a quick reset to calm down, or review your tasks and adjust your schedule.';
-            secondaryBtnText = 'Review your plan';
+            badgeText = window.t
+                ? window.t('workspace.planUpdateNeededBadge', {}, isVi ? 'PLAN CẦN ĐƯỢC CẬP NHẬT' : 'PLAN UPDATE NEEDED')
+                : (isVi ? 'PLAN CẦN ĐƯỢC CẬP NHẬT' : 'PLAN UPDATE NEEDED');
+            titleText = window.t
+                ? window.t('workspace.reviewAndResetWorkingPlanTitle', {}, isVi ? 'Xem lại và điều chỉnh plan của bạn' : 'Review and reset your Working Plan')
+                : (isVi ? 'Xem lại và điều chỉnh plan của bạn' : 'Review and reset your Working Plan');
+            bodyText = window.t
+                ? window.t('workspace.planUpdateNeededBody', {}, isVi ? 'Bạn có một số task đã quá deadline cần được xem lại. Hãy dành chút thời gian để lấy lại bình tĩnh, hoặc xem lại các task và điều chỉnh lịch trình của mình nhé.' : 'You have tasks with overdue deadlines that need your attention. Take a quick reset to calm down, or review your tasks and adjust your schedule.')
+                : (isVi ? 'Bạn có một số task đã quá deadline cần được xem lại. Hãy dành chút thời gian để lấy lại bình tĩnh, hoặc xem lại các task và điều chỉnh lịch trình của mình nhé.' : 'You have tasks with overdue deadlines that need your attention. Take a quick reset to calm down, or review your tasks and adjust your schedule.');
+            secondaryBtnText = window.t
+                ? window.t('workspace.reviewYourPlanBtn', {}, isVi ? 'Xem lại plan' : 'Review your plan')
+                : (isVi ? 'Xem lại plan' : 'Review your plan');
+        } else {
+            // NO_PLAN
+            badgeText = window.t
+                ? window.t('workspace.groundedStartBadge', {}, isVi ? 'KHỞI ĐẦU ĐIỀM TĨNH' : 'GROUNDED START')
+                : (isVi ? 'KHỞI ĐẦU ĐIỀM TĨNH' : 'GROUNDED START');
+            titleText = window.t
+                ? window.t('workspace.groundedStartTitle', {}, isVi ? 'Dành một chút thời gian để lấy lại bình tĩnh?' : 'Take a moment to reset?')
+                : (isVi ? 'Dành một chút thời gian để lấy lại bình tĩnh?' : 'Take a moment to reset?');
+            bodyText = window.t
+                ? window.t('workspace.groundedStartBody', {}, isVi ? 'Những tình huống khẩn cấp sẽ nhẹ nhàng hơn rất nhiều khi bạn tạm dừng lại một chút. Bạn có muốn dành 2 phút tập thở để làm dịu thần kinh trước khi sắp xếp các task không?' : 'Urgent situations feel much lighter when you pause first. Would you like a 2-minute reset to calm your nervous system before organizing your tasks?')
+                : (isVi ? 'Những tình huống khẩn cấp sẽ nhẹ nhàng hơn rất nhiều khi bạn tạm dừng lại một chút. Bạn có muốn dành 2 phút tập thở để làm dịu thần kinh trước khi sắp xếp các task không?' : 'Urgent situations feel much lighter when you pause first. Would you like a 2-minute reset to calm your nervous system before organizing your tasks?');
+            secondaryBtnText = window.t
+                ? window.t('workspace.buildMyPlanBtn', {}, isVi ? 'Lên plan của tôi' : 'Build my plan')
+                : (isVi ? 'Lên plan của tôi' : 'Build my plan');
         }
+
+        const featureBoxBreathing = window.t
+            ? window.t('workspace.boxBreathingFeature', {}, isVi ? 'Tập thở trong 2 phút' : '2 min box breathing')
+            : (isVi ? 'Tập thở trong 2 phút' : '2 min box breathing');
+        const featureGroundsFocus = window.t
+            ? window.t('workspace.groundsFocusFeature', {}, isVi ? 'Giúp bạn lấy lại sự tập trung' : 'Grounds focus')
+            : (isVi ? 'Giúp bạn lấy lại sự tập trung' : 'Grounds focus');
+        const featureNoRush = window.t
+            ? window.t('workspace.noRushFeature', {}, isVi ? 'Không cần vội' : 'No rush')
+            : (isVi ? 'Không cần vội' : 'No rush');
+
+        const primaryBtnFormatted = primaryBtnText.endsWith('→') ? primaryBtnText : (primaryBtnText + ' →');
 
         const html = `
             <!-- Header -->
@@ -320,9 +563,9 @@ window.TempoUrmodeFlow = (function() {
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.handleResetClose()"
-                        aria-label="Close dialog"
+                        aria-label="${window.t ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close dialog') : (isVi ? 'Đóng' : 'Close dialog')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
-                        title="Close and stay in Urmode">
+                        title="${window.t ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close dialog') : (isVi ? 'Đóng' : 'Close dialog')}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -339,11 +582,11 @@ window.TempoUrmodeFlow = (function() {
                         ${bodyText}
                     </p>
                     <div class="text-xs text-[#8C8782] flex items-center justify-center sm:justify-start gap-2 pt-1">
-                        <span>🌱 2 min box breathing</span>
+                        <span>🌱 ${featureBoxBreathing}</span>
                         <span>•</span>
-                        <span>Grounds focus</span>
+                        <span>${featureGroundsFocus}</span>
                         <span>•</span>
-                        <span>No rush</span>
+                        <span>${featureNoRush}</span>
                     </div>
                 </div>
             </div>
@@ -356,7 +599,7 @@ window.TempoUrmodeFlow = (function() {
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.handleResetYes()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                    <span>${primaryBtnText} →</span>
+                    <span>${primaryBtnFormatted}</span>
                 </button>
             </div>
         `;
@@ -400,20 +643,44 @@ window.TempoUrmodeFlow = (function() {
     function showAreYouReadyPopup() {
         activeModalView = 'are_you_ready';
         const caseType = determinePlanCase();
+        const isVi = isViLocale();
+
+        const badgeText = window.t
+            ? window.t('workspace.groundedCheckpointBadge', {}, isVi ? 'ĐIỂM DỪNG ĐIỀM TĨNH' : 'GROUNDED CHECKPOINT')
+            : (isVi ? 'ĐIỂM DỪNG ĐIỀM TĨNH' : 'GROUNDED CHECKPOINT');
+        const titleText = window.t
+            ? window.t('workspace.areYouReadyTitle', {}, isVi ? 'Bạn đã sẵn sàng chưa?' : 'Are you ready?')
+            : (isVi ? 'Bạn đã sẵn sàng chưa?' : 'Are you ready?');
+        const bodyText = window.t
+            ? window.t('workspace.areYouReadyBody', {}, isVi ? 'Bạn vừa dành thời gian để thở và lấy lại bình tĩnh. Bạn cảm thấy thế nào về việc bắt đầu với Kế hoạch Làm việc bây giờ?' : 'You took a moment to breathe and reset. How do you feel about moving into your Working Plan now?')
+            : (isVi ? 'Bạn vừa dành thời gian để thở và lấy lại bình tĩnh. Bạn cảm thấy thế nào về việc bắt đầu với Kế hoạch Làm việc bây giờ?' : 'You took a moment to breathe and reset. How do you feel about moving into your Working Plan now?');
+        const subText = window.t
+            ? window.t('workspace.areYouReadySub', {}, isVi ? 'Nếu bạn vẫn cảm thấy quá tải, bạn có thể quay lại nghỉ ngơi thêm bất cứ lúc nào.' : 'If you still feel overwhelmed, you can return to take another pause or rest anytime.')
+            : (isVi ? 'Nếu bạn vẫn cảm thấy quá tải, bạn có thể quay lại nghỉ ngơi thêm bất cứ lúc nào.' : 'If you still feel overwhelmed, you can return to take another pause or rest anytime.');
+        const notYetBtnText = window.t
+            ? window.t('workspace.notYetReturnResetBtn', {}, isVi ? 'Chưa, quay lại tập thở' : 'Not yet, return to reset')
+            : (isVi ? 'Chưa, quay lại tập thở' : 'Not yet, return to reset');
+        const readyBtnText = window.t
+            ? window.t('workspace.yesImReadyBtn', {}, isVi ? 'Có, tôi đã sẵn sàng →' : "Yes, I'm ready →")
+            : (isVi ? 'Có, tôi đã sẵn sàng →' : "Yes, I'm ready →");
+        const closeBtnText = window.t
+            ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close dialog')
+            : (isVi ? 'Đóng' : 'Close dialog');
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">
-                        GROUNDED CHECKPOINT
+                        ${badgeText}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Are you ready?
+                        ${titleText}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
-                        aria-label="Close dialog"
-                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
+                        aria-label="${escapeHTML(closeBtnText)}"
+                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
+                        title="${escapeHTML(closeBtnText)}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -422,21 +689,21 @@ window.TempoUrmodeFlow = (function() {
 
             <div class="py-3 text-center sm:text-left space-y-2">
                 <p class="text-sm sm:text-base text-[#484541] leading-relaxed">
-                    You took a moment to breathe and reset. How do you feel about moving into your Working Plan now?
+                    ${bodyText}
                 </p>
                 <p class="text-xs text-[#8C8782]">
-                    If you still feel overwhelmed, you can return to take another pause or rest anytime.
+                    ${subText}
                 </p>
             </div>
 
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-end gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.showResetPopup()"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs inline-flex items-center justify-center transition cursor-pointer">
-                    Not yet, return to reset
+                    ${notYetBtnText}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.handleAreYouReadyYes()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                    <span>Yes, I'm ready →</span>
+                    <span>${readyBtnText}</span>
                 </button>
             </div>
         `;
@@ -691,25 +958,91 @@ window.TempoUrmodeFlow = (function() {
     // 5. REVIEW SUMMARY POPUP (Existing Working Plan)
     // -------------------------------------------------------------------------
 
+    function formatExecutionBadge(rawBadge, isVi) {
+        if (!rawBadge) return isVi ? 'TIẾP THEO' : 'UP NEXT';
+        const normalized = String(rawBadge).trim().toUpperCase();
+        if (normalized === 'UP NEXT') {
+            return window.t
+                ? window.t('workspace.badgeUpNext', {}, isVi ? 'TIẾP THEO' : 'UP NEXT')
+                : (isVi ? 'TIẾP THEO' : 'UP NEXT');
+        }
+        if (normalized === 'THEN') {
+            return window.t
+                ? window.t('workspace.badgeThen', {}, isVi ? 'SAU ĐÓ' : 'THEN')
+                : (isVi ? 'SAU ĐÓ' : 'THEN');
+        }
+        if (normalized === 'LATER') {
+            return window.t
+                ? window.t('workspace.badgeLater', {}, isVi ? 'ĐỂ SAU' : 'LATER')
+                : (isVi ? 'ĐỂ SAU' : 'LATER');
+        }
+        if (normalized === 'OVERDUE') {
+            return window.t
+                ? window.t('workspace.badgeOverdue', {}, isVi ? 'QUÁ HẠN' : 'OVERDUE')
+                : (isVi ? 'QUÁ HẠN' : 'OVERDUE');
+        }
+        return rawBadge;
+    }
+
     function showReviewSummaryPopup() {
         activeModalView = 'review_summary';
+        const isVi = isViLocale();
         const plan = getActiveWorkingPlan();
         const tasks = getAllPlanTasks(plan);
         const overdueCount = tasks.filter(t => isTaskOverdue(t, plan)).length;
+
+        const badgeText = window.t
+            ? window.t('workspace.workingPlanReviewBadge', {}, isVi ? 'XEM LẠI PLAN' : 'WORKING PLAN REVIEW')
+            : (isVi ? 'XEM LẠI PLAN' : 'WORKING PLAN REVIEW');
+        const titleText = window.t
+            ? window.t('workspace.workingPlanSummaryTitle', {}, isVi ? 'Tổng quan kế hoạch làm việc' : 'Your Working Plan Summary')
+            : (isVi ? 'Tổng quan kế hoạch làm việc' : 'Your Working Plan Summary');
+        const closeBtnText = window.t
+            ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close dialog')
+            : (isVi ? 'Đóng' : 'Close dialog');
+
+        const overdueCountText = window.t
+            ? (isVi
+                ? window.t('workspace.tasksOverdueCount', { count: overdueCount }, `${overdueCount} task đã quá hạn:`)
+                : (overdueCount === 1
+                    ? window.t('workspace.taskOverdueSingleCount', { count: overdueCount }, '1 task overdue:')
+                    : window.t('workspace.tasksOverdueCount', { count: overdueCount }, `${overdueCount} tasks overdue:`)))
+            : (isVi ? `${overdueCount} task đã quá hạn:` : (overdueCount === 1 ? '1 task overdue:' : `${overdueCount} tasks overdue:`));
+
+        const overdueDescText = window.t
+            ? window.t('workspace.overdueWarningDesc', {}, isVi ? 'Một số task đã quá ngày lên lịch hoặc deadline. Bạn có thể giữ lại hoặc điều chỉnh lịch trình.' : 'Some tasks passed their planned date or deadline. You can keep them or adjust your schedule.')
+            : (isVi ? 'Một số task đã quá ngày lên lịch hoặc deadline. Bạn có thể giữ lại hoặc điều chỉnh lịch trình.' : 'Some tasks passed their planned date or deadline. You can keep them or adjust your schedule.');
+
+        const overdueBadgeText = window.t
+            ? window.t('workspace.badgeOverdue', {}, isVi ? 'QUÁ HẠN' : 'OVERDUE')
+            : (isVi ? 'QUÁ HẠN' : 'OVERDUE');
+
+        const noDeadlineText = window.t
+            ? window.t('workspace.noFixedDeadlineLabel', {}, isVi ? 'Chưa có deadline' : 'No fixed deadline')
+            : (isVi ? 'Chưa có deadline' : 'No fixed deadline');
+
+        const adjustPlanBtnText = window.t
+            ? window.t('workspace.adjustMyPlanBtn', {}, isVi ? 'Điều chỉnh plan' : 'Adjust my plan')
+            : (isVi ? 'Điều chỉnh plan' : 'Adjust my plan');
+
+        const keepPlanBtnText = window.t
+            ? window.t('workspace.keepThePlanBtn', {}, isVi ? 'Giữ nguyên plan →' : 'Keep the plan →')
+            : (isVi ? 'Giữ nguyên plan →' : 'Keep the plan →');
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        WORKING PLAN REVIEW
+                        ${badgeText}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Your Working Plan Summary
+                        ${titleText}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
-                        aria-label="Close dialog"
-                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
+                        aria-label="${closeBtnText}"
+                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
+                        title="${closeBtnText}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -721,8 +1054,8 @@ window.TempoUrmodeFlow = (function() {
                 <div class="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center space-x-3 text-xs text-amber-900">
                     <span class="text-base shrink-0">⚠️</span>
                     <div>
-                        <strong class="font-bold">${overdueCount} task${overdueCount === 1 ? '' : 's'} overdue:</strong>
-                        <span>Some tasks passed their planned date or deadline. You can keep them or adjust your schedule.</span>
+                        <strong class="font-bold">${overdueCountText}</strong>
+                        <span>${overdueDescText}</span>
                     </div>
                 </div>
             ` : ''}
@@ -731,7 +1064,7 @@ window.TempoUrmodeFlow = (function() {
             <div class="max-h-64 sm:max-h-72 overflow-y-auto space-y-2 pr-1 py-1">
                 ${tasks.map((t, idx) => {
                     const overdue = isTaskOverdue(t, plan);
-                    const deadlineStr = t.hasDeadline && t.deadlineDate ? formatDeadline(t.deadlineDate, t.deadlineTime) : 'No fixed deadline';
+                    const deadlineStr = t.hasDeadline && t.deadlineDate ? formatDeadline(t.deadlineDate, t.deadlineTime) : noDeadlineText;
                     const durStr = t.durationLabel || formatDuration(t.durationMinutes);
                     const isDone = t.completed === true;
 
@@ -753,16 +1086,16 @@ window.TempoUrmodeFlow = (function() {
                             <div class="flex items-center space-x-1.5 shrink-0">
                                 ${overdue ? `
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                        OVERDUE
+                                        ${overdueBadgeText}
                                     </span>
                                 ` : ''}
                                 ${isDone ? `
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
-                                        ✓ Done
+                                        ✓ ${isVi ? 'Đã xong' : 'Done'}
                                     </span>
                                 ` : `
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600">
-                                        ${escapeHTML(t._executionBadge || 'UP NEXT')}
+                                        ${escapeHTML(formatExecutionBadge(t._executionBadge || 'UP NEXT', isVi))}
                                     </span>
                                 `}
                             </div>
@@ -775,11 +1108,11 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-end gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.startAdjustmentFlow()"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs inline-flex items-center justify-center transition cursor-pointer">
-                    Adjust my plan
+                    ${adjustPlanBtnText}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.showKeepPlanTaskPopup()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                    <span>Keep the plan →</span>
+                    <span>${keepPlanBtnText}</span>
                 </button>
             </div>
         `;
@@ -789,6 +1122,7 @@ window.TempoUrmodeFlow = (function() {
 
     function showKeepPlanTaskPopup() {
         activeModalView = 'keep_plan_task';
+        const isVi = isViLocale();
         const plan = getActiveWorkingPlan();
         const tasks = getAllPlanTasks(plan);
         const topTask = tasks.find(t => !t.completed) || tasks[0];
@@ -798,23 +1132,60 @@ window.TempoUrmodeFlow = (function() {
             return;
         }
 
-        const deadlineStr = topTask.hasDeadline && topTask.deadlineDate ? formatDeadline(topTask.deadlineDate, topTask.deadlineTime) : 'No fixed deadline';
+        const noDeadlineText = window.t
+            ? window.t('workspace.noFixedDeadlineLabel', {}, isVi ? 'Chưa có deadline' : 'No fixed deadline')
+            : (isVi ? 'Chưa có deadline' : 'No fixed deadline');
+
+        const deadlineStr = topTask.hasDeadline && topTask.deadlineDate 
+            ? formatDeadline(topTask.deadlineDate, topTask.deadlineTime) 
+            : noDeadlineText;
         const durStr = topTask.durationLabel || formatDuration(topTask.durationMinutes);
         const subtasks = Array.isArray(topTask.subtasks) ? topTask.subtasks : [];
+
+        const badgeText = window.t
+            ? window.t('workspace.yourTaskForNowBadge', {}, isVi ? 'TASK HIỆN TẠI CỦA BẠN' : 'YOUR TASK FOR NOW')
+            : (isVi ? 'TASK HIỆN TẠI CỦA BẠN' : 'YOUR TASK FOR NOW');
+
+        const headingText = window.t
+            ? window.t('workspace.yourTaskForNowHeading', {}, isVi ? 'Task bạn nên thực hiện lúc này là…' : 'Your task for now is…')
+            : (isVi ? 'Task bạn nên thực hiện lúc này là…' : 'Your task for now is…');
+
+        const doThisFirstText = window.t
+            ? window.t('workspace.doThisFirstPriority', {}, isVi ? 'ƯU TIÊN LÀM TRƯỚC' : 'DO THIS FIRST')
+            : (isVi ? 'ƯU TIÊN LÀM TRƯỚC' : 'DO THIS FIRST');
+
+        const dueLabelText = window.t
+            ? window.t('workspace.duePrefixLabel', {}, 'Deadline:')
+            : 'Deadline:';
+
+        const laterBtnText = window.t
+            ? window.t('workspace.laterBtn', {}, isVi ? 'Để sau' : 'Later')
+            : (isVi ? 'Để sau' : 'Later');
+
+        const focusNowBtnText = window.t
+            ? window.t('workspace.focusNowBtn', {}, isVi ? 'Tập trung ngay →' : 'Focus now →')
+            : (isVi ? 'Tập trung ngay →' : 'Focus now →');
+
+        const closeBtnText = window.t
+            ? window.t('common.close', {}, isVi ? 'Đóng' : 'Close dialog')
+            : (isVi ? 'Đóng' : 'Close dialog');
+
+        const actionStepsText = isVi ? 'Các bước thực hiện:' : 'Action steps:';
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        YOUR TASK FOR NOW
+                        ${badgeText}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Your task for now is…
+                        ${headingText}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
-                        aria-label="Close dialog"
-                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
+                        aria-label="${closeBtnText}"
+                        class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
+                        title="${closeBtnText}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -825,24 +1196,24 @@ window.TempoUrmodeFlow = (function() {
             <div class="p-4 rounded-2xl border-2 border-[#D79277] bg-[#FFF9F5] space-y-2">
                 <div class="flex items-center justify-between">
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#D79277] text-white">
-                        DO THIS FIRST
+                        ${doThisFirstText}
                     </span>
                     <span class="text-xs text-stone-500 font-medium">~${escapeHTML(durStr)}</span>
                 </div>
                 <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
-                    ${escapeHTML(topTask.name)}
+                    ${escapeHTML(topTask.name || topTask.title)}
                 </h3>
                 <div class="text-xs text-[#6F6B68] flex items-center space-x-2">
-                    <span>📅 Due: ${escapeHTML(deadlineStr)}</span>
+                    <span>📅 ${dueLabelText} ${escapeHTML(deadlineStr)}</span>
                 </div>
 
                 ${subtasks.length > 0 ? `
                     <div class="pt-2 border-t border-stone-200/60 space-y-1">
-                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">Action steps:</div>
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">${actionStepsText}</div>
                         ${subtasks.map(s => `
                             <div class="flex items-center space-x-2 text-xs text-stone-700">
                                 <span>${s.completed ? '✓' : '○'}</span>
-                                <span class="${s.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(s.title)}</span>
+                                <span class="${s.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(s.title || s.name)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -853,11 +1224,11 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-end gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs inline-flex items-center justify-center transition cursor-pointer">
-                    Later
+                    ${laterBtnText}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.launchFocusForTask('${topTask.id}')"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                    <span>Focus now →</span>
+                    <span>${focusNowBtnText}</span>
                 </button>
             </div>
         `;
@@ -886,7 +1257,7 @@ window.TempoUrmodeFlow = (function() {
             window.TempoEmergencyFlow.toggleTaskCompleted(taskId);
         }
         if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-            window.TempoApp.showToast("Overdue task marked as finished.");
+            window.TempoApp.showToast("Đã đánh dấu hoàn thành task quá hạn.");
         }
         if (window.TempoMode && typeof window.TempoMode.renderEmodeHome === 'function') {
             window.TempoMode.renderEmodeHome();
@@ -897,8 +1268,11 @@ window.TempoUrmodeFlow = (function() {
     // 7. POST-SAVE "YOUR TASK FOR NOW" & BREAK-TASK FLOW
     // -------------------------------------------------------------------------
 
+    let lastPostSavePlan = null;
+
     function showTaskForNowPopupAfterSave(plan) {
-        const confirmed = plan || getActiveWorkingPlan();
+        if (plan) lastPostSavePlan = plan;
+        const confirmed = plan || lastPostSavePlan || getActiveWorkingPlan();
         const tasks = getAllPlanTasks(confirmed);
         const topTask = tasks.find(t => !t.completed) || tasks[0];
 
@@ -908,22 +1282,31 @@ window.TempoUrmodeFlow = (function() {
         }
 
         activeModalView = 'post_save_task_now';
-        const durStr = topTask.durationLabel || formatDuration(topTask.durationMinutes);
-        const deadlineStr = topTask.hasDeadline && topTask.deadlineDate ? formatDeadline(topTask.deadlineDate, topTask.deadlineTime) : 'No fixed deadline';
+        const durStr = (topTask.durationMinutes === 90) ? (isViLocale() ? '1,5 giờ' : '1.5 hr') : (topTask.durationMinutes ? formatDuration(topTask.durationMinutes) : (topTask.durationLabel || '30 min'));
+        
+        let deadlineDisplay = '';
+        if (topTask.hasDeadline && topTask.deadlineDate) {
+            const formattedDate = formatStep2DisplayDate(topTask.deadlineDate);
+            deadlineDisplay = `Deadline: ${formattedDate}`;
+        } else {
+            deadlineDisplay = window.t ? window.t('workspace.dueNoFixedDeadline', {}, (isViLocale() ? 'Deadline: Chưa có deadline' : 'Deadline: No fixed deadline')) : (isViLocale() ? 'Deadline: Chưa có deadline' : 'Deadline: No fixed deadline');
+        }
+
         const subtasks = Array.isArray(topTask.subtasks) ? topTask.subtasks : [];
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        PLAN CONFIRMED & SAVED
+                        ${window.t ? window.t('workspace.planConfirmedAndSavedUpper', {}, 'PLAN CONFIRMED & SAVED') : (isViLocale() ? 'PLAN ĐÃ ĐƯỢC XÁC NHẬN & LƯU' : 'PLAN CONFIRMED & SAVED')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Your task for now
+                        ${window.t ? window.t('workspace.yourTaskForNow', {}, 'Your task for now') : (isViLocale() ? 'Task tiếp theo của bạn' : 'Your task for now')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
-                        aria-label="Close dialog"
+                        aria-label="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}"
+                        title="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -935,24 +1318,26 @@ window.TempoUrmodeFlow = (function() {
             <div class="p-4 rounded-2xl border-2 border-[#D79277] bg-[#FFF9F5] space-y-2">
                 <div class="flex items-center justify-between">
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#D79277] text-white">
-                        DO THIS FIRST
+                        ${window.t ? window.t('workspace.doThisFirstPriority', {}, (isViLocale() ? 'ƯU TIÊN LÀM TRƯỚC' : 'DO THIS FIRST')) : (isViLocale() ? 'ƯU TIÊN LÀM TRƯỚC' : 'DO THIS FIRST')}
                     </span>
                     <span class="text-xs text-stone-500 font-medium">~${escapeHTML(durStr)}</span>
                 </div>
                 <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
-                    ${escapeHTML(topTask.name)}
+                    ${escapeHTML(topTask.name || topTask.title)}
                 </h3>
                 <div class="text-xs text-[#6F6B68] flex items-center space-x-2">
-                    <span>📅 Due: ${escapeHTML(deadlineStr)}</span>
+                    <span>📅 ${escapeHTML(deadlineDisplay)}</span>
                 </div>
 
                 ${subtasks.length > 0 ? `
                     <div class="pt-2 border-t border-stone-200/60 space-y-1">
-                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">${subtasks.length} action step${subtasks.length === 1 ? '' : 's'}:</div>
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                            ${subtasks.length} ${isViLocale() ? 'subtask' : (subtasks.length === 1 ? 'action step' : 'action steps')}:
+                        </div>
                         ${subtasks.map((s, idx) => `
                             <div class="flex items-center space-x-2 text-xs text-stone-700">
                                 <span>${s.completed ? '✓' : '○'}</span>
-                                <span class="${s.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(s.title)}</span>
+                                <span class="${s.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(s.title || s.name)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -962,10 +1347,10 @@ window.TempoUrmodeFlow = (function() {
             <!-- Question: Break down this task? -->
             <div class="py-2 space-y-1 text-center sm:text-left">
                 <h4 class="font-bold text-sm sm:text-base text-stone-800">
-                    Would you like to break down this task into smaller steps?
+                    ${window.t ? window.t('workspace.breakDownQuestion', {}, 'Would you like to break down this task into smaller steps?') : (isViLocale() ? 'Bạn có muốn chia nhỏ task này thành các bước dễ thực hiện hơn không?' : 'Would you like to break down this task into smaller steps?')}
                 </h4>
                 <p class="text-xs text-stone-500">
-                    Breaking big tasks into 10–15 min steps prevents freeze and makes starting effortless.
+                    ${window.t ? window.t('workspace.breakDownDesc', {}, 'Breaking big tasks into 10–15 min steps prevents freeze and makes starting effortless.') : (isViLocale() ? 'Chia task lớn thành những bước nhỏ từ 10–15 phút giúp bạn dễ bắt đầu hơn và tránh cảm giác quá tải.' : 'Breaking big tasks into 10–15 min steps prevents freeze and makes starting effortless.')}
                 </p>
             </div>
 
@@ -973,11 +1358,11 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-end gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.showStartWorkingPopup()"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs inline-flex items-center justify-center transition cursor-pointer">
-                    No, start working
+                    ${window.t ? window.t('workspace.noStartWorking', {}, (isViLocale() ? 'Không, bắt đầu làm' : 'No, start working')) : (isViLocale() ? 'Không, bắt đầu làm' : 'No, start working')}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.startBreakTaskFlow('${topTask.id}')"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center justify-center space-x-2 transition cursor-pointer">
-                    <span>Break down task →</span>
+                    <span>${window.t ? window.t('workspace.breakDownTaskBtn', {}, (isViLocale() ? 'Chia nhỏ task →' : 'Break down task →')) : (isViLocale() ? 'Chia nhỏ task →' : 'Break down task →')}</span>
                 </button>
             </div>
         `;
@@ -1028,10 +1413,10 @@ window.TempoUrmodeFlow = (function() {
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        STEP BREAKDOWN
+                        ${isViLocale() ? 'CHIA NHỎ TASK' : 'STEP BREAKDOWN'}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Break down: ${escapeHTML(task.name)}
+                        ${isViLocale() ? 'Chia nhỏ task: ' : 'Break down: '}${escapeHTML(task.name)}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
@@ -1047,9 +1432,9 @@ window.TempoUrmodeFlow = (function() {
             <!-- Task Metadata & AI Action Button -->
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="text-xs text-stone-500 flex items-center space-x-2">
-                    <span>⏱ Total estimate: ~${escapeHTML(durStr)}</span>
+                    <span>⏱ ${isViLocale() ? 'Tổng dự tính: ~' : 'Total estimate: ~'}${escapeHTML(durStr)}</span>
                     <span>•</span>
-                    <span>Add 2 to 4 concrete action steps</span>
+                    <span>${isViLocale() ? 'Thêm 2 đến 4 bước hành động cụ thể' : 'Add 2 to 4 concrete action steps'}</span>
                 </div>
                 ${aiHelpLoading ? `
                     <button type="button" disabled id="btn-ai-help-breakdown"
@@ -1058,14 +1443,14 @@ window.TempoUrmodeFlow = (function() {
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                         </svg>
-                        <span>Thinking...</span>
+                        <span>${isViLocale() ? 'Đang xử lý...' : 'Thinking...'}</span>
                     </button>
                 ` : `
                     <button type="button" id="btn-ai-help-breakdown" onclick="window.TempoUrmodeFlow.triggerAiHelp('${task.id}')"
                             class="px-2.5 py-1 rounded-lg text-xs font-bold text-[#B83D08] bg-[#FFE9DC] hover:bg-[#FFD2BA] transition flex items-center space-x-1.5 shadow-xs border border-[#FF6B2C]/30 cursor-pointer"
-                            title="Get AI action step suggestions for this task">
+                            title="${isViLocale() ? 'Nhận gợi ý bước hành động AI cho task này' : 'Get AI action step suggestions for this task'}">
                         <span>✨</span>
-                        <span>AI Help</span>
+                        <span>${isViLocale() ? 'AI Hỗ trợ' : 'AI Help'}</span>
                     </button>
                 `}
             </div>
@@ -1118,7 +1503,7 @@ window.TempoUrmodeFlow = (function() {
             <div class="space-y-2 max-h-52 overflow-y-auto pr-1" id="breakdown-subtask-list">
                 ${subtasks.length === 0 ? `
                     <div class="p-3 bg-stone-50 rounded-xl text-xs text-stone-500 italic text-center">
-                        No action steps added yet. Add your first step below or click ✨ AI Help.
+                        ${window.t ? window.t('workspace.breakdownEmptyState', {}, (isViLocale() ? 'Chưa có bước thực hiện nào. Hãy thêm bước đầu tiên bên dưới hoặc chọn ✨ AI hỗ trợ.' : 'No action steps added yet. Add your first step below or click ✨ AI Help.')) : (isViLocale() ? 'Chưa có bước thực hiện nào. Hãy thêm bước đầu tiên bên dưới hoặc chọn ✨ AI hỗ trợ.' : 'No action steps added yet. Add your first step below or click ✨ AI Help.')}
                     </div>
                 ` : subtasks.map((s, idx) => `
                     ${editingSubtaskId === s.id ? `
@@ -1170,12 +1555,12 @@ window.TempoUrmodeFlow = (function() {
             <!-- Add Subtask Input Form -->
             <div class="flex items-center space-x-2 pt-1">
                 <input type="text" id="breakdown-subtask-input"
-                       placeholder="e.g. Draft opening paragraph (15 min)"
+                       placeholder="${isViLocale() ? 'VD: Viết đoạn mở đầu (15 phút)' : 'e.g. Draft opening paragraph (15 min)'}"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();window.TempoUrmodeFlow.addSubtask('${task.id}');}"
                        class="flex-1 px-3.5 py-2 rounded-xl border border-stone-300 text-xs text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#D79277]" />
                 <button type="button" onclick="window.TempoUrmodeFlow.addSubtask('${task.id}')"
                         class="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs transition cursor-pointer">
-                    + Add step
+                    ${isViLocale() ? '+ Thêm bước' : '+ Add step'}
                 </button>
             </div>
 
@@ -1183,20 +1568,20 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-wrap items-center justify-between gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
                         class="px-4 py-2 rounded-xl font-semibold text-xs text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                    Later
+                    ${isViLocale() ? 'Để sau' : 'Later'}
                 </button>
                 <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <button type="button" id="btn-view-my-plan" onclick="window.TempoUrmodeFlow.viewMyPlan('${task.id}')"
                             class="px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] hover:text-[#202124] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                        View my plan
+                        ${isViLocale() ? 'Xem kế hoạch' : 'View my plan'}
                     </button>
                     <button type="button" onclick="window.TempoUrmodeFlow.handleBreakMoreTasks('${task.id}')"
                             class="px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                        Break more tasks →
+                        ${isViLocale() ? 'Chia thêm task →' : 'Break more tasks →'}
                     </button>
                     <button type="button" onclick="window.TempoUrmodeFlow.launchFocusForTask('${task.id}')"
                             class="btn-primary btn-terracotta px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                        Do this task →
+                        ${isViLocale() ? 'Làm ngay →' : 'Do this task →'}
                     </button>
                 </div>
             </div>
@@ -1636,20 +2021,33 @@ window.TempoUrmodeFlow = (function() {
         const tasks = getAllPlanTasks(plan);
         const topTask = tasks.find(t => !t.completed) || tasks[0];
 
+        let durStr = isViLocale() ? '30 phút' : '30 min';
+        if (topTask) {
+            if (topTask.durationMinutes === 90 || topTask.duration === 90 || topTask.estimateMinutes === 90 || topTask.durationLabel === '1.5 hr' || topTask.durationLabel === '1,5 giờ') {
+                durStr = isViLocale() ? '1,5 giờ' : '1.5 hr';
+            } else if (topTask.durationMinutes) {
+                durStr = formatDuration(topTask.durationMinutes);
+            } else if (typeof formatTaskDuration === 'function') {
+                durStr = formatTaskDuration(topTask);
+            } else if (topTask.durationLabel) {
+                durStr = topTask.durationLabel;
+            }
+        }
+
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        READY TO WORK
+                        ${window.t ? window.t('workspace.readyToWorkUpper', {}, 'READY TO WORK') : (isViLocale() ? 'SẴN SÀNG BẮT ĐẦU' : 'READY TO WORK')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Start working on your plan?
+                        ${window.t ? window.t('workspace.startWorkingOnPlanTitle', {}, 'Start working on your plan?') : (isViLocale() ? 'Bắt đầu làm việc nhé?' : 'Start working on your plan?')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
-                        aria-label="Close dialog"
+                        aria-label="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
-                        title="Close and stay in Working Plan">
+                        title="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1658,12 +2056,12 @@ window.TempoUrmodeFlow = (function() {
 
             <div class="py-3 text-center sm:text-left space-y-2">
                 <p class="text-sm sm:text-base text-[#484541] leading-relaxed">
-                    Your working plan is ready. Would you like to start right away on your first task?
+                    ${window.t ? window.t('workspace.startWorkingOnPlanDesc', {}, 'Your working plan is ready. Would you like to start right away on your first task?') : (isViLocale() ? 'Kế hoạch làm việc của bạn đã sẵn sàng. Bạn muốn bắt đầu với task đầu tiên ngay bây giờ không?' : 'Your working plan is ready. Would you like to start right away on your first task?')}
                 </p>
                 ${topTask ? `
                     <div class="p-3 bg-[#FFF9F5] border border-[#FFD2BA] rounded-2xl flex items-center justify-between text-xs">
-                        <span class="font-bold text-[#202124]">First task: ${escapeHTML(topTask.name)}</span>
-                        <span class="text-[#8C8782]">~${escapeHTML(topTask.durationLabel || formatDuration(topTask.durationMinutes))}</span>
+                        <span class="font-bold text-[#202124]">${window.t ? window.t('workspace.firstTaskPrefix', {}, 'First task:') : (isViLocale() ? 'Task đầu tiên:' : 'First task:')} ${escapeHTML(topTask.name || topTask.title)}</span>
+                        <span class="text-[#8C8782]">~${escapeHTML(durStr)}</span>
                     </div>
                 ` : ''}
             </div>
@@ -1672,16 +2070,16 @@ window.TempoUrmodeFlow = (function() {
                 <div class="flex items-center space-x-2">
                     <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
                             class="px-4 py-2 rounded-xl font-semibold text-xs text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                        Later
+                        ${window.t ? window.t('workspace.laterBtn', {}, 'Later') : (isViLocale() ? 'Để sau' : 'Later')}
                     </button>
                     <button type="button" onclick="window.TempoUrmodeFlow.restartBreakdownFlow()"
                             class="px-4 py-2 rounded-xl font-semibold text-xs text-[#D79277] hover:underline transition cursor-pointer">
-                        Break more tasks
+                        ${window.t ? window.t('workspace.breakMoreTasksBtn', {}, 'Break more tasks') : (isViLocale() ? 'Chia nhỏ thêm task' : 'Break more tasks')}
                     </button>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.showFirstTaskExecutionPopup()"
                         class="btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-sm shadow-sm inline-flex items-center space-x-2 transition cursor-pointer">
-                    <span>Yes, start working →</span>
+                    <span>${window.t ? window.t('workspace.yesStartWorkingBtn', {}, 'Yes, start working →') : (isViLocale() ? 'Có, bắt đầu thôi →' : 'Yes, start working →')}</span>
                 </button>
             </div>
         `;
@@ -1712,24 +2110,43 @@ window.TempoUrmodeFlow = (function() {
             return;
         }
 
-        const durStr = topTask.durationLabel || formatDuration(topTask.durationMinutes);
-        const deadlineStr = topTask.hasDeadline && topTask.deadlineDate ? formatDeadline(topTask.deadlineDate, topTask.deadlineTime) : 'No fixed deadline';
+        let durStr = isViLocale() ? '30 phút' : '30 min';
+        if (topTask) {
+            if (topTask.durationMinutes === 90 || topTask.duration === 90 || topTask.estimateMinutes === 90 || topTask.durationLabel === '1.5 hr' || topTask.durationLabel === '1,5 giờ' || topTask.durationLabel === '1.5h') {
+                durStr = isViLocale() ? '1,5 giờ' : '1.5 hr';
+            } else if (topTask.durationMinutes) {
+                durStr = formatDuration(topTask.durationMinutes);
+            } else if (typeof formatTaskDuration === 'function') {
+                durStr = formatTaskDuration(topTask);
+            } else if (topTask.durationLabel) {
+                durStr = topTask.durationLabel;
+            }
+        }
+
+        let deadlineDisplay = '';
+        if (topTask.hasDeadline && topTask.deadlineDate) {
+            const formattedDeadline = formatDeadline(topTask.deadlineDate, topTask.deadlineTime);
+            deadlineDisplay = `Deadline: ${formattedDeadline}`;
+        } else {
+            deadlineDisplay = window.t ? window.t('workspace.dueNoFixedDeadline', {}, (isViLocale() ? 'Deadline: Chưa có deadline' : 'Deadline: No fixed deadline')) : (isViLocale() ? 'Deadline: Chưa có deadline' : 'Deadline: No fixed deadline');
+        }
+
         const subtasks = Array.isArray(topTask.subtasks) ? topTask.subtasks : [];
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        FIRST TASK EXECUTION
+                        ${window.t ? window.t('workspace.firstTaskExecutionUpper', {}, 'FIRST TASK EXECUTION') : (isViLocale() ? 'BẮT ĐẦU TASK ĐẦU TIÊN' : 'FIRST TASK EXECUTION')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Your first task is…
+                        ${window.t ? window.t('workspace.yourFirstTaskIs', {}, 'Your first task is…') : (isViLocale() ? 'Task đầu tiên của bạn là…' : 'Your first task is…')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
-                        aria-label="Close dialog"
+                        aria-label="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
-                        title="Close and stay in Working Plan">
+                        title="${window.t ? window.t('common.close', {}, 'Close dialog') : (isViLocale() ? 'Đóng' : 'Close dialog')}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1740,21 +2157,21 @@ window.TempoUrmodeFlow = (function() {
             <div class="p-4 rounded-2xl border-2 border-[#D79277] bg-[#FFF9F5] space-y-2">
                 <div class="flex items-center justify-between">
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#D79277] text-white">
-                        READY NOW
+                        ${window.t ? window.t('workspace.readyNowBadge', {}, 'READY NOW') : (isViLocale() ? 'SẴN SÀNG THỰC HIỆN' : 'READY NOW')}
                     </span>
                     <span class="text-xs text-stone-500 font-medium">~${escapeHTML(durStr)}</span>
                 </div>
                 <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
-                    ${escapeHTML(topTask.name)}
+                    ${escapeHTML(topTask.name || topTask.title)}
                 </h3>
                 <div class="text-xs text-[#6F6B68] flex items-center space-x-2">
-                    <span>📅 Due: ${escapeHTML(deadlineStr)}</span>
+                    <span>📅 ${escapeHTML(deadlineDisplay)}</span>
                 </div>
                 ${subtasks.length > 0 ? `
                     <div class="pt-2 border-t border-stone-200/60 space-y-1">
-                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">${subtasks.length} step${subtasks.length === 1 ? '' : 's'}:</div>
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">${subtasks.length} ${isViLocale() ? 'bước' : (subtasks.length === 1 ? 'step' : 'steps')}:</div>
                         ${subtasks.slice(0, 3).map((s, i) => `
-                            <div class="text-xs text-stone-700 truncate">• ${escapeHTML(s.title)}</div>
+                            <div class="text-xs text-stone-700 truncate">• ${escapeHTML(s.title || s.name)}</div>
                         `).join('')}
                     </div>
                 ` : ''}
@@ -1764,16 +2181,16 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-wrap items-center justify-between gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.closeModal('plan-workspace')"
                         class="px-4 py-2 rounded-xl font-semibold text-xs text-stone-500 hover:text-stone-800 transition cursor-pointer">
-                    Later
+                    ${window.t ? window.t('workspace.laterBtn', {}, 'Later') : (isViLocale() ? 'Để sau' : 'Later')}
                 </button>
                 <div class="flex items-center space-x-2.5">
                     <button type="button" onclick="window.TempoUrmodeFlow.showTaskSelectionPopup()"
                             class="px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                        Choose another task
+                        ${window.t ? window.t('workspace.chooseAnotherTaskBtn', {}, 'Choose another task') : (isViLocale() ? 'Chọn task khác' : 'Choose another task')}
                     </button>
                     <button type="button" onclick="window.TempoUrmodeFlow.launchFocusForTask('${topTask.id}')"
                             class="btn-primary btn-terracotta px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                        Do this task →
+                        ${window.t ? window.t('workspace.doThisTaskBtn', {}, 'Do this task →') : (isViLocale() ? 'Bắt đầu task này →' : 'Do this task →')}
                     </button>
                 </div>
             </div>
@@ -1787,18 +2204,32 @@ window.TempoUrmodeFlow = (function() {
         const plan = getActiveWorkingPlan();
         const tasks = getAllPlanTasks(plan).filter(t => !t.completed);
 
+        function formatTaskCardDuration(t) {
+            if (t.durationMinutes === 90 || t.duration === 90 || t.estimateMinutes === 90 || t.durationLabel === '1.5 hr' || t.durationLabel === '1,5 giờ' || t.durationLabel === '1.5h') {
+                return isViLocale() ? '1,5 giờ' : '1.5 hr';
+            }
+            if (t.durationMinutes) {
+                return formatDuration(t.durationMinutes);
+            }
+            if (typeof formatTaskDuration === 'function') {
+                return formatTaskDuration(t);
+            }
+            return t.durationLabel || (isViLocale() ? '30 phút' : '30 min');
+        }
+
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        TASK SELECTION
+                        ${window.t ? window.t('workspace.taskSelectionUpper', {}, 'TASK SELECTION') : (isViLocale() ? 'CHỌN TASK' : 'TASK SELECTION')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Select a task to work on
+                        ${window.t ? window.t('workspace.selectTaskToWorkOn', {}, 'Select a task to work on') : (isViLocale() ? 'Chọn task bạn muốn thực hiện' : 'Select a task to work on')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.showFirstTaskExecutionPopup()"
-                        aria-label="Back"
+                        aria-label="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
+                        title="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
                     ←
                 </button>
@@ -1811,12 +2242,12 @@ window.TempoUrmodeFlow = (function() {
                         <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2">
                             <span class="font-bold text-stone-400 w-5 shrink-0 text-center">${idx + 1}.</span>
                             <div class="min-w-0">
-                                <div class="font-bold text-stone-800 truncate">${escapeHTML(t.name)}</div>
-                                <div class="text-[11px] text-stone-500">~${escapeHTML(t.durationLabel || formatDuration(t.durationMinutes))}</div>
+                                <div class="font-bold text-stone-800 truncate">${escapeHTML(t.name || t.title)}</div>
+                                <div class="text-[11px] text-stone-500">~${escapeHTML(formatTaskCardDuration(t))}</div>
                             </div>
                         </div>
                         <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-100 text-stone-700 shrink-0">
-                            Select →
+                            ${window.t ? window.t('workspace.selectTaskWithArrow', {}, 'Select →') : (isViLocale() ? 'Chọn →' : 'Select →')}
                         </span>
                     </div>
                 `).join('')}
@@ -1825,7 +2256,7 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex justify-end">
                 <button type="button" onclick="window.TempoUrmodeFlow.showFirstTaskExecutionPopup()"
                         class="px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                    Back
+                    ${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}
                 </button>
             </div>
         `;
@@ -1855,8 +2286,8 @@ window.TempoUrmodeFlow = (function() {
         return '';
     }
 
-    function startAdjustmentFlow() {
-        const plan = getActiveWorkingPlan();
+    function startAdjustmentFlow(customPlan) {
+        const plan = customPlan || getActiveWorkingPlan() || (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.getActivePlan === 'function' ? window.TempoPlanWorkspace.getActivePlan() : null);
         const tasks = getAllPlanTasks(plan);
 
         // Pre-populate adjustment draft with existing plan tasks (preserving all IDs and state)
@@ -1890,16 +2321,16 @@ window.TempoUrmodeFlow = (function() {
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        STEP 1 OF 3 • ADJUST PLAN
+                        ${window.t ? window.t('workspace.adjustPlanStep1', {}, 'STEP 1 OF 3 · ADJUST PLAN') : (isViLocale() ? 'BƯỚC 1/3 · ĐIỀU CHỈNH PLAN' : 'STEP 1 OF 3 · ADJUST PLAN')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Choose tasks to keep
+                        ${window.t ? window.t('workspace.chooseTasksToKeep', {}, 'Choose tasks to keep') : (isViLocale() ? 'Chọn các task muốn giữ lại' : 'Choose tasks to keep')}
                     </h2>
                 </div>
-                <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
-                        aria-label="Cancel adjustment"
+                <button type="button" onclick="window.TempoUrmodeFlow.closeModal(window.location.hash.includes('plan-workspace') ? 'plan-workspace' : 'dashboard')"
+                        aria-label="${window.t ? window.t('workspace.cancelAdjustment', {}, 'Cancel adjustment') : (isViLocale() ? 'Hủy điều chỉnh' : 'Cancel adjustment')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer"
-                        title="Cancel adjustment (keeps existing plan)">
+                        title="${window.t ? window.t('workspace.cancelAdjustment', {}, 'Cancel adjustment') : (isViLocale() ? 'Hủy điều chỉnh' : 'Cancel adjustment')}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1907,7 +2338,7 @@ window.TempoUrmodeFlow = (function() {
             </div>
 
             <p class="text-xs sm:text-sm text-stone-600">
-                Select the tasks you still need to complete. Overdue or completed tasks can be removed or kept.
+                ${window.t ? window.t('workspace.chooseTasksToKeepDesc', {}, 'Select the tasks you still need to complete. Overdue or completed tasks can be removed or kept.') : (isViLocale() ? 'Chọn những task bạn vẫn cần hoàn thành. Bạn có thể giữ lại hoặc loại bỏ các task đã quá hạn hoặc hoàn thành.' : 'Select the tasks you still need to complete. Overdue or completed tasks can be removed or kept.')}
             </p>
 
             <div class="max-h-60 overflow-y-auto space-y-2 pr-1 py-1">
@@ -1920,13 +2351,13 @@ window.TempoUrmodeFlow = (function() {
                                        onchange="window.TempoUrmodeFlow.toggleRetainedTask('${t.id}', this.checked)"
                                        class="w-4 h-4 rounded text-[#D79277] focus:ring-[#D79277] border-gray-300 cursor-pointer" />
                                 <div class="min-w-0">
-                                    <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name)}</span>
-                                    <span class="text-[11px] text-stone-500">~${escapeHTML(t.durationLabel || formatDuration(t.durationMinutes))}</span>
+                                    <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name || t.title)}</span>
+                                    <span class="text-[11px] text-stone-500">~${escapeHTML(formatTaskDuration(t))}</span>
                                 </div>
                             </div>
                             ${overdue ? `
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                                    OVERDUE
+                                    ${window.t ? window.t('workspace.priorityOverdueUpper', {}, 'OVERDUE') : (isViLocale() ? 'TRỄ DEADLINE' : 'OVERDUE')}
                                 </span>
                             ` : ''}
                         </label>
@@ -1935,13 +2366,13 @@ window.TempoUrmodeFlow = (function() {
             </div>
 
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <button type="button" onclick="window.TempoUrmodeFlow.closeModal('dashboard')"
+                <button type="button" onclick="window.TempoUrmodeFlow.closeModal(window.location.hash.includes('plan-workspace') ? 'plan-workspace' : 'dashboard')"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                    Cancel adjustment
+                    ${window.t ? window.t('workspace.cancelAdjustment', {}, 'Cancel adjustment') : (isViLocale() ? 'Hủy điều chỉnh' : 'Cancel adjustment')}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.renderAdjustmentStep2Tasks()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                    Next: Adjust & add tasks →
+                    ${window.t ? window.t('workspace.nextAdjustAddTasks', {}, 'Next: Adjust & add tasks →') : (isViLocale() ? 'Tiếp theo: Điều chỉnh & thêm task →' : 'Next: Adjust & add tasks →')}
                 </button>
             </div>
         `;
@@ -1956,23 +2387,226 @@ window.TempoUrmodeFlow = (function() {
         }
     }
 
+    // Step 2: Date Formatting & Parsing Helpers
+    function formatStep2DisplayDate(isoStr) {
+        if (!isoStr || typeof isoStr !== 'string') return '';
+        const clean = isoStr.trim();
+        if (!clean) return '';
+        if (window.TempoI18n && typeof window.TempoI18n.formatCalendarDate === 'function') {
+            return window.TempoI18n.formatCalendarDate(clean, isViLocale() ? 'vi' : 'en');
+        }
+        const parts = clean.split('-');
+        if (parts.length === 3) {
+            const y = parts[0];
+            const m = parts[1].padStart(2, '0');
+            const d = parts[2].padStart(2, '0');
+            if (isViLocale()) {
+                return `${d}/${m}/${y}`;
+            } else {
+                const enMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const mName = enMonths[parseInt(m, 10) - 1] || m;
+                return `${mName} ${d}, ${y}`;
+            }
+        }
+        return clean;
+    }
+
+    function parseStep2DateInput(inputVal) {
+        if (!inputVal || typeof inputVal !== 'string') return '';
+        const val = inputVal.trim();
+        if (!val) return '';
+
+        // 1. Check ISO YYYY-MM-DD
+        const isoMatch = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (isoMatch) {
+            const y = parseInt(isoMatch[1], 10);
+            const m = parseInt(isoMatch[2], 10);
+            const d = parseInt(isoMatch[3], 10);
+            if (y >= 1900 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+        }
+
+        // 2. Check English textual date: e.g. "Nov 02, 2026", "Nov 2, 2026", "November 2, 2026"
+        const enMonthsMap = {
+            jan: 1, january: 1,
+            feb: 2, february: 2,
+            mar: 3, march: 3,
+            apr: 4, april: 4,
+            may: 5,
+            jun: 6, june: 6,
+            jul: 7, july: 7,
+            aug: 8, august: 8,
+            sep: 9, sept: 9, september: 9,
+            oct: 10, october: 10,
+            nov: 11, november: 11,
+            dec: 12, december: 12
+        };
+        const enTextMatch = val.match(/^([a-zA-Z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/i);
+        if (enTextMatch) {
+            const monthKey = enTextMatch[1].toLowerCase();
+            const m = enMonthsMap[monthKey];
+            const d = parseInt(enTextMatch[2], 10);
+            const y = parseInt(enTextMatch[3], 10);
+            if (m && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+                return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+        }
+
+        // 3. Numeric format with slash/dash/dot: e.g. "02/11/2026", "2/11/2026", "02-11-2026"
+        const numMatch = val.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+        if (numMatch) {
+            let p1 = parseInt(numMatch[1], 10);
+            let p2 = parseInt(numMatch[2], 10);
+            const y = parseInt(numMatch[3], 10);
+
+            let d, m;
+            if (isViLocale()) {
+                // Strictly DD/MM/YYYY in Vietnamese
+                d = p1;
+                m = p2;
+            } else {
+                if (p1 > 12) {
+                    d = p1;
+                    m = p2;
+                } else if (p2 > 12) {
+                    m = p1;
+                    d = p2;
+                } else {
+                    m = p1;
+                    d = p2;
+                }
+            }
+
+            if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+                return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+        }
+
+        return '';
+    }
+
+    function handleStep2DateInput(taskId, inputEl) {
+        if (!inputEl) return;
+        const val = inputEl.value.trim();
+        const picker = document.getElementById(`adjust-due-picker-${taskId}`);
+        if (!val) {
+            inputEl.dataset.iso = '';
+            if (picker) picker.value = '';
+            updateRetainedDueDate(taskId, '');
+            return;
+        }
+        const iso = parseStep2DateInput(val);
+        if (iso) {
+            inputEl.dataset.iso = iso;
+            if (picker) picker.value = iso;
+            updateRetainedDueDate(taskId, iso);
+        }
+    }
+
+    function handleStep2DateBlur(taskId, inputEl) {
+        if (!inputEl) return;
+        const val = inputEl.value.trim();
+        if (!val) {
+            inputEl.dataset.iso = '';
+            inputEl.value = '';
+            updateRetainedDueDate(taskId, '');
+            return;
+        }
+        const iso = inputEl.dataset.iso || parseStep2DateInput(val);
+        if (iso) {
+            inputEl.dataset.iso = iso;
+            inputEl.value = formatStep2DisplayDate(iso);
+            const picker = document.getElementById(`adjust-due-picker-${taskId}`);
+            if (picker) picker.value = iso;
+            updateRetainedDueDate(taskId, iso);
+        } else {
+            const item = adjustmentDraft?.retainedTasks?.find(t => String(t.id) === String(taskId));
+            if (item && item.deadlineDate) {
+                inputEl.dataset.iso = item.deadlineDate;
+                inputEl.value = formatStep2DisplayDate(item.deadlineDate);
+            } else {
+                inputEl.dataset.iso = '';
+                inputEl.value = '';
+                updateRetainedDueDate(taskId, '');
+            }
+        }
+    }
+
+    function handleStep2PickerChange(taskId, isoVal) {
+        const textInput = document.getElementById(`adjust-due-${taskId}`);
+        const cleanIso = (isoVal || '').trim();
+        if (textInput) {
+            textInput.dataset.iso = cleanIso;
+            textInput.value = formatStep2DisplayDate(cleanIso);
+        }
+        updateRetainedDueDate(taskId, cleanIso);
+    }
+
+    function handleStep2NewTaskDateInput(inputEl) {
+        if (!inputEl) return;
+        const val = inputEl.value.trim();
+        const picker = document.getElementById('adjust-new-task-due-picker');
+        if (!val) {
+            inputEl.dataset.iso = '';
+            if (picker) picker.value = '';
+            return;
+        }
+        const iso = parseStep2DateInput(val);
+        if (iso) {
+            inputEl.dataset.iso = iso;
+            if (picker) picker.value = iso;
+        }
+    }
+
+    function handleStep2NewTaskDateBlur(inputEl) {
+        if (!inputEl) return;
+        const val = inputEl.value.trim();
+        if (!val) {
+            inputEl.dataset.iso = '';
+            inputEl.value = '';
+            return;
+        }
+        const iso = inputEl.dataset.iso || parseStep2DateInput(val);
+        if (iso) {
+            inputEl.dataset.iso = iso;
+            inputEl.value = formatStep2DisplayDate(iso);
+            const picker = document.getElementById('adjust-new-task-due-picker');
+            if (picker) picker.value = iso;
+        } else {
+            inputEl.dataset.iso = '';
+            inputEl.value = '';
+        }
+    }
+
+    function handleStep2NewTaskPickerChange(isoVal) {
+        const textInput = document.getElementById('adjust-new-task-due');
+        const cleanIso = (isoVal || '').trim();
+        if (textInput) {
+            textInput.dataset.iso = cleanIso;
+            textInput.value = formatStep2DisplayDate(cleanIso);
+        }
+    }
+
     // Step 2: Adjust retained tasks & add new tasks
     function renderAdjustmentStep2Tasks() {
         activeModalView = 'adjust_tasks';
         const kept = adjustmentDraft.retainedTasks.filter(t => t._keep);
+        const datePlaceholder = window.t ? window.t('workspace.datePlaceholderStep2', {}, (isViLocale() ? 'dd/mm/yyyy' : 'MMM DD, YYYY')) : (isViLocale() ? 'dd/mm/yyyy' : 'MMM DD, YYYY');
 
         const html = `
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        STEP 2 OF 3 • ADJUST PLAN
+                        ${window.t ? window.t('workspace.adjustPlanStep2', {}, 'STEP 2 OF 3 · ADJUST PLAN') : (isViLocale() ? 'BƯỚC 2/3 · ĐIỀU CHỈNH PLAN' : 'STEP 2 OF 3 · ADJUST PLAN')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Adjust estimates & add new tasks
+                        ${window.t ? window.t('workspace.adjustEstimatesAndAddTasks', {}, 'Adjust estimates & add new tasks') : (isViLocale() ? 'Điều chỉnh thời lượng & thêm task mới' : 'Adjust estimates & add new tasks')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.handleAdjustmentStep2Back()"
-                        aria-label="Back"
+                        aria-label="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
+                        title="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
                     ←
                 </button>
@@ -1980,71 +2614,120 @@ window.TempoUrmodeFlow = (function() {
 
             <!-- Retained tasks list -->
             <div class="space-y-2 max-h-56 sm:max-h-60 overflow-y-auto pr-1 py-1">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">Retained Tasks (${kept.length}):</div>
-                ${kept.map(t => `
+                <div class="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                    ${window.t ? window.t('workspace.retainedTasksCount', { count: kept.length }, `RETAINED TASKS (${kept.length}):`) : (isViLocale() ? `CÁC TASK ĐƯỢC GIỮ LẠI (${kept.length}):` : `RETAINED TASKS (${kept.length}):`)}
+                </div>
+                ${kept.map(t => {
+                    const displayDue = formatStep2DisplayDate(t.deadlineDate);
+                    return `
                     <div class="p-3 rounded-2xl border border-stone-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                         <div class="min-w-0 flex-1">
-                            <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name)}</span>
+                            <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name || t.title)}</span>
                         </div>
                         <div class="flex items-center gap-2 shrink-0 flex-wrap">
                             <div class="flex items-center space-x-1.5">
-                                <label for="adjust-due-${t.id}" class="text-[11px] font-semibold text-stone-500">Due:</label>
-                                <input type="date"
-                                       id="adjust-due-${t.id}"
-                                       value="${t.deadlineDate || ''}"
-                                       onchange="window.TempoUrmodeFlow.updateRetainedDueDate('${t.id}', this.value)"
-                                       oninput="window.TempoUrmodeFlow.updateRetainedDueDate('${t.id}', this.value)"
-                                       class="px-2.5 py-1.5 rounded-xl border border-stone-300 text-xs text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277]" />
+                                <label for="adjust-due-${t.id}" class="text-[11px] font-semibold text-stone-500">
+                                    ${window.t ? window.t('workspace.duePrefixLabel', {}, 'Deadline:') : 'Deadline:'}
+                                </label>
+                                <div class="relative inline-flex items-center">
+                                    <input type="text"
+                                           id="adjust-due-${t.id}"
+                                           data-iso="${t.deadlineDate || ''}"
+                                           value="${escapeHTML(displayDue)}"
+                                           placeholder="${escapeHTML(datePlaceholder)}"
+                                           oninput="window.TempoUrmodeFlow.handleStep2DateInput('${t.id}', this)"
+                                           onchange="window.TempoUrmodeFlow.handleStep2DateBlur('${t.id}', this)"
+                                           onblur="window.TempoUrmodeFlow.handleStep2DateBlur('${t.id}', this)"
+                                           class="pl-2.5 pr-7 py-1.5 rounded-xl border border-stone-300 text-xs text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277] w-[115px] sm:w-[125px]" />
+                                    <input type="date"
+                                           id="adjust-due-picker-${t.id}"
+                                           tabindex="-1"
+                                           aria-hidden="true"
+                                           value="${t.deadlineDate || ''}"
+                                           onchange="window.TempoUrmodeFlow.handleStep2PickerChange('${t.id}', this.value)"
+                                           class="absolute right-1 w-6 h-6 opacity-0 cursor-pointer z-10" />
+                                    <span class="absolute right-2 pointer-events-none text-stone-400 text-xs select-none">
+                                        📅
+                                    </span>
+                                </div>
                             </div>
                             <select id="adjust-dur-${t.id}"
                                     onchange="window.TempoUrmodeFlow.updateRetainedDuration('${t.id}', this.value)"
                                     class="px-2.5 py-1.5 rounded-xl border border-stone-300 text-xs font-medium text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277]">
-                                <option value="15" ${t.durationMinutes === 15 ? 'selected' : ''}>15 min</option>
-                                <option value="30" ${t.durationMinutes === 30 ? 'selected' : ''}>30 min</option>
-                                <option value="45" ${t.durationMinutes === 45 ? 'selected' : ''}>45 min</option>
-                                <option value="60" ${t.durationMinutes === 60 ? 'selected' : ''}>1 hr</option>
-                                <option value="90" ${t.durationMinutes === 90 ? 'selected' : ''}>1.5 hr</option>
-                                <option value="120" ${t.durationMinutes === 120 ? 'selected' : ''}>2 hr</option>
+                                <option value="15" ${t.durationMinutes === 15 ? 'selected' : ''}>${isViLocale() ? '15 phút' : '15 min'}</option>
+                                <option value="30" ${t.durationMinutes === 30 ? 'selected' : ''}>${isViLocale() ? '30 phút' : '30 min'}</option>
+                                <option value="45" ${t.durationMinutes === 45 ? 'selected' : ''}>${isViLocale() ? '45 phút' : '45 min'}</option>
+                                <option value="60" ${t.durationMinutes === 60 ? 'selected' : ''}>${isViLocale() ? '1 giờ' : '1 hr'}</option>
+                                <option value="90" ${t.durationMinutes === 90 ? 'selected' : ''}>${isViLocale() ? '1,5 giờ' : '1.5 hr'}</option>
+                                <option value="120" ${t.durationMinutes === 120 ? 'selected' : ''}>${isViLocale() ? '2 giờ' : '2 hr'}</option>
                             </select>
                         </div>
                     </div>
-                `).join('')}
+                `;}).join('')}
             </div>
 
             <!-- Add new task section -->
             <div class="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl space-y-2.5 pt-2.5">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-stone-600">+ Add new task:</div>
+                <div class="text-[11px] font-bold uppercase tracking-wider text-stone-600">
+                    ${window.t ? window.t('workspace.addNewTaskUpper', {}, '+ ADD NEW TASK:') : (isViLocale() ? '+ THÊM TASK MỚI:' : '+ ADD NEW TASK:')}
+                </div>
                 <div class="flex flex-wrap sm:flex-nowrap items-center gap-2">
-                    <input type="text" id="adjust-new-task-name" placeholder="Task name..."
+                    <input type="text" id="adjust-new-task-name"
+                           placeholder="${window.t ? window.t('workspace.taskNamePlaceholderEllipsis', {}, 'Task name...') : (isViLocale() ? 'Tên task...' : 'Task name...')}"
                            class="flex-1 min-w-[130px] px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#D79277]" />
                     <div class="flex items-center space-x-1.5 shrink-0">
-                        <label for="adjust-new-task-due" class="text-[11px] font-semibold text-stone-500">Due:</label>
-                        <input type="date" id="adjust-new-task-due"
-                               class="px-2.5 py-1.5 rounded-xl border border-stone-300 text-xs text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277]" />
+                        <label for="adjust-new-task-due" class="text-[11px] font-semibold text-stone-500">
+                            ${window.t ? window.t('workspace.duePrefixLabel', {}, 'Deadline:') : 'Deadline:'}
+                        </label>
+                        <div class="relative inline-flex items-center">
+                            <input type="text"
+                                   id="adjust-new-task-due"
+                                   data-iso=""
+                                   value=""
+                                   placeholder="${escapeHTML(datePlaceholder)}"
+                                   oninput="window.TempoUrmodeFlow.handleStep2NewTaskDateInput(this)"
+                                   onchange="window.TempoUrmodeFlow.handleStep2NewTaskDateBlur(this)"
+                                   onblur="window.TempoUrmodeFlow.handleStep2NewTaskDateBlur(this)"
+                                   class="pl-2.5 pr-7 py-1.5 rounded-xl border border-stone-300 text-xs text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277] w-[115px] sm:w-[125px]" />
+                            <input type="date"
+                                   id="adjust-new-task-due-picker"
+                                   tabindex="-1"
+                                   aria-hidden="true"
+                                   value=""
+                                   onchange="window.TempoUrmodeFlow.handleStep2NewTaskPickerChange(this.value)"
+                                   class="absolute right-1 w-6 h-6 opacity-0 cursor-pointer z-10" />
+                            <span class="absolute right-2 pointer-events-none text-stone-400 text-xs select-none">
+                                📅
+                            </span>
+                        </div>
                     </div>
                     <select id="adjust-new-task-dur"
                             class="px-2.5 py-1.5 rounded-xl border border-stone-300 text-xs text-stone-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#D79277] shrink-0">
-                        <option value="30">30 min</option>
-                        <option value="45">45 min</option>
-                        <option value="60">1 hr</option>
-                        <option value="90">1.5 hr</option>
+                        <option value="15">${isViLocale() ? '15 phút' : '15 min'}</option>
+                        <option value="30" selected>${isViLocale() ? '30 phút' : '30 min'}</option>
+                        <option value="45">${isViLocale() ? '45 phút' : '45 min'}</option>
+                        <option value="60">${isViLocale() ? '1 giờ' : '1 hr'}</option>
+                        <option value="90">${isViLocale() ? '1,5 giờ' : '1.5 hr'}</option>
+                        <option value="120">${isViLocale() ? '2 giờ' : '2 hr'}</option>
                     </select>
                     <button type="button" onclick="window.TempoUrmodeFlow.addNewAdjustmentTask()"
                             class="px-3.5 py-1.5 rounded-xl bg-[#D79277] text-white font-bold text-xs hover:bg-[#C68166] transition cursor-pointer shrink-0">
-                        Add
+                        ${window.t ? window.t('workspace.addPlain', {}, (isViLocale() ? 'Thêm' : 'Add')) : (isViLocale() ? 'Thêm' : 'Add')}
                     </button>
                 </div>
                 ${adjustmentDraft.newTasks.length > 0 ? `
                     <div id="adjust-new-tasks-list" class="space-y-1.5 pt-1">
                         ${adjustmentDraft.newTasks.map((nt, idx) => {
-                            const dueStr = nt.hasDeadline && nt.deadlineDate ? ` • Due: ${formatDeadline(nt.deadlineDate, nt.deadlineTime)}` : '';
+                            const dueFormatted = nt.hasDeadline && nt.deadlineDate ? formatStep2DisplayDate(nt.deadlineDate) : '';
+                            const dueStr = dueFormatted ? ` • Deadline: ${dueFormatted}` : '';
+                            const durLabel = (nt.durationMinutes === 90) ? (isViLocale() ? '1,5 giờ' : '1.5 hr') : formatDuration(nt.durationMinutes);
                             return `
                                 <div class="flex items-center justify-between text-xs text-stone-700 bg-white px-3 py-2 rounded-xl border border-stone-200">
                                     <div class="truncate mr-2 font-medium">
                                         <span class="text-[#D79277] font-bold">+</span> ${escapeHTML(nt.name)}
-                                        <span class="text-stone-500 font-normal">(~${escapeHTML(nt.durationLabel)}${escapeHTML(dueStr)})</span>
+                                        <span class="text-stone-500 font-normal">(~${escapeHTML(durLabel)}${escapeHTML(dueStr)})</span>
                                     </div>
-                                    <button type="button" onclick="window.TempoUrmodeFlow.removeAdjustmentNewTask(${idx})" class="text-stone-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0" title="Remove task">✕</button>
+                                    <button type="button" onclick="window.TempoUrmodeFlow.removeAdjustmentNewTask(${idx})" class="text-stone-400 hover:text-rose-600 p-0.5 cursor-pointer shrink-0" title="${isViLocale() ? 'Xóa task' : 'Remove task'}">✕</button>
                                 </div>
                             `;
                         }).join('')}
@@ -2055,11 +2738,11 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.handleAdjustmentStep2Back()"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                    ← Back
+                    ← ${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.handleAdjustmentStep2Next()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                    Next: Propose plan →
+                    ${window.t ? window.t('workspace.nextProposePlan', {}, 'Next: Propose plan →') : (isViLocale() ? 'Tiếp theo: Đề xuất plan →' : 'Next: Propose plan →')}
                 </button>
             </div>
         `;
@@ -2073,7 +2756,8 @@ window.TempoUrmodeFlow = (function() {
         kept.forEach(t => {
             const dueInput = document.getElementById(`adjust-due-${t.id}`);
             if (dueInput) {
-                updateRetainedDueDate(t.id, dueInput.value);
+                const iso = dueInput.dataset.iso || parseStep2DateInput(dueInput.value) || '';
+                updateRetainedDueDate(t.id, iso);
             }
             const durSelect = document.getElementById(`adjust-dur-${t.id}`);
             if (durSelect) {
@@ -2096,10 +2780,11 @@ window.TempoUrmodeFlow = (function() {
         if (!adjustmentDraft || !Array.isArray(adjustmentDraft.retainedTasks)) return;
         const item = adjustmentDraft.retainedTasks.find(t => String(t.id) === String(taskId));
         if (item) {
-            const val = (dateVal || '').trim();
-            if (val) {
+            const raw = (dateVal || '').trim();
+            const iso = parseStep2DateInput(raw) || (raw.match(/^\d{4}-\d{2}-\d{2}$/) ? raw : '');
+            if (iso) {
                 item.hasDeadline = true;
-                item.deadlineDate = val;
+                item.deadlineDate = iso;
                 if (!item.deadlineTime) {
                     item.deadlineTime = '23:59';
                 }
@@ -2133,7 +2818,8 @@ window.TempoUrmodeFlow = (function() {
         syncStep2InputsFromDom();
 
         const dur = parseInt(durInput?.value || '30', 10);
-        const dueDate = dueInput ? (dueInput.value || '').trim() : '';
+        const rawDue = dueInput ? (dueInput.dataset.iso || parseStep2DateInput(dueInput.value) || dueInput.value || '').trim() : '';
+        const dueDate = parseStep2DateInput(rawDue) || (rawDue.match(/^\d{4}-\d{2}-\d{2}$/) ? rawDue : '');
         const hasDeadline = Boolean(dueDate);
 
         adjustmentDraft.newTasks.push({
@@ -2159,7 +2845,7 @@ window.TempoUrmodeFlow = (function() {
         renderAdjustmentStep2Tasks();
     }
 
-    // Step 3: Propose updated plan & Save
+    // Step 3: Confirm updated plan proposal
     function renderAdjustmentStep3Proposal() {
         activeModalView = 'adjust_propose';
         const kept = adjustmentDraft.retainedTasks.filter(t => t._keep);
@@ -2195,41 +2881,53 @@ window.TempoUrmodeFlow = (function() {
             <div class="flex items-start justify-between pb-3 border-b border-[#EAE4DF]/80 gap-4">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#D79277] block">
-                        STEP 3 OF 3 • CONFIRM UPDATED PLAN
+                        ${window.t ? window.t('workspace.adjustPlanStep3', {}, 'STEP 3 OF 3 · CONFIRM UPDATED PLAN') : (isViLocale() ? 'BƯỚC 3/3 · XÁC NHẬN PLAN MỚI' : 'STEP 3 OF 3 · CONFIRM UPDATED PLAN')}
                     </span>
                     <h2 class="font-heading text-xl sm:text-2xl font-bold text-[#202124] leading-snug tracking-tight">
-                        Proposed Updated Plan
+                        ${window.t ? window.t('workspace.proposedUpdatedPlan', {}, 'Proposed Updated Plan') : (isViLocale() ? 'Plan mới được đề xuất' : 'Proposed Updated Plan')}
                     </h2>
                 </div>
                 <button type="button" onclick="window.TempoUrmodeFlow.renderAdjustmentStep2Tasks()"
-                        aria-label="Back"
+                        aria-label="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
+                        title="${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}"
                         class="text-[#6F6B68] hover:text-[#202124] hover:bg-[#EAE4DF]/60 p-2 rounded-full transition-colors shrink-0 cursor-pointer">
                     ←
                 </button>
             </div>
 
             <p class="text-xs sm:text-sm text-stone-600">
-                Here is your updated working plan. Your original plan is preserved until you confirm and save.
+                ${window.t ? window.t('workspace.adjustPlanStep3Desc', {}, 'Here is your updated working plan. Your original plan is preserved until you confirm and save.') : (isViLocale() ? 'Đây là kế hoạch làm việc đã được điều chỉnh. Kế hoạch ban đầu sẽ được giữ nguyên cho đến khi bạn xác nhận và lưu thay đổi.' : 'Here is your updated working plan. Your original plan is preserved until you confirm and save.')}
             </p>
 
             <div class="max-h-60 overflow-y-auto space-y-2 pr-1 py-1">
                 ${allAdjustedTasks.map((t, idx) => {
-                    const dueStr = t.hasDeadline && t.deadlineDate ? `Due: ${formatDeadline(t.deadlineDate, t.deadlineTime)}` : 'No fixed deadline';
+                    let dueStr = '';
+                    if (t.hasDeadline && t.deadlineDate) {
+                        const formattedDate = formatStep2DisplayDate(t.deadlineDate);
+                        dueStr = `Deadline: ${formattedDate}`;
+                    } else {
+                        dueStr = window.t ? window.t('workspace.noFixedDeadlineStep3', {}, (isViLocale() ? 'Chưa có deadline cố định' : 'No fixed deadline')) : (isViLocale() ? 'Chưa có deadline cố định' : 'No fixed deadline');
+                    }
+                    const durLabel = (t.durationMinutes === 90) ? (isViLocale() ? '1,5 giờ' : '1.5 hr') : formatDuration(t.durationMinutes || 30);
+                    const badgeText = idx === 0 
+                        ? (window.t ? window.t('workspace.doThisFirstUpper', {}, (isViLocale() ? 'LÀM ĐẦU TIÊN' : 'DO THIS FIRST')) : (isViLocale() ? 'LÀM ĐẦU TIÊN' : 'DO THIS FIRST'))
+                        : (window.t ? window.t('workspace.upNextUpper', {}, (isViLocale() ? 'TIẾP THEO' : 'UP NEXT')) : (isViLocale() ? 'TIẾP THEO' : 'UP NEXT'));
+
                     return `
                         <div class="p-3 rounded-2xl border border-stone-200 bg-white flex items-center justify-between text-xs">
                             <div class="flex items-center space-x-2.5 min-w-0 flex-1 mr-2">
                                 <span class="font-bold text-stone-400 w-5 shrink-0 text-center">${idx + 1}.</span>
                                 <div class="min-w-0">
-                                    <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name)}</span>
+                                    <span class="font-bold text-stone-800 truncate block">${escapeHTML(t.name || t.title)}</span>
                                     <div class="text-[11px] text-stone-500 flex items-center space-x-2 mt-0.5">
                                         <span>${escapeHTML(dueStr)}</span>
                                         <span>•</span>
-                                        <span>~${escapeHTML(t.durationLabel || formatDuration(t.durationMinutes))}</span>
+                                        <span>~${escapeHTML(durLabel)}</span>
                                     </div>
                                 </div>
                             </div>
                             <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${idx === 0 ? 'bg-[#D79277] text-white' : 'bg-stone-100 text-stone-600'}">
-                                ${idx === 0 ? 'DO THIS FIRST' : 'UP NEXT'}
+                                ${escapeHTML(badgeText)}
                             </span>
                         </div>
                     `;
@@ -2239,11 +2937,11 @@ window.TempoUrmodeFlow = (function() {
             <div class="pt-4 border-t border-[#EAE4DF]/80 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <button type="button" onclick="window.TempoUrmodeFlow.renderAdjustmentStep2Tasks()"
                         class="w-full sm:w-auto px-5 py-2.5 rounded-2xl font-bold text-xs sm:text-sm bg-white hover:bg-[#FAF7F4] text-[#6F6B68] border border-[#EAE4DF] shadow-2xs transition cursor-pointer">
-                    ← Back
+                    ← ${window.t ? window.t('common.back', {}, 'Back') : (isViLocale() ? 'Quay lại' : 'Back')}
                 </button>
                 <button type="button" onclick="window.TempoUrmodeFlow.saveAdjustmentPlan()"
                         class="w-full sm:w-auto btn-primary btn-terracotta px-6 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-sm transition cursor-pointer">
-                    Save updated plan →
+                    ${window.t ? window.t('workspace.saveUpdatedPlan', {}, (isViLocale() ? 'Lưu Plan mới →' : 'Save updated plan →')) : (isViLocale() ? 'Lưu Plan mới →' : 'Save updated plan →')}
                 </button>
             </div>
         `;
@@ -2271,7 +2969,7 @@ window.TempoUrmodeFlow = (function() {
         }
 
         if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-            window.TempoApp.showToast("Working Plan updated and saved successfully.");
+            window.TempoApp.showToast("Đã cập nhật và lưu Kế hoạch Làm việc thành công.");
         }
 
         // Proceed to break-down prompt (Section 4 Step 7)
@@ -2281,6 +2979,54 @@ window.TempoUrmodeFlow = (function() {
     // -------------------------------------------------------------------------
     // PUBLIC API
     // -------------------------------------------------------------------------
+
+    if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+        window.TempoI18n.onLanguageChange(() => {
+            if (activeModalView === 'reset') {
+                showResetPopup(currentResetCase);
+            } else if (activeModalView === 'are_you_ready') {
+                showAreYouReadyPopup();
+            } else if (activeModalView === 'review_summary') {
+                showReviewSummaryPopup();
+            } else if (activeModalView === 'keep_plan_task') {
+                showKeepPlanTaskPopup();
+            } else if (activeModalView === 'adjust_keep') {
+                renderAdjustmentStep1Keep();
+            } else if (activeModalView === 'adjust_tasks') {
+                const draftName = document.getElementById('adjust-new-task-name')?.value || '';
+                const newDueEl = document.getElementById('adjust-new-task-due');
+                const draftDueIso = newDueEl ? (newDueEl.dataset.iso || parseStep2DateInput(newDueEl.value) || '') : '';
+                const draftDur = document.getElementById('adjust-new-task-dur')?.value || '30';
+                syncStep2InputsFromDom();
+                renderAdjustmentStep2Tasks();
+                const newNameInput = document.getElementById('adjust-new-task-name');
+                const newDueInput = document.getElementById('adjust-new-task-due');
+                const newDuePicker = document.getElementById('adjust-new-task-due-picker');
+                const newDurInput = document.getElementById('adjust-new-task-dur');
+                if (newNameInput && draftName) newNameInput.value = draftName;
+                if (newDueInput && draftDueIso) {
+                    newDueInput.dataset.iso = draftDueIso;
+                    newDueInput.value = formatStep2DisplayDate(draftDueIso);
+                    if (newDuePicker) newDuePicker.value = draftDueIso;
+                }
+                if (newDurInput && draftDur) newDurInput.value = draftDur;
+            } else if (activeModalView === 'adjust_propose') {
+                renderAdjustmentStep3Proposal();
+            } else if (activeModalView === 'post_save_task_now') {
+                showTaskForNowPopupAfterSave(lastPostSavePlan);
+            } else if (activeModalView === 'start_working_plan') {
+                showStartWorkingPopup();
+            } else if (activeModalView === 'first_task_choice') {
+                showFirstTaskExecutionPopup();
+            } else if (activeModalView === 'select_another_task') {
+                showTaskSelectionPopup();
+            } else if (activeModalView === 'breakdown') {
+                if (currentBreakdownTaskId) {
+                    renderBreakTaskPopup(currentBreakdownTaskId);
+                }
+            }
+        });
+    }
 
     return {
         // Entry Trigger & Session Flags
@@ -2339,6 +3085,14 @@ window.TempoUrmodeFlow = (function() {
         renderAdjustmentStep1Keep,
         toggleRetainedTask,
         renderAdjustmentStep2Tasks,
+        formatStep2DisplayDate,
+        parseStep2DateInput,
+        handleStep2DateInput,
+        handleStep2DateBlur,
+        handleStep2PickerChange,
+        handleStep2NewTaskDateInput,
+        handleStep2NewTaskDateBlur,
+        handleStep2NewTaskPickerChange,
         updateRetainedDuration,
         updateRetainedDueDate,
         handleAdjustmentStep2Back,
@@ -2352,6 +3106,11 @@ window.TempoUrmodeFlow = (function() {
         determinePlanCase,
         getActiveWorkingPlan,
         getAllPlanTasks,
-        isTaskOverdue
+        isTaskOverdue,
+        isTaskMissedSchedule,
+        getTaskState,
+        formatScheduledDateLabel,
+        getLocalTodayISO,
+        formatTaskDuration
     };
 })();

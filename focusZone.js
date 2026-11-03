@@ -21,8 +21,8 @@ window.TempoFocusZone = (function() {
         
         // Task reference (shared, not owned)
         taskId: null,
-        taskName: 'Independent Focus Session',
-        nextAction: 'Begin focused preliminary work block.',
+        taskName: 'Phiên Tập trung Độc lập',
+        nextAction: '',
         subtasks: [],
         
         // Timer settings
@@ -296,7 +296,7 @@ window.TempoFocusZone = (function() {
             session.subtasks = [];
         } else {
             session.taskId = null;
-            session.taskName = 'No task selected';
+            session.taskName = 'Chưa chọn công việc';
             session.nextAction = '';
             session.subtasks = [];
         }
@@ -328,7 +328,7 @@ window.TempoFocusZone = (function() {
         session.isStandaloneBreak = false;
         session.phase = 'quick_entry';
         session.taskId = null;
-        session.taskName = 'Independent Focus Session';
+        session.taskName = 'Phiên Tập trung Độc lập';
         session.nextAction = 'Focus with intentional breaks.';
         session.subtasks = [];
         session.hasUsedBreakExtension = false;
@@ -397,19 +397,21 @@ window.TempoFocusZone = (function() {
                 session.nextAction = firstIncomplete.title;
             } else if (session.subtasks.length > 0) {
                 session.nextAction = session.subtasks[0].title;
+            } else if (task && task.description) {
+                session.nextAction = task.description;
             } else {
-                session.nextAction = 'Begin focused preliminary work block.';
+                session.nextAction = '';
             }
         } else {
             session.taskName = 'Planned Academic Task';
-            session.nextAction = 'Begin first concrete step.';
+            session.nextAction = '';
             session.subtasks = [];
         }
     }
 
     function focusWithoutTask() {
         session.taskId = null;
-        session.taskName = 'Independent Focus Session';
+        session.taskName = 'Phiên Tập trung Độc lập';
         session.nextAction = '';
         session.subtasks = [];
         saveSessionToStorage();
@@ -675,7 +677,7 @@ window.TempoFocusZone = (function() {
             session.taskName = nextItem.task.name;
             session.subtasks = nextItem.task.subtasks || [];
             const firstIncomplete = session.subtasks.find(s => !s.completed);
-            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : 'Begin focused preliminary work block.');
+            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : (nextItem.task.description || ''));
 
             if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setTaskInProgress === 'function') {
                 window.TempoEmergencyFlow.setTaskInProgress(nextItem.task.id, true);
@@ -945,7 +947,7 @@ window.TempoFocusZone = (function() {
             session.taskName = nextItem.task.name;
             session.subtasks = nextItem.task.subtasks || [];
             const firstIncomplete = session.subtasks.find(s => !s.completed);
-            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : 'Begin focused preliminary work block.');
+            session.nextAction = firstIncomplete ? firstIncomplete.title : (session.subtasks.length > 0 ? session.subtasks[0].title : (nextItem.task.description || ''));
 
             if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setTaskInProgress === 'function') {
                 window.TempoEmergencyFlow.setTaskInProgress(nextItem.task.id, true);
@@ -1484,7 +1486,7 @@ window.TempoFocusZone = (function() {
             // Only restore if saved less than 3 hours ago
             if (Date.now() - data.timestamp < 3 * 60 * 60 * 1000) {
                 session.taskId = data.taskId;
-                session.taskName = data.taskName || 'Independent Focus Session';
+                session.taskName = data.taskName || 'Phiên Tập trung Độc lập';
                 session.nextAction = data.nextAction || 'Single focus objective.';
                 session.focusDurationSeconds = data.focusDurationSeconds || 45 * 60;
                 session.breakDurationSeconds = data.breakDurationSeconds || 15 * 60;
@@ -1756,7 +1758,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-lg p-6 sm:p-8 space-y-6 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1.5">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">FOCUS ZONE</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">What are you working on?</h3>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Bạn đang làm việc gì?</h3>
                     <p class="text-xs text-[#6F6B68]">
                         Work on a specific task from your plan, or start an independent timed focus block.
                     </p>
@@ -1787,7 +1789,7 @@ window.TempoFocusZone = (function() {
                         </div>
                     ` : ''}
 
-                    <button type="button" onclick="window.TempoFocusZone.open({ taskName: 'Independent Focus Session' })"
+                    <button type="button" onclick="window.TempoFocusZone.open({ taskName: 'Phiên Tập trung Độc lập' })"
                             class="w-full p-4 rounded-2xl border-2 border-dashed border-stone-300 hover:border-[#FF6B2C] bg-stone-50 hover:bg-white text-center transition group">
                         <span class="text-sm font-bold text-[#202124] group-hover:text-[#FF6B2C] block">Focus without a task</span>
                         <span class="text-xs text-[#6F6B68]">Use the full focus and break timer without modifying any task.</span>
@@ -1811,7 +1813,7 @@ window.TempoFocusZone = (function() {
                 <div class="space-y-1.5">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">FOCUS ZONE</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        ${session.taskId ? escapeHTML(session.taskName) : 'No task selected'}
+                        ${session.taskId ? escapeHTML(session.taskName) : 'Chưa chọn công việc'}
                     </h2>
                 </div>
 
@@ -1824,7 +1826,7 @@ window.TempoFocusZone = (function() {
                         <div class="min-w-0">
                             ${session.taskId ? `
                                 <h4 class="text-xs font-bold text-[#202124] truncate">${escapeHTML(session.taskName)}</h4>
-                                <p class="text-[11px] text-[#6F6B68] truncate">Next: ${escapeHTML(session.nextAction)}</p>
+                                ${session.nextAction ? `<p class="text-[11px] text-[#6F6B68] truncate">Next: ${escapeHTML(session.nextAction)}</p>` : ''}
                             ` : `
                                 <h4 class="text-xs font-bold text-[#202124] truncate">NO TASK</h4>
                                 <p class="text-[11px] text-[#6F6B68] truncate">Just give yourself some focused time</p>
@@ -2022,25 +2024,27 @@ window.TempoFocusZone = (function() {
                 <!-- Task Header -->
                 <div class="space-y-1">
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold ${style.isDark ? 'text-white' : 'text-[#202124]'} tracking-tight">
-                        ${session.taskId ? escapeHTML(session.taskName) : 'Independent Focus Session'}
+                        ${session.taskId ? escapeHTML(session.taskName) : 'Phiên Tập trung Độc lập'}
                     </h2>
                 </div>
 
                 <!-- Next Action Pill with Immediate Done Checkmark -->
                 ${session.taskId ? `
                     <div class="flex flex-col items-center gap-2">
-                        <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full ${style.pillClass} shadow-xs max-w-md mx-auto">
-                            <span class="text-xs font-bold ${style.isDark ? 'text-stone-300' : 'text-stone-700'} truncate">
-                                Next: ${escapeHTML(session.nextAction)}
-                            </span>
-                            ${session.subtasks.length > 0 ? `
-                                <button type="button" onclick="window.TempoFocusZone.completeActiveSubtask()" 
-                                        class="w-5 h-5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 transition shadow-2xs"
-                                        title="Mark step done">
-                                    ✓
-                                </button>
-                            ` : ''}
-                        </div>
+                        ${session.nextAction ? `
+                            <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full ${style.pillClass} shadow-xs max-w-md mx-auto">
+                                <span class="text-xs font-bold ${style.isDark ? 'text-stone-300' : 'text-stone-700'} truncate">
+                                    Next: ${escapeHTML(session.nextAction)}
+                                </span>
+                                ${session.subtasks.length > 0 ? `
+                                    <button type="button" onclick="window.TempoFocusZone.completeActiveSubtask()" 
+                                            class="w-5 h-5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 transition shadow-2xs"
+                                            title="Mark step done">
+                                        ✓
+                                    </button>
+                                ` : ''}
+                            </div>
+                        ` : ''}
                         <button type="button" onclick="window.TempoFocusZone.finishActiveTaskEarly()"
                                 class="px-3.5 py-1 rounded-full text-xs font-bold border border-stone-200 hover:border-[#FF6B2C] bg-white/90 hover:bg-white text-stone-700 hover:text-[#FF6B2C] shadow-2xs transition">
                             Finish task
@@ -2098,7 +2102,7 @@ window.TempoFocusZone = (function() {
                     <button type="button" onclick="window.TempoFocusZone.pauseFocusTimer()"
                             class="px-8 py-2.5 rounded-full bg-white hover:bg-stone-50 text-[#202124] font-bold text-xs sm:text-sm shadow-md border border-stone-200/80 transition flex items-center space-x-2">
                         <span>⏸</span>
-                        <span>Pause</span>
+                        <span>Tạm dừng</span>
                     </button>
                 </div>
 
@@ -2190,7 +2194,7 @@ window.TempoFocusZone = (function() {
                     <button type="button" onclick="window.TempoFocusZone.resumeFocusTimer()"
                             class="btn-primary w-full py-3 rounded-2xl font-bold text-sm shadow-md transition flex items-center justify-center space-x-1.5">
                         <span>▶</span>
-                        <span>Resume</span>
+                        <span>Tiếp tục</span>
                     </button>
                     ${session.taskId ? `
                         <button type="button" onclick="window.TempoFocusZone.finishActiveTaskEarly()"
@@ -2258,7 +2262,7 @@ window.TempoFocusZone = (function() {
             // No-task session: simply confirm ending
             return `
                 <div class="tempo-card w-full max-w-sm p-6 sm:p-8 text-center space-y-5 rounded-3xl ${style.cardClass}">
-                    <h3 class="font-heading text-xl font-bold text-[#202124]">End this focus session?</h3>
+                    <h3 class="font-heading text-xl font-bold text-[#202124]">Kết thúc phiên tập trung này?</h3>
                     <p class="text-xs text-[#6F6B68]">You focused for ~${Math.max(1, Math.round(session.focusElapsedSeconds / 60))} minutes.</p>
                     <div class="space-y-2 pt-2">
                         <button type="button" onclick="window.TempoFocusZone.handleFinishChoice('stop_here')"
@@ -2278,7 +2282,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">FINISH SESSION</span>
-                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Did you finish the task?</h3>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Bạn đã hoàn thành công việc chưa?</h3>
                     <p class="text-xs text-[#6F6B68] max-w-xs mx-auto">
                         <strong>${escapeHTML(session.taskName)}</strong>
                     </p>
@@ -2322,7 +2326,7 @@ window.TempoFocusZone = (function() {
                     ✓
                 </div>
                 <div class="space-y-1">
-                    <h3 class="font-heading text-xl font-bold text-[#202124]">All action steps are done!</h3>
+                    <h3 class="font-heading text-xl font-bold text-[#202124]">Tất cả các bước hành động đã xong!</h3>
                     <p class="text-xs text-[#6F6B68]">Is the whole task finished?</p>
                 </div>
 
@@ -2471,7 +2475,7 @@ window.TempoFocusZone = (function() {
                             <div class="text-2xl">🎮</div>
                             <div>
                                 <div class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C]">Play something</div>
-                                <div class="text-[11px] font-semibold text-stone-500">Gentle Match</div>
+                                <div class="text-[11px] font-semibold text-stone-500">Ghép cặp Nhẹ nhàng</div>
                             </div>
                             <p class="text-[10px] text-[#6F6B68] leading-tight">Low-pressure memory puzzle.</p>
                         </button>
@@ -2492,7 +2496,7 @@ window.TempoFocusZone = (function() {
                                 class="p-3.5 rounded-2xl border border-stone-200 hover:border-[#FF6B2C] bg-white hover:bg-[#FFF9F4] transition text-left space-y-1 shadow-2xs group">
                             <div class="text-2xl">🚶</div>
                             <div>
-                                <div class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C]">Move a little</div>
+                                <div class="text-xs font-bold text-[#202124] group-hover:text-[#FF6B2C]">Vận động một chút</div>
                                 <div class="text-[11px] font-semibold text-stone-500">Short activities</div>
                             </div>
                             <p class="text-[10px] text-[#6F6B68] leading-tight">Simple stretches or 3m walk.</p>
@@ -2547,7 +2551,7 @@ window.TempoFocusZone = (function() {
                     <button type="button" onclick="window.TempoFocusZone.returnToBreakHub()"
                             class="text-xs font-semibold text-stone-600 hover:text-stone-900 flex items-center space-x-1.5 transition">
                         <span>←</span>
-                        <span>Back to break options</span>
+                        <span>Quay lại lựa chọn nghỉ ngơi</span>
                     </button>
                     <span id="fz-break-badge" class="text-xs font-mono font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-3 py-1 rounded-full">
                         Break: ${timeDisplay}
@@ -2555,7 +2559,7 @@ window.TempoFocusZone = (function() {
                 </div>
 
                 <div class="space-y-0.5 pt-1">
-                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Gentle Match</h3>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Ghép cặp Nhẹ nhàng</h3>
                     <p class="text-xs text-[#6F6B68]">Find all matching pairs at your own pace. A calm game for a calmer you.</p>
                 </div>
 
@@ -2579,7 +2583,7 @@ window.TempoFocusZone = (function() {
                 <!-- Completion Status -->
                 ${game.isCompleted ? `
                     <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
-                        <span class="text-xs font-bold text-emerald-900 block">✨ All pairs matched. Take a slow breath.</span>
+                        <span class="text-xs font-bold text-emerald-900 block">✨ Đã tìm thấy tất cả các cặp ghép. Hãy thở một hơi chậm rãi.</span>
                         <div class="flex items-center justify-center gap-2">
                             <button type="button" onclick="window.TempoFocusZone.returnToBreakHub()"
                                     class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition shadow-xs">
@@ -2612,7 +2616,7 @@ window.TempoFocusZone = (function() {
                     <button type="button" onclick="window.TempoFocusZone.returnToBreakHub()"
                             class="text-xs font-semibold text-stone-500 hover:text-stone-800 flex items-center space-x-1">
                         <span>←</span>
-                        <span>Back to break options</span>
+                        <span>Quay lại lựa chọn nghỉ ngơi</span>
                     </button>
                     <span id="fz-break-badge" class="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
                         Break: ${timeDisplay}
@@ -2620,7 +2624,7 @@ window.TempoFocusZone = (function() {
                 </div>
 
                 <div class="space-y-1">
-                    <h3 class="font-heading text-xl font-bold text-[#202124]">Move a little</h3>
+                    <h3 class="font-heading text-xl font-bold text-[#202124]">Vận động một chút</h3>
                     <p class="text-xs text-[#6F6B68]">Gentle micro-movements to release physical tension.</p>
                 </div>
 
@@ -2680,7 +2684,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-md p-8 sm:p-10 space-y-6 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700">REST & RESTORE</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Just resting.</h3>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Chỉ cần nghỉ ngơi.</h3>
                     <p class="text-xs text-[#6F6B68] max-w-xs mx-auto leading-relaxed">
                         No tasks. No tracking. Close your eyes, lean back, or let your mind wander freely.
                     </p>
@@ -2815,7 +2819,7 @@ window.TempoFocusZone = (function() {
                     </div>
                     <div class="space-y-1">
                         <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
-                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Đã xong giờ nghỉ 🌿</h3>
                         <p class="text-xs text-[#6F6B68]">Take this refreshed momentum back into your day.</p>
                     </div>
                     <div class="pt-2">
@@ -2840,7 +2844,7 @@ window.TempoFocusZone = (function() {
                     </div>
                     <div class="space-y-1">
                         <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
-                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Đã xong giờ nghỉ 🌿</h3>
                         <p class="text-xs text-[#6F6B68]">You're done with today's plan.</p>
                     </div>
 
@@ -2890,7 +2894,7 @@ window.TempoFocusZone = (function() {
                 <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                     <div class="space-y-1">
                         <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
-                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                        <h3 class="font-heading text-2xl font-bold text-[#202124]">Đã xong giờ nghỉ 🌿</h3>
                         <p class="text-xs text-[#6F6B68]">
                             Your next task is planned for <strong>${escapeHTML(plannedStartStr)}</strong>.
                         </p>
@@ -2934,7 +2938,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">RECHARGED</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Break complete 🌿</h3>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Đã xong giờ nghỉ 🌿</h3>
                 </div>
 
                 <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl text-left space-y-2">
@@ -3187,7 +3191,7 @@ window.TempoFocusZone = (function() {
                 </div>
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-emerald-700 block">DAY COMPLETE</span>
-                    <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Today's plan is complete ✓</h3>
+                    <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Kế hoạch hôm nay đã hoàn thành ✓</h3>
                     <p class="text-xs text-[#6F6B68]">
                         You made it through everything you planned for today.
                     </p>
@@ -3234,7 +3238,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">PREVIEW</span>
-                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Tomorrow's Plan</h3>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Kế hoạch Ngày mai</h3>
                 </div>
 
                 <div class="space-y-2 text-left py-1 max-h-56 overflow-y-auto pr-1">
@@ -3302,7 +3306,7 @@ window.TempoFocusZone = (function() {
             <div class="tempo-card w-full max-w-md p-6 sm:p-8 space-y-5 rounded-3xl ${style.cardClass} text-center">
                 <div class="space-y-1">
                     <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C] block">PACING</span>
-                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Change focus rhythm</h3>
+                    <h3 class="font-heading text-2xl font-bold text-[#202124]">Thay đổi nhịp độ tập trung</h3>
                     <p class="text-xs text-[#6F6B68]">Find a pace that works better for you.</p>
                 </div>
 
@@ -3399,7 +3403,7 @@ window.TempoFocusZone = (function() {
                     ✓
                 </div>
                 <div class="space-y-1">
-                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Focus rhythm updated ✓</h3>
+                    <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">Đã cập nhật nhịp độ tập trung ✓</h3>
                     <p class="text-xs font-bold text-[#FF6B2C]">
                         ${focusMin} min focus · ${breakMin} min break
                     </p>

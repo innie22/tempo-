@@ -2,18 +2,64 @@
  * Tempo Tool Notes
  * File: toolNotes.js
  *
- * Dedicated storage and manager for Tool Notes and Task-associated notes.
- * Integrates with Working Plan task cards, Tool Notes screen, and Focus Zone.
+ * Dedicated storage and manager for Tool Notes (Day Notes & Task Notes).
+ * Integrates with Working Plan task cards, Tool Notes screen, URmode dashboard, and Focus Zone.
  */
 
 window.TempoToolNotes = (function () {
     'use strict';
 
+    // Localization helper
+    function isViLocale() {
+        return !window.TempoI18n || typeof window.TempoI18n.getLanguage !== 'function' || window.TempoI18n.getLanguage() === 'vi';
+    }
+
+    if (typeof window !== 'undefined' && typeof window.isViLocale !== 'function') {
+        window.isViLocale = isViLocale;
+    }
+
+    function t(path, params = {}, fallback = '') {
+        if (typeof params === 'string') {
+            fallback = params;
+            params = {};
+        }
+        if (window.TempoI18n && typeof window.TempoI18n.t === 'function') {
+            return window.TempoI18n.t(path, params, fallback);
+        }
+        if (typeof window.t === 'function') {
+            return window.t(path, params, fallback);
+        }
+        return fallback;
+    }
+
+    // State for Note Creation Form on Tool Notes Page
+    let currentCreationType = 'day'; // 'day' | 'task'
+    let isSavingNote = false;
+
+    // Active modal state
+    let activeModalNoteId = null;
+    let activeModalCleanup = null;
+
+    // =========================================================================
+    // 1. USER & STORAGE HELPERS
+    // =========================================================================
+
     function getUserId() {
-        if (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') {
+        if (typeof window !== 'undefined' && window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') {
             const uid = window.TempoAuth.getCurrentUserId();
             if (uid) return uid;
         }
+        if (typeof window !== 'undefined' && window.TempoAuth && typeof window.TempoAuth.getUser === 'function') {
+            const u = window.TempoAuth.getUser();
+            if (u && u.id) return u.id;
+        }
+        try {
+            const raw = localStorage.getItem('tempo_local_dev_user');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.id) return parsed.id;
+            }
+        } catch (e) {}
         return 'local_user';
     }
 
@@ -22,163 +68,202 @@ window.TempoToolNotes = (function () {
         return `tempo_tool_notes_${uid}`;
     }
 
-    function loadNotes() {
-        try {
-            const key = getStorageKey();
-            const raw = localStorage.getItem(key);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) return parsed;
-            }
+    function getSupabaseClient() {
+        if (typeof window !== 'undefined' && window.TempoSupabase && typeof window.TempoSupabase.getClient === 'function') {
+            return window.TempoSupabase.getClient();
+        }
+        return null;
+    }
 
-            // Fallback to non-uid key
-            const fallback = localStorage.getItem('tempo_tool_notes');
-            if (fallback) {
-                const parsed = JSON.parse(fallback);
-                if (Array.isArray(parsed)) return parsed;
-            }
+    // =========================================================================
+    // 2. DATA PERSISTENCE & DUAL SYNC (LocalStorage + Supabase)
+    // =========================================================================
+
+    function loadNotes() {
+        const uid = getUserId();
+        const seenIds = new Set();
+        const result = [];
+
+        function addRaw(list) {
+            if (!Array.isArray(list)) return;
+            list.forEach(n => {
+                if (!n) return;
+                const noteId = String(n.id || (n.taskId ? 'task_' + n.taskId : Math.random().toString(36).substr(2)));
+                if (!seenIds.has(noteId)) {
+                    seenIds.add(noteId);
+                    const isTask = !!(n.taskId || n.category === 'task' || n.type === 'task');
+                    result.push({
+                        id: noteId,
+                        type: isTask ? 'task' : 'day',
+                        category: isTask ? 'task' : 'day',
+                        date: n.date || (n.createdAt ? getLocalDateStr(n.createdAt) : getTodayLocalDateStr()),
+                        taskId: n.taskId ? String(n.taskId) : null,
+                        taskName: n.taskName || (n.taskId ? `Task #${n.taskId}` : null),
+                        title: n.title || (isTask ? `Note for ${n.taskName || 'Task'}` : `Day Note - ${n.date || getTodayLocalDateStr()}`),
+                        text: (n.text || n.content || '').trim(),
+                        content: (n.text || n.content || '').trim(),
+                        user_id: n.user_id || uid,
+                        createdAt: n.createdAt || new Date().toISOString(),
+                        updatedAt: n.updatedAt || new Date().toISOString()
+                    });
+                }
+            });
+        }
+
+        try {
+            // Priority 1: User-scoped tool notes
+            const rawUser = localStorage.getItem(`tempo_tool_notes_${uid}`);
+            if (rawUser) addRaw(JSON.parse(rawUser));
+
+            // Priority 2: User-scoped day notes
+            const rawDay = localStorage.getItem(`tempo_day_notes_${uid}`);
+            if (rawDay) addRaw(JSON.parse(rawDay));
+
+            // Priority 3: Fallback keys
+            const rawFallback = localStorage.getItem('tempo_tool_notes');
+            if (rawFallback) addRaw(JSON.parse(rawFallback));
         } catch (e) {
             console.warn("[TempoToolNotes] Error loading notes:", e);
         }
-        return [];
+
+        // Sort latest first
+        result.sort((a, b) => {
+            const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+            const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+            return timeB - timeA;
+        });
+
+        return result;
     }
 
     function saveNotes(notes) {
+        const uid = getUserId();
         try {
-            const key = getStorageKey();
+            const key = `tempo_tool_notes_${uid}`;
             localStorage.setItem(key, JSON.stringify(notes));
             localStorage.setItem('tempo_tool_notes', JSON.stringify(notes));
+
+            // Keep tempo_day_notes synchronized
+            const dayNotes = notes.filter(n => !(n.taskId || n.category === 'task' || n.type === 'task'));
+            localStorage.setItem(`tempo_day_notes_${uid}`, JSON.stringify(dayNotes));
+            localStorage.setItem('tempo_day_notes', JSON.stringify(dayNotes));
         } catch (e) {
             console.warn("[TempoToolNotes] Error saving notes:", e);
         }
     }
 
-    function getNotes() {
-        return loadNotes();
-    }
-
-    function getNoteForTask(taskId) {
-        if (!taskId) return null;
-        const sId = String(taskId);
-        const notes = loadNotes();
-        return notes.find(n => String(n.taskId) === sId) || null;
-    }
-
-    function saveTaskNote(taskId, taskName, text) {
-        if (!taskId) return null;
-        const sId = String(taskId);
-        const trimmed = (text || '').trim();
-
-        const notes = loadNotes();
-        const existingIdx = notes.findIndex(n => String(n.taskId) === sId);
-
-        let savedNote = null;
-
-        if (!trimmed) {
-            // If empty text, remove note
-            if (existingIdx !== -1) {
-                notes.splice(existingIdx, 1);
-                saveNotes(notes);
-            }
-            syncTaskInPlans(sId, '');
-        } else {
-            const now = new Date().toISOString();
-            if (existingIdx !== -1) {
-                notes[existingIdx].text = trimmed;
-                notes[existingIdx].content = trimmed;
-                notes[existingIdx].taskName = taskName || notes[existingIdx].taskName || 'Academic Task';
-                notes[existingIdx].title = `Note for ${notes[existingIdx].taskName}`;
-                notes[existingIdx].updatedAt = now;
-                savedNote = notes[existingIdx];
+    async function syncNoteToSupabase(note, action = 'upsert') {
+        const sb = getSupabaseClient();
+        if (!sb) return;
+        try {
+            const uid = getUserId();
+            if (action === 'delete') {
+                await sb.from('tool_notes').delete().eq('id', note.id);
             } else {
-                savedNote = {
-                    id: 'tool_note_task_' + sId,
-                    taskId: sId,
-                    taskName: taskName || 'Academic Task',
-                    title: `Note for ${taskName || 'Academic Task'}`,
-                    text: trimmed,
-                    content: trimmed,
-                    createdAt: now,
-                    updatedAt: now,
-                    category: 'task'
+                const payload = {
+                    id: note.id,
+                    user_id: uid === 'local_user' ? null : uid,
+                    type: note.type,
+                    category: note.category,
+                    date: note.date,
+                    task_id: note.taskId,
+                    task_name: note.taskName,
+                    title: note.title,
+                    content: note.text || note.content || '',
+                    text: note.text || note.content || '',
+                    updated_at: note.updatedAt || new Date().toISOString()
                 };
-                notes.unshift(savedNote);
+                await sb.from('tool_notes').upsert(payload);
             }
-            saveNotes(notes);
-            syncTaskInPlans(sId, trimmed);
-        }
-
-        // Notify active views
-        renderToolNotesPage();
-
-        if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
-            window.TempoPlanWorkspace.render();
-        }
-
-        if (window.TempoFocusZone && typeof window.TempoFocusZone.render === 'function') {
-            window.TempoFocusZone.render();
-        }
-
-        return savedNote;
-    }
-
-    function deleteTaskNote(taskId) {
-        if (!taskId) return;
-        const sId = String(taskId);
-        const notes = loadNotes();
-        const idx = notes.findIndex(n => String(n.taskId) === sId);
-        if (idx !== -1) {
-            notes.splice(idx, 1);
-            saveNotes(notes);
-        }
-        syncTaskInPlans(sId, '');
-
-        renderToolNotesPage();
-
-        if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
-            window.TempoPlanWorkspace.render();
-        }
-
-        if (window.TempoFocusZone && typeof window.TempoFocusZone.render === 'function') {
-            window.TempoFocusZone.render();
+        } catch (e) {
+            console.warn("[TempoToolNotes] Supabase sync notice (local storage preserved):", e);
         }
     }
 
-    function syncTaskInPlans(taskId, noteText) {
-        // 1. Sync in TempoEmergencyFlow
-        if (window.TempoEmergencyFlow) {
-            const confirmedPlan = typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function' ? window.TempoEmergencyFlow.getConfirmedPlan() : null;
-            if (confirmedPlan && Array.isArray(confirmedPlan.plannedTasks)) {
-                const pt = confirmedPlan.plannedTasks.find(item => item.task && String(item.task.id) === String(taskId));
-                if (pt && pt.task) {
-                    pt.task.note = noteText;
-                    pt.task.description = noteText;
-                }
+    // =========================================================================
+    // 3. DATE & TIME UTILITIES
+    // =========================================================================
+
+    function getTodayLocalDateStr() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function getLocalDateStr(d) {
+        if (!d) return '';
+        try {
+            if (typeof d === 'string' && d.length === 10 && d.includes('-') && !d.includes('T')) {
+                return d;
             }
-            if (typeof window.TempoEmergencyFlow.getTasks === 'function') {
-                const tasks = window.TempoEmergencyFlow.getTasks();
-                const t = tasks.find(item => String(item.id) === String(taskId));
-                if (t) {
-                    t.note = noteText;
-                    t.description = noteText;
-                }
+            const dateObj = new Date(d);
+            if (!isNaN(dateObj.getTime())) {
+                const y = dateObj.getFullYear();
+                const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
             }
+        } catch (e) {}
+        if (typeof d === 'string') {
+            if (d.includes('T')) return d.split('T')[0];
+            return d.substring(0, 10);
+        }
+        return '';
+    }
+
+    function formatDisplayDate(dateStr) {
+        if (!dateStr) return 'Unspecified Date';
+        const today = getTodayLocalDateStr();
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = getLocalDateStr(yesterday);
+
+        let parsed;
+        try {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                parsed = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            } else {
+                parsed = new Date(dateStr);
+            }
+        } catch (e) {
+            parsed = new Date(dateStr);
         }
 
-        // 2. Sync in TempoPlanStore
-        if (window.TempoPlanStore) {
-            const activePlan = typeof window.TempoPlanStore.getActivePlan === 'function' ? window.TempoPlanStore.getActivePlan('emergency') : null;
-            if (activePlan && Array.isArray(activePlan.plannedTasks)) {
-                const pt = activePlan.plannedTasks.find(item => item.task && String(item.task.id) === String(taskId));
-                if (pt && pt.task) {
-                    pt.task.note = noteText;
-                    pt.task.description = noteText;
-                }
-                if (typeof window.TempoPlanStore.saveActivePlan === 'function') {
-                    window.TempoPlanStore.saveActivePlan('emergency', activePlan);
-                }
-            }
+        const dateFormatted = !isNaN(parsed.getTime())
+            ? parsed.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+            : dateStr;
+
+        if (dateStr === today) {
+            return `Today • ${dateFormatted}`;
         }
+        if (dateStr === yesterdayStr) {
+            return `Yesterday • ${dateFormatted}`;
+        }
+        return dateFormatted;
+    }
+
+    function formatNoteTime(note) {
+        if (!note) return '';
+        if (note.time) return note.time;
+        const iso = note.updatedAt || note.createdAt;
+        if (iso) {
+            try {
+                const d = new Date(iso);
+                if (!isNaN(d.getTime())) {
+                    let hours = d.getHours();
+                    const minutes = String(d.getMinutes()).padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    return `${hours}:${minutes} ${ampm}`;
+                }
+            } catch (e) {}
+        }
+        return '';
     }
 
     function escapeHTML(str) {
@@ -191,101 +276,1546 @@ window.TempoToolNotes = (function () {
             .replace(/'/g, '&#039;');
     }
 
-    function renderToolNotesPage() {
-        const screen = document.getElementById('screen-tool-notes');
-        if (!screen) return;
+    // =========================================================================
+    // 4. TASK AGGREGATION & PLAN SYNCHRONIZATION
+    // =========================================================================
 
-        let notesContainer = document.getElementById('tool-notes-task-list-container');
-        if (!notesContainer) {
-            notesContainer = document.createElement('div');
-            notesContainer.id = 'tool-notes-task-list-container';
-            notesContainer.className = 'max-w-2xl mx-auto space-y-4 pt-6';
-            screen.appendChild(notesContainer);
+    function getAvailableTasks() {
+        const uid = getUserId();
+        const tasksMap = new Map();
+
+        // 1. From TempoEmergencyFlow getTasks()
+        if (typeof window !== 'undefined' && window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getTasks === 'function') {
+            try {
+                const efTasks = window.TempoEmergencyFlow.getTasks() || [];
+                efTasks.forEach(t => {
+                    if (t && t.id) {
+                        tasksMap.set(String(t.id), {
+                            id: String(t.id),
+                            name: t.name || t.title || `Task ${t.id}`,
+                            deadlineDate: t.deadlineDate || t.deadline || null,
+                            priority: t.priorityCategory || t.importance || null,
+                            completed: !!t.completed
+                        });
+                    }
+                });
+            } catch (e) {}
         }
 
-        const notes = loadNotes();
+        // 2. From confirmedPlan plannedTasks
+        if (typeof window !== 'undefined' && window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
+            try {
+                const plan = window.TempoEmergencyFlow.getConfirmedPlan();
+                if (plan && Array.isArray(plan.plannedTasks)) {
+                    plan.plannedTasks.forEach(pt => {
+                        const t = pt.task || pt;
+                        if (t && t.id && !tasksMap.has(String(t.id))) {
+                            tasksMap.set(String(t.id), {
+                                id: String(t.id),
+                                name: t.name || t.title || `Task ${t.id}`,
+                                deadlineDate: t.deadlineDate || pt.dayDate || null,
+                                priority: t.priorityCategory || null,
+                                completed: !!t.completed
+                            });
+                        }
+                    });
+                }
+            } catch (e) {}
+        }
 
-        if (notes.length === 0) {
-            notesContainer.innerHTML = `
-                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-8 text-center space-y-3 shadow-xs">
-                    <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl">
-                        📝
-                    </div>
-                    <div class="space-y-1">
-                        <h3 class="font-heading text-lg font-bold text-[#202124]">No task notes yet</h3>
-                        <p class="text-xs text-[#6F6B68] max-w-sm mx-auto">
-                            When you create notes on your Working Plan task cards, they will be preserved and accessible here.
-                        </p>
-                    </div>
-                </div>
-            `;
+        // 3. From PlanStore active plan
+        if (typeof window !== 'undefined' && window.TempoPlanStore && typeof window.TempoPlanStore.getActivePlan === 'function') {
+            try {
+                const plan = window.TempoPlanStore.getActivePlan('emergency');
+                if (plan && Array.isArray(plan.plannedTasks)) {
+                    plan.plannedTasks.forEach(pt => {
+                        const t = pt.task || pt;
+                        if (t && t.id && !tasksMap.has(String(t.id))) {
+                            tasksMap.set(String(t.id), {
+                                id: String(t.id),
+                                name: t.name || t.title || `Task ${t.id}`,
+                                deadlineDate: t.deadlineDate || pt.dayDate || null,
+                                priority: t.priorityCategory || null,
+                                completed: !!t.completed
+                            });
+                        }
+                    });
+                }
+            } catch (e) {}
+        }
+
+        // 4. From LocalStorage tempo_tasks_${uid}
+        try {
+            const rawTasks = localStorage.getItem(`tempo_tasks_${uid}`);
+            if (rawTasks) {
+                const parsed = JSON.parse(rawTasks);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach(t => {
+                        if (t && t.id && !tasksMap.has(String(t.id))) {
+                            tasksMap.set(String(t.id), {
+                                id: String(t.id),
+                                name: t.name || t.title || `Task ${t.id}`,
+                                deadlineDate: t.deadlineDate || null,
+                                priority: t.priorityCategory || null,
+                                completed: !!t.completed
+                            });
+                        }
+                    });
+                }
+            }
+        } catch (e) {}
+
+        return Array.from(tasksMap.values());
+    }
+
+    function syncTaskInPlans(taskId, noteText) {
+        if (!taskId) return;
+        const sId = String(taskId);
+
+        // 1. Sync in TempoEmergencyFlow
+        if (typeof window !== 'undefined' && window.TempoEmergencyFlow) {
+            const confirmedPlan = typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function' ? window.TempoEmergencyFlow.getConfirmedPlan() : null;
+            if (confirmedPlan && Array.isArray(confirmedPlan.plannedTasks)) {
+                const pt = confirmedPlan.plannedTasks.find(item => item.task && String(item.task.id) === sId);
+                if (pt && pt.task) {
+                    pt.task.note = noteText;
+                    pt.task.description = noteText;
+                }
+            }
+            if (typeof window.TempoEmergencyFlow.getTasks === 'function') {
+                const tasks = window.TempoEmergencyFlow.getTasks();
+                const t = tasks.find(item => String(item.id) === sId);
+                if (t) {
+                    t.note = noteText;
+                    t.description = noteText;
+                }
+            }
+        }
+
+        // 2. Sync in TempoPlanStore
+        if (typeof window !== 'undefined' && window.TempoPlanStore) {
+            const activePlan = typeof window.TempoPlanStore.getActivePlan === 'function' ? window.TempoPlanStore.getActivePlan('emergency') : null;
+            if (activePlan && Array.isArray(activePlan.plannedTasks)) {
+                const pt = activePlan.plannedTasks.find(item => item.task && String(item.task.id) === sId);
+                if (pt && pt.task) {
+                    pt.task.note = noteText;
+                    pt.task.description = noteText;
+                }
+                if (typeof window.TempoPlanStore.saveActivePlan === 'function') {
+                    window.TempoPlanStore.saveActivePlan('emergency', activePlan);
+                }
+            }
+        }
+
+        // 3. Refresh Plan Workspace & Focus Zone if open
+        if (typeof window !== 'undefined' && window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
+            window.TempoPlanWorkspace.render();
+        }
+        if (typeof window !== 'undefined' && window.TempoFocusZone && typeof window.TempoFocusZone.render === 'function') {
+            window.TempoFocusZone.render();
+        }
+    }
+
+    // =========================================================================
+    // 5. NOTE OPERATIONS (CRUD)
+    // =========================================================================
+
+    function getNotes() {
+        return loadNotes();
+    }
+
+    function getDayNotes(dateStr) {
+        const notes = loadNotes();
+        return notes.filter(n => {
+            const isTask = !!(n.taskId || n.category === 'task' || n.type === 'task');
+            if (isTask) return false;
+            if (dateStr) {
+                return (n.date && String(n.date).slice(0, 10) === dateStr) ||
+                       (n.createdAt && getLocalDateStr(n.createdAt) === dateStr);
+            }
+            return true;
+        });
+    }
+
+    function getTaskNotes() {
+        const notes = loadNotes();
+        return notes.filter(n => !!(n.taskId || n.category === 'task' || n.type === 'task'));
+    }
+
+    function getNoteById(noteId) {
+        if (!noteId) return null;
+        const notes = loadNotes();
+        return notes.find(n => String(n.id) === String(noteId)) || null;
+    }
+
+    function saveDayNote(text, dateStr, existingNoteId, customTitle) {
+        const trimmed = (text || '').trim();
+        if (!trimmed) return null;
+
+        const targetDate = dateStr ? getLocalDateStr(dateStr) : getTodayLocalDateStr();
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const notes = loadNotes();
+        const uid = getUserId();
+
+        let savedNote = null;
+
+        if (existingNoteId) {
+            const idx = notes.findIndex(n => String(n.id) === String(existingNoteId));
+            if (idx !== -1) {
+                notes[idx].text = trimmed;
+                notes[idx].content = trimmed;
+                notes[idx].date = targetDate;
+                if (customTitle && customTitle.trim()) {
+                    notes[idx].title = customTitle.trim();
+                } else if (!notes[idx].title) {
+                    notes[idx].title = `Day Note - ${targetDate}`;
+                }
+                notes[idx].updatedAt = nowIso;
+                savedNote = notes[idx];
+            }
+        }
+
+        if (!savedNote) {
+            const finalTitle = (customTitle && customTitle.trim()) ? customTitle.trim() : `Day Note - ${targetDate}`;
+            savedNote = {
+                id: 'day_note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                type: 'day',
+                category: 'day',
+                date: targetDate,
+                text: trimmed,
+                content: trimmed,
+                title: finalTitle,
+                user_id: uid,
+                createdAt: nowIso,
+                updatedAt: nowIso
+            };
+            notes.unshift(savedNote);
+        }
+
+        saveNotes(notes);
+        syncNoteToSupabase(savedNote, 'upsert');
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tempo:note-updated', { detail: { note: savedNote, type: 'day' } }));
+        }
+
+        renderToolNotesPage();
+
+        if (typeof window !== 'undefined' && window.TempoMode && typeof window.TempoMode.refreshNotesCardIfPresent === 'function') {
+            window.TempoMode.refreshNotesCardIfPresent();
+        }
+
+        return savedNote;
+    }
+
+    function saveTaskNote(taskId, taskName, text, existingNoteId, customTitle) {
+        const trimmed = (text || '').trim();
+        const sId = taskId ? String(taskId) : null;
+        if (!sId || !trimmed) return null;
+
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const notes = loadNotes();
+        const uid = getUserId();
+
+        let savedNote = null;
+
+        if (existingNoteId) {
+            const idx = notes.findIndex(n => String(n.id) === String(existingNoteId));
+            if (idx !== -1) {
+                notes[idx].taskId = sId;
+                notes[idx].taskName = taskName || notes[idx].taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task');
+                if (customTitle && customTitle.trim()) {
+                    notes[idx].title = customTitle.trim();
+                } else {
+                    notes[idx].title = `Note for ${notes[idx].taskName}`;
+                }
+                notes[idx].text = trimmed;
+                notes[idx].content = trimmed;
+                notes[idx].updatedAt = nowIso;
+                savedNote = notes[idx];
+            }
+        }
+
+        if (!savedNote) {
+            const existingTaskNoteIdx = notes.findIndex(n => String(n.taskId) === sId);
+            if (existingTaskNoteIdx !== -1) {
+                notes[existingTaskNoteIdx].text = trimmed;
+                notes[existingTaskNoteIdx].content = trimmed;
+                notes[existingTaskNoteIdx].taskName = taskName || notes[existingTaskNoteIdx].taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task');
+                if (customTitle && customTitle.trim()) {
+                    notes[existingTaskNoteIdx].title = customTitle.trim();
+                } else {
+                    notes[existingTaskNoteIdx].title = `Note for ${notes[existingTaskNoteIdx].taskName}`;
+                }
+                notes[existingTaskNoteIdx].updatedAt = nowIso;
+                savedNote = notes[existingTaskNoteIdx];
+            } else {
+                const defaultTitle = `Note for ${taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task')}`;
+                savedNote = {
+                    id: 'tool_note_task_' + sId + '_' + Date.now().toString(36),
+                    taskId: sId,
+                    taskName: taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task'),
+                    title: (customTitle && customTitle.trim()) ? customTitle.trim() : defaultTitle,
+                    type: 'task',
+                    category: 'task',
+                    date: getTodayLocalDateStr(),
+                    text: trimmed,
+                    content: trimmed,
+                    user_id: uid,
+                    createdAt: nowIso,
+                    updatedAt: nowIso
+                };
+                notes.unshift(savedNote);
+            }
+        }
+
+        saveNotes(notes);
+        syncTaskInPlans(sId, trimmed);
+        syncNoteToSupabase(savedNote, 'upsert');
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tempo:note-updated', { detail: { note: savedNote, type: 'task' } }));
+        }
+
+        renderToolNotesPage();
+
+        if (typeof window !== 'undefined' && window.TempoMode && typeof window.TempoMode.refreshNotesCardIfPresent === 'function') {
+            window.TempoMode.refreshNotesCardIfPresent();
+        }
+
+        return savedNote;
+    }
+
+    function updateNote(noteId, updates) {
+        if (!noteId || !updates) return null;
+        const notes = loadNotes();
+        const idx = notes.findIndex(n => String(n.id) === String(noteId));
+        if (idx === -1) return null;
+
+        const nowIso = new Date().toISOString();
+        const n = notes[idx];
+
+        if (typeof updates.text === 'string') {
+            n.text = updates.text.trim();
+            n.content = n.text;
+        }
+        if (typeof updates.date === 'string') {
+            n.date = getLocalDateStr(updates.date);
+            if (n.type === 'day') {
+                n.title = `Day Note - ${n.date}`;
+            }
+        }
+        if (updates.taskId) {
+            n.taskId = String(updates.taskId);
+            if (updates.taskName) n.taskName = updates.taskName;
+            n.title = `Note for ${n.taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task')}`;
+            syncTaskInPlans(n.taskId, n.text);
+        }
+        n.updatedAt = nowIso;
+
+        saveNotes(notes);
+        syncNoteToSupabase(n, 'upsert');
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tempo:note-updated', { detail: { note: n, action: 'update' } }));
+        }
+
+        renderToolNotesPage();
+
+        if (typeof window !== 'undefined' && window.TempoMode && typeof window.TempoMode.refreshNotesCardIfPresent === 'function') {
+            window.TempoMode.refreshNotesCardIfPresent();
+        }
+
+        return n;
+    }
+
+    function deleteNote(noteId) {
+        if (!noteId) return;
+        const sId = String(noteId);
+        const notes = loadNotes();
+        const noteToDelete = notes.find(n => String(n.id) === sId);
+        const filtered = notes.filter(n => String(n.id) !== sId);
+        saveNotes(filtered);
+
+        if (noteToDelete) {
+            if (noteToDelete.taskId) {
+                syncTaskInPlans(noteToDelete.taskId, '');
+            }
+            syncNoteToSupabase(noteToDelete, 'delete');
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tempo:note-updated', { detail: { noteId: sId, action: 'delete' } }));
+        }
+
+        renderToolNotesPage();
+
+        if (typeof window !== 'undefined' && window.TempoMode && typeof window.TempoMode.refreshNotesCardIfPresent === 'function') {
+            window.TempoMode.refreshNotesCardIfPresent();
+        }
+    }
+
+    function deleteDayNote(noteId) {
+        deleteNote(noteId);
+    }
+
+    function deleteTaskNote(taskId) {
+        if (!taskId) return;
+        const notes = loadNotes();
+        const note = notes.find(n => String(n.taskId) === String(taskId));
+        if (note) {
+            deleteNote(note.id);
+        }
+    }
+
+    // =========================================================================
+    // 6. UI CREATION FORM HANDLERS
+    // =========================================================================
+
+    function setCreationType(type) {
+        currentCreationType = (type === 'task') ? 'task' : 'day';
+
+        const pillDay = document.getElementById('pill-type-day');
+        const pillTask = document.getElementById('pill-type-task');
+        const groupDate = document.getElementById('form-group-day-date');
+        const groupTask = document.getElementById('form-group-task-select');
+        const textarea = document.getElementById('textarea-note-content');
+
+        if (pillDay && pillTask) {
+            if (currentCreationType === 'day') {
+                pillDay.className = "px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer bg-[#C88E7D] text-white shadow-2xs";
+                pillTask.className = "px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer text-[#6F6B68] hover:text-[#202124]";
+            } else {
+                pillTask.className = "px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer bg-[#C88E7D] text-white shadow-2xs";
+                pillDay.className = "px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer text-[#6F6B68] hover:text-[#202124]";
+            }
+        }
+
+        if (groupDate) {
+            groupDate.className = currentCreationType === 'day' ? 'block space-y-1.5' : 'hidden';
+        }
+        if (groupTask) {
+            groupTask.className = currentCreationType === 'task' ? 'block space-y-1.5' : 'hidden';
+        }
+        if (textarea) {
+            textarea.placeholder = currentCreationType === 'day'
+                ? t('toolNotes.pageContentPlaceholderDay', isViLocale() ? 'Ghi lại suy nghĩ, lời nhắc hoặc những điều bạn muốn lưu giữ trong ngày...' : 'Write reflections, reminders, or general observations for the day...')
+                : t('toolNotes.contentPlaceholderTask', isViLocale() ? 'Viết ghi chú, dàn ý hoặc các bước hành động tiếp theo cho task này...' : 'Write research notes, outlines, or next action steps for this task...');
+        }
+
+        const feedback = document.getElementById('create-note-feedback');
+        if (feedback) feedback.innerHTML = '';
+    }
+
+    function handleCreateFormSubmit() {
+        if (isSavingNote) return;
+
+        const textarea = document.getElementById('textarea-note-content');
+        const content = textarea ? textarea.value.trim() : '';
+        const feedback = document.getElementById('create-note-feedback');
+        const submitBtn = document.getElementById('btn-save-note-submit');
+
+        if (!content) {
+            if (feedback) {
+                feedback.innerHTML = `<span class="text-rose-600 font-bold">⚠️ ${escapeHTML(t('toolNotes.validationContentMissing', isViLocale() ? 'Vui lòng nhập nội dung ghi chú.' : 'Please enter note content.'))}</span>`;
+            }
+            if (textarea) textarea.focus();
             return;
         }
 
-        notesContainer.innerHTML = `
-            <div class="space-y-3">
-                <div class="flex items-center justify-between px-1">
-                    <h3 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
-                        Task Notes (${notes.length})
-                    </h3>
-                    <span class="text-xs text-[#6F6B68]">Saved from your Working Plan</span>
-                </div>
-                <div class="space-y-3">
-                    ${notes.map(note => {
-                        const dateStr = note.updatedAt ? new Date(note.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-                        return `
-                            <div class="bg-white border border-[#EAE4DF] rounded-2xl p-5 space-y-3 shadow-xs hover:border-[#D99E87] transition" data-tool-note-id="${note.id}">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center space-x-2 min-w-0">
-                                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 shrink-0">
-                                            Task Note
-                                        </span>
-                                        <h4 class="font-heading text-sm sm:text-base font-bold text-[#202124] truncate">
-                                            ${escapeHTML(note.taskName || 'Academic Task')}
-                                        </h4>
-                                    </div>
-                                    <div class="text-[11px] text-[#8C827A] shrink-0">
-                                        ${dateStr}
-                                    </div>
-                                </div>
-                                <p class="text-xs sm:text-sm text-[#4A4540] whitespace-pre-wrap leading-relaxed bg-[#FAF7F4] p-3 rounded-xl border border-stone-100">
-                                    ${escapeHTML(note.text)}
-                                </p>
-                                <div class="flex items-center justify-end space-x-3 pt-1 text-xs">
-                                    <button type="button"
-                                            onclick="window.TempoToolNotes.deleteTaskNote('${note.taskId}')"
-                                            class="text-rose-600 hover:text-rose-800 font-semibold cursor-pointer">
-                                        Delete
-                                    </button>
-                                    <button type="button"
-                                            onclick="window.TempoApp.navigateTo('plan-workspace'); if (window.TempoPlanWorkspace && window.TempoPlanWorkspace.selectTask) { window.TempoPlanWorkspace.selectTask('${note.taskId}'); setTimeout(() => window.TempoPlanWorkspace.openNoteEditor('${note.taskId}'), 150); }"
-                                            class="text-[#D99E87] hover:underline font-bold cursor-pointer">
-                                        Edit in Plan →
-                                    </button>
-                                </div>
+        const titleInput = document.getElementById('input-note-title');
+        const customTitleVal = titleInput ? titleInput.value.trim() : '';
+
+        if (currentCreationType === 'day') {
+            const dateInput = document.getElementById('input-note-date');
+            const dateVal = dateInput ? dateInput.value.trim() : getTodayLocalDateStr();
+            if (!dateVal) {
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-rose-600 font-bold">⚠️ ${escapeHTML(t('toolNotes.validationDateMissing', isViLocale() ? 'Vui lòng chọn ngày hợp lệ.' : 'Please select a date.'))}</span>`;
+                }
+                return;
+            }
+
+            isSavingNote = true;
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
+                submitBtn.innerHTML = `<span>Saving...</span>`;
+            }
+
+            try {
+                saveDayNote(content, dateVal, null, customTitleVal);
+                if (textarea) textarea.value = '';
+                if (titleInput) titleInput.value = '';
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-emerald-700 font-bold">✓ Day Note saved successfully!</span>`;
+                }
+                setTimeout(() => {
+                    if (feedback) feedback.innerHTML = '';
+                }, 2500);
+            } catch (err) {
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-rose-600 font-bold">❌ Error saving note: ${escapeHTML(err.message)}</span>`;
+                }
+            } finally {
+                isSavingNote = false;
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    submitBtn.innerHTML = `<span>${isViLocale() ? 'Lưu ghi chú' : 'Save Note'}</span>`;
+                }
+            }
+        } else {
+            const taskSelect = document.getElementById('select-note-task');
+            const taskId = taskSelect ? taskSelect.value.trim() : '';
+            if (!taskId) {
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-rose-600 font-bold">⚠️ ${escapeHTML(t('toolNotes.validationTaskMissing', isViLocale() ? 'Vui lòng chọn một công việc.' : 'Please select an associated task.'))}</span>`;
+                }
+                return;
+            }
+            const taskName = taskSelect.options[taskSelect.selectedIndex]?.text || (isViLocale() ? 'Công việc Học tập' : 'Study Task');
+
+            isSavingNote = true;
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-70', 'cursor-not-allowed');
+                submitBtn.innerHTML = `<span>Saving...</span>`;
+            }
+
+            try {
+                saveTaskNote(taskId, taskName, content, null, customTitleVal);
+                if (textarea) textarea.value = '';
+                if (titleInput) titleInput.value = '';
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-emerald-700 font-bold">✓ Task Note saved successfully!</span>`;
+                }
+                setTimeout(() => {
+                    if (feedback) feedback.innerHTML = '';
+                }, 2500);
+            } catch (err) {
+                if (feedback) {
+                    feedback.innerHTML = `<span class="text-rose-600 font-bold">❌ Error saving task note: ${escapeHTML(err.message)}</span>`;
+                }
+            } finally {
+                isSavingNote = false;
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    submitBtn.innerHTML = `<span>${isViLocale() ? 'Lưu ghi chú' : 'Save Note'}</span>`;
+                }
+            }
+        }
+    }
+
+    function resetCreateForm() {
+        const textarea = document.getElementById('textarea-note-content');
+        if (textarea) textarea.value = '';
+        const feedback = document.getElementById('create-note-feedback');
+        if (feedback) feedback.innerHTML = '';
+    }
+
+    // =========================================================================
+    // 7. MODALS & POPUPS (Detail, Edit, and Create Popups)
+    // =========================================================================
+
+    function getOrCreateModalRoot() {
+        let root = document.getElementById('tool-notes-modal-root');
+        if (!root) {
+            root = document.createElement('div');
+            root.id = 'tool-notes-modal-root';
+            document.body.appendChild(root);
+        }
+        return root;
+    }
+
+    function closeModal() {
+        if (typeof activeModalCleanup === 'function') {
+            try { activeModalCleanup(); } catch (e) {}
+            activeModalCleanup = null;
+        }
+        const root = document.getElementById('tool-notes-modal-root');
+        if (root) root.innerHTML = '';
+        activeModalNoteId = null;
+    }
+
+    function openNoteDetailModal(noteId) {
+        if (!noteId) return;
+        const note = getNoteById(noteId);
+        if (!note) return;
+
+        // Clean up previous listeners if switching modals
+        if (typeof activeModalCleanup === 'function') {
+            try { activeModalCleanup(); } catch (e) {}
+            activeModalCleanup = null;
+        }
+
+        activeModalNoteId = String(note.id);
+        const root = getOrCreateModalRoot();
+        const isTask = note.type === 'task' || !!note.taskId;
+
+        const formattedDate = formatDisplayDate(note.date);
+        const timeStr = formatNoteTime(note);
+        const noteText = escapeHTML(note.text || note.content || '');
+
+        root.innerHTML = `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity" 
+                 id="note-detail-backdrop"
+                 onclick="if (event.target === this) window.TempoToolNotes.closeModal();">
+                <div class="bg-white border border-[#EAE4DF] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl space-y-4 animate-in fade-in zoom-in-95 relative text-left" 
+                     role="dialog" 
+                     aria-modal="true"
+                     aria-labelledby="note-detail-title">
+                    
+                    <!-- Header -->
+                    <div class="flex items-start justify-between gap-3 pb-3 border-b border-stone-100">
+                        <div class="space-y-1 min-w-0">
+                            <div class="flex items-center space-x-2">
+                                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold ${isTask ? 'bg-[#FEF3C7] text-[#92400E]' : 'bg-[#F9E8E2] text-[#B87561]'} uppercase tracking-wider">
+                                    ${isTask ? `📋 ${escapeHTML(t('toolNotes.tabTaskNote', isViLocale() ? 'Note theo task' : 'Task Note'))}` : `📝 ${escapeHTML(t('toolNotes.tabDayNote', isViLocale() ? 'Note theo ngày' : 'Day Note'))}`}
+                                </span>
+                                ${timeStr ? `<span class="text-xs text-[#8C827A] font-medium">${escapeHTML(timeStr)}</span>` : ''}
                             </div>
-                        `;
-                    }).join('')}
+                            <h3 id="note-detail-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124] truncate">
+                                ${isTask ? `📌 ${escapeHTML(note.taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task'))}` : `📅 ${escapeHTML(formattedDate)}`}
+                            </h3>
+                        </div>
+                        <button type="button" 
+                                onclick="window.TempoToolNotes.closeModal()"
+                                class="text-stone-400 hover:text-stone-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 transition cursor-pointer shrink-0"
+                                aria-label="Close note popup">
+                            ✕
+                        </button>
+                    </div>
+
+                    <!-- Complete Note Content (Untruncated) -->
+                    <div class="space-y-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#8C827A]">${escapeHTML(t('toolNotes.fullContent', isViLocale() ? 'Nội dung đầy đủ' : 'Full Content'))}</span>
+                        <div class="bg-[#FAF7F4] border border-stone-200/70 rounded-2xl p-4 max-h-[340px] overflow-y-auto custom-scrollbar">
+                            <p class="whitespace-pre-wrap text-xs sm:text-sm text-[#332F2C] leading-relaxed break-words font-medium">
+                                ${noteText}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Timestamps -->
+                    <div class="flex items-center justify-between text-[11px] text-[#8C827A] pt-1">
+                        <span>Created: ${note.createdAt ? new Date(note.createdAt).toLocaleDateString() : 'N/A'}</span>
+                        <span>Updated: ${note.updatedAt ? new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
+                    </div>
+
+                    <!-- Feedback message (e.g. for unavailable task) -->
+                    <div id="note-detail-feedback" class="text-xs font-semibold text-rose-600 min-h-[16px]"></div>
+
+                    <!-- Footer Actions -->
+                    <div class="flex items-center justify-between pt-3 border-t border-stone-100 flex-wrap gap-2">
+                        <button type="button"
+                                onclick="window.TempoToolNotes.confirmDeleteNote('${escapeHTML(String(note.id))}')"
+                                class="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition cursor-pointer inline-flex items-center gap-1.5">
+                            <span>🗑️ ${escapeHTML(t('toolNotes.delete', isViLocale() ? 'Xóa' : 'Delete'))}</span>
+                        </button>
+                        <div class="flex items-center space-x-2">
+                            <button type="button"
+                                    onclick="window.TempoToolNotes.closeModal()"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100 transition cursor-pointer">
+                                ${escapeHTML(t('toolNotes.close', isViLocale() ? 'Đóng' : 'Close'))}
+                            </button>
+                            ${isTask ? `
+                                <button type="button"
+                                        id="btn-note-view-task"
+                                        onclick="window.TempoToolNotes.viewAssociatedTask('${escapeHTML(String(note.taskId || ''))}')"
+                                        class="px-4 py-2 rounded-xl text-xs font-bold bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#92400E] border border-[#FCD34D] transition cursor-pointer inline-flex items-center gap-1.5">
+                                    <span>📌 ${escapeHTML(t('toolNotes.viewTask', isViLocale() ? 'Xem task' : 'View Task'))}</span>
+                                </button>
+                            ` : ''}
+                            <button type="button"
+                                    onclick="window.TempoToolNotes.openNoteEditModal('${escapeHTML(String(note.id))}')"
+                                    class="px-5 py-2 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer inline-flex items-center gap-1.5">
+                                <span>✏️ ${escapeHTML(t('toolNotes.editNote', isViLocale() ? 'Chỉnh sửa Ghi chú' : 'Edit Note'))}</span>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         `;
+
+        // Subscribe to dynamic language changes while modal is open
+        const unsubscribeLang = window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function'
+            ? window.TempoI18n.onLanguageChange(() => {
+                if (activeModalNoteId === String(note.id)) {
+                    openNoteDetailModal(note.id);
+                }
+            })
+            : null;
+
+        activeModalCleanup = () => {
+            if (typeof unsubscribeLang === 'function') {
+                try { unsubscribeLang(); } catch (e) {}
+            }
+        };
+    }
+
+    function viewAssociatedTask(taskId) {
+        if (!taskId) {
+            showTaskUnavailableFeedback();
+            return;
+        }
+
+        const sTaskId = String(taskId);
+
+        // 1. Check if task exists in any active data source
+        let taskData = null;
+        if (window.TempoMode && typeof window.TempoMode.getUrmodeTaskData === 'function') {
+            const res = window.TempoMode.getUrmodeTaskData(sTaskId);
+            if (res && res.task) {
+                taskData = res.task;
+            }
+        }
+
+        if (!taskData && typeof getAvailableTasks === 'function') {
+            const avail = getAvailableTasks();
+            const found = avail.find(t => t && String(t.id) === sTaskId);
+            if (found) {
+                taskData = found;
+            }
+        }
+
+        if (!taskData) {
+            showTaskUnavailableFeedback();
+            return;
+        }
+
+        // Close note detail modal so user can view task modal cleanly
+        closeModal();
+
+        // Open existing Task Detail Modal
+        if (window.TempoMode && typeof window.TempoMode.openUrmodeTaskDetailModal === 'function') {
+            window.TempoMode.openUrmodeTaskDetailModal(sTaskId);
+        } else if (window.TempoMode && typeof window.TempoMode.openRmodeTaskDetailModal === 'function') {
+            window.TempoMode.openRmodeTaskDetailModal(sTaskId);
+        }
+    }
+
+    function showTaskUnavailableFeedback() {
+        const fb = document.getElementById('note-detail-feedback');
+        const msg = t('toolNotes.taskUnavailable', isViLocale() ? 'Task này hiện không còn tồn tại.' : 'This task is no longer available.');
+        if (fb) {
+            fb.innerText = msg;
+        } else {
+            alert(msg);
+        }
+    }
+
+    function confirmDeleteNote(noteId) {
+        if (!noteId) return;
+        const note = getNoteById(noteId);
+        if (!note) return;
+
+        const isTask = note.type === 'task' || !!note.taskId;
+        const confirmMsg = isTask 
+            ? `Are you sure you want to delete this task note for "${note.taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task')}"?` 
+            : `Are you sure you want to delete this day note for ${note.date || 'today'}?`;
+
+        if (window.confirm(confirmMsg)) {
+            deleteNote(noteId);
+            closeModal();
+        }
+    }
+
+    function openNoteEditModal(noteId) {
+        if (!noteId) return;
+        const note = getNoteById(noteId);
+        if (!note) return;
+
+        const root = getOrCreateModalRoot();
+        const isTask = note.type === 'task' || !!note.taskId;
+        const availableTasks = getAvailableTasks();
+        const noteDate = note.date || getTodayLocalDateStr();
+
+        root.innerHTML = `
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity" 
+                 id="note-edit-backdrop"
+                 onclick="if (event.target === this) window.TempoToolNotes.closeModal();">
+                <div class="bg-white border border-[#EAE4DF] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl space-y-4 animate-in fade-in zoom-in-95 relative" 
+                     role="dialog" 
+                     aria-modal="true">
+                    
+                    <!-- Header -->
+                    <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg">✏️</span>
+                            <h3 class="font-heading text-lg font-bold text-[#202124]">${isViLocale() ? 'Chỉnh sửa Ghi chú' : 'Edit Note'}</h3>
+                        </div>
+                        <button type="button" 
+                                onclick="window.TempoToolNotes.closeModal()"
+                                class="text-stone-400 hover:text-stone-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 transition cursor-pointer">
+                            ✕
+                        </button>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <form onsubmit="event.preventDefault(); window.TempoToolNotes.handleSaveEditSubmit('${escapeHTML(String(note.id))}');" class="space-y-4">
+                        ${!isTask ? `
+                            <div class="space-y-1.5">
+                                <label for="edit-note-date" class="block text-xs font-bold text-[#554741]">Calendar Date</label>
+                                <input type="date" 
+                                       id="edit-note-date" 
+                                       value="${escapeHTML(noteDate)}"
+                                       class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white" />
+                            </div>
+                        ` : `
+                            <div class="space-y-1.5">
+                                <label for="edit-note-task" class="block text-xs font-bold text-[#554741]">${isViLocale() ? 'Associated Công việc Học tập' : 'Associated Study Task'}</label>
+                                <select id="edit-note-task" 
+                                        class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white">
+                                    ${availableTasks.length === 0 ? `
+                                        <option value="${escapeHTML(note.taskId || 'current')}" selected>${escapeHTML(note.taskName || 'Current Task')}</option>
+                                    ` : availableTasks.map(t => `
+                                        <option value="${escapeHTML(t.id)}" ${String(t.id) === String(note.taskId) ? 'selected' : ''}>${escapeHTML(t.name)}${t.deadlineDate ? ` (Due ${t.deadlineDate})` : ''}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        `}
+
+                        <div class="space-y-1.5">
+                            <label for="edit-note-content" class="block text-xs font-bold text-[#554741]">Note Content</label>
+                            <textarea id="edit-note-content" 
+                                      rows="4" 
+                                      class="w-full p-3.5 text-xs sm:text-sm rounded-2xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white resize-y min-h-[110px] leading-relaxed">${escapeHTML(note.text || note.content || '')}</textarea>
+                        </div>
+
+                        <div id="edit-note-feedback" class="text-xs font-semibold text-rose-600 min-h-[16px]"></div>
+
+                        <div class="flex items-center justify-end space-x-2 pt-2 border-t border-stone-100">
+                            <button type="button" 
+                                    onclick="window.TempoToolNotes.openNoteDetailModal('${escapeHTML(String(note.id))}')"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100 transition cursor-pointer">
+                                Back to Details
+                            </button>
+                            <button type="submit" 
+                                    class="px-5 py-2 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        `;
+    }
+
+    function handleSaveEditSubmit(noteId) {
+        if (!noteId) return;
+        const note = getNoteById(noteId);
+        if (!note) return;
+
+        const isTask = note.type === 'task' || !!note.taskId;
+        const textarea = document.getElementById('edit-note-content');
+        const content = textarea ? textarea.value.trim() : '';
+        const feedback = document.getElementById('edit-note-feedback');
+
+        if (!content) {
+            if (feedback) feedback.innerText = 'Please enter note content.';
+            return;
+        }
+
+        const updates = { text: content };
+
+        if (!isTask) {
+            const dateInput = document.getElementById('edit-note-date');
+            if (dateInput && dateInput.value) {
+                updates.date = dateInput.value.trim();
+            }
+        } else {
+            const taskSelect = document.getElementById('edit-note-task');
+            if (taskSelect && taskSelect.value) {
+                updates.taskId = taskSelect.value.trim();
+                updates.taskName = taskSelect.options[taskSelect.selectedIndex]?.text || note.taskName;
+            }
+        }
+
+        updateNote(noteId, updates);
+        openNoteDetailModal(noteId);
+    }
+
+    function openCreateNoteModal(defaultType = 'day', defaultDate = null) {
+        if (typeof activeModalCleanup === 'function') {
+            try { activeModalCleanup(); } catch (e) {}
+            activeModalCleanup = null;
+        }
+
+        const root = getOrCreateModalRoot();
+        const availableTasks = getAvailableTasks();
+        const initialDate = defaultDate ? getLocalDateStr(defaultDate) : getTodayLocalDateStr();
+        let selectedType = defaultType === 'task' ? 'task' : 'day';
+
+        // State preservation across type switching and dynamic language switching
+        let currentTitle = '';
+        let currentContent = '';
+        let currentDate = initialDate;
+        let currentTaskId = '';
+
+        function snapshotInputs() {
+            const titleEl = document.getElementById('modal-input-title');
+            if (titleEl) currentTitle = titleEl.value;
+            const textEl = document.getElementById('modal-textarea-content');
+            if (textEl) currentContent = textEl.value;
+            const dateEl = document.getElementById('modal-input-date');
+            if (dateEl && dateEl.value) currentDate = dateEl.value;
+            const taskEl = document.getElementById('modal-select-task');
+            if (taskEl && taskEl.value) currentTaskId = taskEl.value;
+        }
+
+        function renderModalBody() {
+            const isDay = selectedType === 'day';
+            const modalTitle = t('toolNotes.createNotesTitle', isViLocale() ? 'Tạo Notes' : 'Create Notes');
+            const tabDay = t('toolNotes.tabDayNote', isViLocale() ? 'Note theo ngày' : 'Day Note');
+            const tabTask = t('toolNotes.tabTaskNote', isViLocale() ? 'Note theo task' : 'Task Note');
+            const titleLabel = t('toolNotes.noteTitleLabel', isViLocale() ? 'Tiêu đề (không bắt buộc)' : 'Note Title (optional)');
+            const titlePlaceholder = t('toolNotes.noteTitlePlaceholder', isViLocale() ? 'VD: Suy nghĩ hôm nay, Tóm tắt bài giảng...' : 'e.g. Daily reflection, Lecture summary...');
+            const dateLabel = t('toolNotes.calendarDateLabel', isViLocale() ? 'Ngày ghi chú' : 'Calendar Date');
+            const dateHelper = t('toolNotes.dateHelperText', isViLocale() ? 'Ngày được tự động điền theo hôm nay. Bạn có thể thay đổi nếu muốn tạo ghi chú cho ngày khác.' : "Prefilled with today's date. You can change it if creating for another day.");
+            const taskLabel = t('toolNotes.associatedTaskLabel', isViLocale() ? 'Công việc Học tập liên kết' : 'Associated Study Task');
+            const selectTaskPlaceholder = t('toolNotes.selectTaskPlaceholder', isViLocale() ? '-- Chọn một task từ kế hoạch --' : '-- Select a task from your plan --');
+            const noActiveTasksText = t('toolNotes.noActiveTasks', isViLocale() ? 'Chưa có task nào trong kế hoạch' : 'No active tasks in your plan');
+            const contentLabel = t('toolNotes.noteContentLabel', isViLocale() ? 'Nội dung ghi chú' : 'Note Content');
+            const contentPlaceholder = isDay
+                ? t('toolNotes.contentPlaceholderDay', isViLocale() ? 'Viết những suy nghĩ, lời nhắc hoặc điều bạn muốn ghi lại trong ngày...' : 'Write reflections, reminders, or general observations for the day...')
+                : t('toolNotes.contentPlaceholderTask', isViLocale() ? 'Viết ghi chú, dàn ý hoặc các bước hành động tiếp theo cho task này...' : 'Write research notes, outlines, or next action steps for this task...');
+            const cancelText = t('toolNotes.cancelAction', isViLocale() ? 'Hủy' : 'Cancel');
+            const saveText = t('toolNotes.saveNoteAction', isViLocale() ? 'Lưu ghi chú' : 'Save Note');
+
+            root.innerHTML = `
+                <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity" 
+                     id="note-create-backdrop"
+                     onclick="if (event.target === this) window.TempoToolNotes.closeModal();">
+                    <div class="bg-white border border-[#EAE4DF] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl space-y-4 animate-in fade-in zoom-in-95 relative" 
+                         role="dialog" 
+                         aria-modal="true">
+                        
+                        <!-- Header -->
+                        <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xl">✏️</span>
+                                <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]" id="modal-heading-title">${escapeHTML(modalTitle)}</h3>
+                            </div>
+                            <button type="button" 
+                                    onclick="window.TempoToolNotes.closeModal()"
+                                    aria-label="Close"
+                                    class="text-stone-400 hover:text-stone-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-stone-100 transition cursor-pointer">
+                                ✕
+                            </button>
+                        </div>
+
+                        <!-- Type Selector Pills -->
+                        <div class="flex items-center justify-center">
+                            <div class="inline-flex p-1 bg-[#FAF7F4] border border-[#EAE4DF] rounded-2xl space-x-1">
+                                <button type="button" 
+                                        id="modal-pill-day"
+                                        class="px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${isDay ? 'bg-[#C88E7D] text-white shadow-2xs' : 'text-[#6F6B68] hover:text-[#202124]'}">
+                                    📝 ${escapeHTML(tabDay)}
+                                </button>
+                                <button type="button" 
+                                        id="modal-pill-task"
+                                        class="px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${!isDay ? 'bg-[#C88E7D] text-white shadow-2xs' : 'text-[#6F6B68] hover:text-[#202124]'}">
+                                    📋 ${escapeHTML(tabTask)}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Form -->
+                        <form id="modal-create-note-form" class="space-y-4">
+                            <!-- Note Title Field -->
+                            <div class="space-y-1.5">
+                                <label for="modal-input-title" class="block text-xs font-bold text-[#554741]">
+                                    ${escapeHTML(titleLabel)}
+                                </label>
+                                <input type="text" 
+                                       id="modal-input-title" 
+                                       placeholder="${escapeHTML(titlePlaceholder)}"
+                                       class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white" />
+                            </div>
+
+                            <!-- Day Note Date Field -->
+                            <div id="modal-group-date" class="${isDay ? 'block' : 'hidden'} space-y-1.5">
+                                <label for="modal-input-date" class="block text-xs font-bold text-[#554741]">${escapeHTML(dateLabel)}</label>
+                                <input type="date" 
+                                       id="modal-input-date" 
+                                       value="${escapeHTML(currentDate)}"
+                                       class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white" />
+                                <p class="text-[11px] text-[#8C827A]">${escapeHTML(dateHelper)}</p>
+                            </div>
+
+                            <!-- Task Note Selector Field -->
+                            <div id="modal-group-task" class="${!isDay ? 'block' : 'hidden'} space-y-1.5">
+                                <label for="modal-select-task" class="block text-xs font-bold text-[#554741]">${escapeHTML(taskLabel)}</label>
+                                <select id="modal-select-task" 
+                                        class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white">
+                                    <option value="" disabled ${!currentTaskId ? 'selected' : ''}>${escapeHTML(selectTaskPlaceholder)}</option>
+                                    ${availableTasks.length === 0 ? `
+                                        <option value="" disabled>${escapeHTML(noActiveTasksText)}</option>
+                                    ` : availableTasks.map(tItem => `
+                                        <option value="${escapeHTML(tItem.id)}" ${tItem.id === currentTaskId ? 'selected' : ''}>${escapeHTML(tItem.name)}${tItem.deadlineDate ? ` (Due ${tItem.deadlineDate})` : ''}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+
+                            <!-- Note Content Textarea -->
+                            <div class="space-y-1.5">
+                                <label for="modal-textarea-content" class="block text-xs font-bold text-[#554741]">${escapeHTML(contentLabel)}</label>
+                                <textarea id="modal-textarea-content" 
+                                          rows="3" 
+                                          placeholder="${escapeHTML(contentPlaceholder)}"
+                                          class="w-full p-3.5 text-xs sm:text-sm rounded-2xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white resize-y min-h-[90px]"></textarea>
+                            </div>
+
+                            <div id="modal-create-feedback" class="text-xs font-semibold text-rose-600 min-h-[16px]"></div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center justify-end space-x-2 pt-2 border-t border-stone-100">
+                                <button type="button" 
+                                        onclick="window.TempoToolNotes.closeModal()"
+                                        id="modal-btn-cancel"
+                                        class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100 transition cursor-pointer">
+                                    ${escapeHTML(cancelText)}
+                                </button>
+                                <button type="submit" 
+                                        id="modal-btn-submit"
+                                        class="px-5 py-2 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer">
+                                    ${escapeHTML(saveText)}
+                                </button>
+                            </div>
+                        </form>
+
+                    </div>
+                </div>
+            `;
+
+            // Restore preserved title and content
+            const titleInput = document.getElementById('modal-input-title');
+            if (titleInput && currentTitle) {
+                titleInput.value = currentTitle;
+            }
+            const contentTextarea = document.getElementById('modal-textarea-content');
+            if (contentTextarea && currentContent) {
+                contentTextarea.value = currentContent;
+            }
+
+            // Attach pill click events
+            const pDay = document.getElementById('modal-pill-day');
+            const pTask = document.getElementById('modal-pill-task');
+            if (pDay) pDay.onclick = () => {
+                snapshotInputs();
+                selectedType = 'day';
+                renderModalBody();
+            };
+            if (pTask) pTask.onclick = () => {
+                snapshotInputs();
+                selectedType = 'task';
+                renderModalBody();
+            };
+
+            // Attach form submission
+            const form = document.getElementById('modal-create-note-form');
+            if (form) {
+                form.onsubmit = (e) => {
+                    e.preventDefault();
+                    if (isSavingNote) return;
+
+                    const ta = document.getElementById('modal-textarea-content');
+                    const textVal = ta ? ta.value.trim() : '';
+                    const fb = document.getElementById('modal-create-feedback');
+                    if (!textVal) {
+                        if (fb) fb.innerText = t('toolNotes.validationContentMissing', isViLocale() ? 'Vui lòng nhập nội dung ghi chú.' : 'Please enter note content.');
+                        if (ta) ta.focus();
+                        return;
+                    }
+
+                    const tInput = document.getElementById('modal-input-title');
+                    const customTitleVal = tInput ? tInput.value.trim() : '';
+
+                    isSavingNote = true;
+                    try {
+                        if (selectedType === 'day') {
+                            const dInput = document.getElementById('modal-input-date');
+                            const dVal = dInput ? dInput.value.trim() : getTodayLocalDateStr();
+                            if (!dVal) {
+                                if (fb) fb.innerText = t('toolNotes.validationDateMissing', isViLocale() ? 'Vui lòng chọn ngày hợp lệ.' : 'Please select a date.');
+                                isSavingNote = false;
+                                return;
+                            }
+                            saveDayNote(textVal, dVal, null, customTitleVal);
+                        } else {
+                            const tSelect = document.getElementById('modal-select-task');
+                            const tId = tSelect ? tSelect.value.trim() : '';
+                            if (!tId) {
+                                if (fb) fb.innerText = t('toolNotes.validationTaskMissing', isViLocale() ? 'Vui lòng chọn một công việc.' : 'Please select an associated task.');
+                                isSavingNote = false;
+                                return;
+                            }
+                            const tName = tSelect.options[tSelect.selectedIndex]?.text || (isViLocale() ? 'Công việc Học tập' : 'Study Task');
+                            saveTaskNote(tId, tName, textVal, null, customTitleVal);
+                        }
+                        closeModal();
+                    } finally {
+                        isSavingNote = false;
+                    }
+                };
+            }
+        }
+
+        // Subscribe to language change while modal is open
+        const unsubscribeLang = window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function'
+            ? window.TempoI18n.onLanguageChange(() => {
+                snapshotInputs();
+                renderModalBody();
+            })
+            : null;
+
+        activeModalCleanup = () => {
+            if (typeof unsubscribeLang === 'function') {
+                try { unsubscribeLang(); } catch (e) {}
+            }
+        };
+
+        renderModalBody();
+    }
+
+    // =========================================================================
+    // 8. TOOL NOTES PAGE RENDERER (Full Workspace)
+    // =========================================================================
+
+    function renderDayNotesListHTML(dayNotes) {
+        if (!dayNotes || dayNotes.length === 0) {
+            return `
+                <div class="py-12 px-4 text-center space-y-3 bg-[#FAF7F4] border border-dashed border-stone-200 rounded-2xl" data-tempo-ui="day-notes-empty">
+                    <div class="w-10 h-10 mx-auto rounded-xl bg-[#F9E8E2] text-[#B87561] flex items-center justify-center text-lg shadow-2xs">📝</div>
+                    <div class="space-y-1">
+                        <h4 class="font-heading text-sm font-bold text-[#202124]">${escapeHTML(t('toolNotes.emptyDayNotesTitle', isViLocale() ? 'Chưa có ghi chú theo ngày nào.' : 'No day notes yet.'))}</h4>
+                        <p class="text-xs text-[#6F6B68] max-w-xs mx-auto">${escapeHTML(t('toolNotes.emptyDayNotesDesc', isViLocale() ? 'Ghi lại suy nghĩ, mức năng lượng hoặc những cảm nhận của bạn mỗi ngày.' : 'Track thoughts, energy levels, or gentle reflections for any day.'))}</p>
+                    </div>
+                    <button type="button" 
+                            onclick="window.TempoToolNotes.setCreationType('day'); const ta = document.getElementById('textarea-note-content'); if (ta) { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); ta.focus(); }" 
+                            class="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer">
+                        ${escapeHTML(t('toolNotes.addDayNoteBtn', isViLocale() ? '+ Thêm note theo ngày' : '+ Add a Day Note'))}
+                    </button>
+                </div>
+            `;
+        }
+
+        // Group notes by date
+        const groups = {};
+        dayNotes.forEach(n => {
+            const d = n.date || (n.createdAt ? getLocalDateStr(n.createdAt) : 'Other');
+            if (!groups[d]) groups[d] = [];
+            groups[d].push(n);
+        });
+
+        const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+        const dayBadge = t('toolNotes.tabDayNote', isViLocale() ? 'Note theo ngày' : 'Day Note');
+        const viewDetailsText = t('toolNotes.viewDetails', isViLocale() ? 'Xem chi tiết →' : 'View details →');
+        const clickToExpandText = t('toolNotes.clickToExpand', isViLocale() ? 'Nhấn để mở rộng' : 'Click to expand');
+
+        return sortedDates.map(dateKey => {
+            const dateNotes = groups[dateKey];
+            const headerLabel = formatDisplayDate(dateKey);
+
+            return `
+                <div class="space-y-2" data-date-group="${escapeHTML(dateKey)}">
+                    <!-- Date Header -->
+                    <div class="flex items-center space-x-2 text-xs font-bold text-[#554741] sticky top-0 bg-white/95 backdrop-blur-2xs py-1 z-10 border-b border-stone-100">
+                        <span class="text-[#B87561]">📅</span>
+                        <span>${escapeHTML(headerLabel)}</span>
+                        <span class="text-[10px] text-[#8C827A] font-medium">(${dateNotes.length})</span>
+                    </div>
+
+                    <!-- Cards in this group -->
+                    <div class="space-y-2">
+                        ${dateNotes.map(n => {
+                            const timeStr = formatNoteTime(n);
+                            const textPreview = escapeHTML(n.text || n.content || '');
+                            const safeId = escapeHTML(String(n.id));
+
+                            return `
+                                <div onclick="window.TempoToolNotes.openNoteDetailModal('${safeId}')"
+                                     class="bg-[#FEFAF8] hover:bg-white border border-[#EBDCD3] hover:border-[#C88E7D] rounded-2xl p-3.5 space-y-2 shadow-2xs hover:shadow-xs transition cursor-pointer group"
+                                     data-day-note-id="${safeId}"
+                                     title="${escapeHTML(clickToExpandText)}">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F9E8E2] text-[#B87561] shrink-0 uppercase tracking-wider">
+                                            ${escapeHTML(dayBadge)}
+                                        </span>
+                                        ${timeStr ? `<span class="text-[11px] text-[#8C827A] font-medium">${escapeHTML(timeStr)}</span>` : ''}
+                                    </div>
+                                    ${n.title ? `<h5 class="text-xs sm:text-sm font-bold text-[#202124] leading-snug break-words">${escapeHTML(n.title)}</h5>` : ''}
+                                    <p class="text-xs sm:text-[13px] text-[#4A4540] font-medium leading-relaxed line-clamp-2 break-words group-hover:text-[#202124] transition-colors">
+                                        ${textPreview}
+                                    </p>
+                                    <div class="flex items-center justify-between pt-1 text-[11px] text-[#8C827A] border-t border-stone-100/70">
+                                        <span class="group-hover:text-[#C88E7D] transition-colors font-medium">${escapeHTML(viewDetailsText)}</span>
+                                        <span class="text-[10px] text-stone-400">${escapeHTML(clickToExpandText)}</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderTaskNotesListHTML(taskNotes) {
+        if (!taskNotes || taskNotes.length === 0) {
+            return `
+                <div class="py-12 px-4 text-center space-y-3 bg-[#FAF7F4] border border-dashed border-stone-200 rounded-2xl" data-tempo-ui="task-notes-empty">
+                    <div class="w-10 h-10 mx-auto rounded-xl bg-[#FEF3C7] text-[#92400E] flex items-center justify-center text-lg shadow-2xs">📋</div>
+                    <div class="space-y-1">
+                        <h4 class="font-heading text-sm font-bold text-[#202124]">${escapeHTML(t('toolNotes.emptyTaskNotesTitle', isViLocale() ? 'Chưa có ghi chú công việc nào.' : 'No task notes yet.'))}</h4>
+                        <p class="text-xs text-[#6F6B68] max-w-xs mx-auto">${escapeHTML(t('toolNotes.emptyTaskNotesDesc', isViLocale() ? 'Liên kết ghi chú nghiên cứu, công thức hoặc các bước thực hiện với kế hoạch làm việc.' : 'Attach specific research notes, formulas, or steps to your working plan tasks.'))}</p>
+                    </div>
+                    <button type="button" 
+                            onclick="window.TempoToolNotes.setCreationType('task'); const ta = document.getElementById('textarea-note-content'); if (ta) { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); ta.focus(); }" 
+                            class="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer">
+                        ${escapeHTML(t('toolNotes.addTaskNoteBtn', isViLocale() ? '+ Thêm note theo task' : '+ Add a Task Note'))}
+                    </button>
+                </div>
+            `;
+        }
+
+        const taskBadge = t('toolNotes.badgeTaskNote', isViLocale() ? 'NOTE THEO TASK' : 'TASK NOTE');
+        const viewDetailsText = t('toolNotes.viewDetails', isViLocale() ? 'Xem chi tiết →' : 'View details →');
+        const clickToExpandText = t('toolNotes.clickToExpand', isViLocale() ? 'Nhấn để mở rộng' : 'Click to expand');
+
+        return taskNotes.map(n => {
+            const timeStr = formatNoteTime(n);
+            const textPreview = escapeHTML(n.text || n.content || '');
+            const safeId = escapeHTML(String(n.id));
+            const rawTaskName = n.taskName || (isViLocale() ? 'Công việc Học tập' : 'Study Task');
+            const taskTitle = escapeHTML(rawTaskName);
+
+            // Determine card title:
+            // If user supplied a custom title, display it as-is.
+            // If default or empty or starting with 'Note for ' or 'Note cho ', localize dynamically to Note cho {taskName} / Note for {taskName}.
+            let displayTitle = '';
+            if (n.title && !n.title.startsWith('Note for ') && !n.title.startsWith('Note cho ')) {
+                displayTitle = n.title;
+            } else {
+                displayTitle = t('toolNotes.noteForTask', { taskName: rawTaskName }, isViLocale() ? (`Note cho ${rawTaskName}`) : (`Note for ${rawTaskName}`));
+            }
+
+            return `
+                <div onclick="window.TempoToolNotes.openNoteDetailModal('${safeId}')"
+                     class="bg-[#FEFAF8] hover:bg-white border border-[#EBDCD3] hover:border-[#C88E7D] rounded-2xl p-3.5 space-y-2 shadow-2xs hover:shadow-xs transition cursor-pointer group"
+                     data-task-note-id="${safeId}"
+                     title="${escapeHTML(clickToExpandText)}">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center space-x-1.5 min-w-0">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#92400E] shrink-0 uppercase tracking-wider">
+                                ${escapeHTML(taskBadge)}
+                            </span>
+                            <span class="text-xs font-bold text-[#202124] truncate flex items-center gap-1">
+                                <span>📌</span>
+                                <span class="truncate">${taskTitle}</span>
+                            </span>
+                        </div>
+                        ${timeStr ? `<span class="text-[11px] text-[#8C827A] font-medium shrink-0">${escapeHTML(timeStr)}</span>` : ''}
+                    </div>
+                    ${displayTitle ? `<h5 class="text-xs sm:text-sm font-bold text-[#202124] leading-snug break-words">${escapeHTML(displayTitle)}</h5>` : ''}
+                    <p class="text-xs sm:text-[13px] text-[#4A4540] font-medium leading-relaxed line-clamp-2 break-words group-hover:text-[#202124] transition-colors">
+                        ${textPreview}
+                    </p>
+                    <div class="flex items-center justify-between pt-1 text-[11px] text-[#8C827A] border-t border-stone-100/70">
+                        <span class="group-hover:text-[#C88E7D] transition-colors font-medium">${escapeHTML(viewDetailsText)}</span>
+                        <span class="text-[10px] text-stone-400">${escapeHTML(clickToExpandText)}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderToolNotesPage() {
+        const root = document.getElementById('tool-notes-root');
+        if (!root) return;
+
+        // Preserve in-progress form inputs if user was typing when language switched
+        const existingTitleInput = document.getElementById('input-note-title');
+        const draftTitle = existingTitleInput ? existingTitleInput.value : '';
+        const existingTextarea = document.getElementById('textarea-note-content');
+        const draftContent = existingTextarea ? existingTextarea.value : '';
+        const existingDateInput = document.getElementById('input-note-date');
+        const draftDate = existingDateInput && existingDateInput.value ? existingDateInput.value : '';
+        const existingTaskSelect = document.getElementById('select-note-task');
+        const draftTaskId = existingTaskSelect ? existingTaskSelect.value : '';
+
+        const notes = loadNotes();
+        const dayNotes = notes.filter(n => !(n.taskId || n.category === 'task' || n.type === 'task'));
+        const taskNotes = notes.filter(n => !!(n.taskId || n.category === 'task' || n.type === 'task'));
+        const availableTasks = getAvailableTasks();
+        const todayStr = getTodayLocalDateStr();
+
+        const backToDashText = t('toolNotes.backToDashboard', isViLocale() ? '← Trở về Dashboard' : '← Back to Dashboard');
+        const pageTitleText = t('toolNotes.pageTitle', isViLocale() ? 'Notes Tools' : 'Notes Tool');
+        const pageSubtitleText = t('toolNotes.pageSubtitle', isViLocale() ? 'Không gian riêng để lưu giữ những suy nghĩ hằng ngày và ghi chú cho các task học tập của bạn.' : 'A calm, dedicated space to keep your daily reflections and academic task notes organized.');
+        const sectionCreateText = t('toolNotes.sectionCreateNotes', isViLocale() ? 'Tạo ghi chú' : 'Create Notes');
+        const tabDayText = t('toolNotes.tabDayNote', isViLocale() ? 'Note theo ngày' : 'Day Note');
+        const tabTaskText = t('toolNotes.tabTaskNote', isViLocale() ? 'Note theo task' : 'Task Note');
+        const titleLabelText = t('toolNotes.noteTitleLabel', isViLocale() ? 'Tiêu đề (không bắt buộc)' : 'Note Title (optional)');
+        const titlePlaceholderText = t('toolNotes.noteTitlePlaceholder', isViLocale() ? 'VD: Suy nghĩ hôm nay, Tóm tắt bài giảng...' : 'e.g. Daily reflection, Lecture summary...');
+        const dateLabelText = t('toolNotes.calendarDateLabel', isViLocale() ? 'Ngày ghi chú' : 'Calendar Date');
+        const dateHelperText = t('toolNotes.pageDateHelper', isViLocale() ? 'Ngày mặc định là hôm nay. Bạn có thể chọn ngày khác nếu cần.' : "Defaults to today's local date. You can select another date if needed.");
+        const taskLabelText = t('toolNotes.associatedTaskLabel', isViLocale() ? 'Công việc Học tập liên kết' : 'Associated Study Task');
+        const selectTaskPlaceholder = t('toolNotes.selectTaskPlaceholder', isViLocale() ? '-- Chọn một task từ kế hoạch --' : '-- Select a task from your plan --');
+        const noActiveTasksText = t('toolNotes.noActiveTasks', isViLocale() ? 'Chưa có task nào trong kế hoạch' : 'No active tasks in your plan');
+        const contentLabelText = t('toolNotes.noteContentLabel', isViLocale() ? 'Nội dung ghi chú' : 'Note Content');
+        const contentPlaceholderText = currentCreationType === 'day'
+            ? t('toolNotes.pageContentPlaceholderDay', isViLocale() ? 'Ghi lại suy nghĩ, lời nhắc hoặc những điều bạn muốn lưu giữ trong ngày...' : 'Write reflections, reminders, or general observations for the day...')
+            : t('toolNotes.contentPlaceholderTask', isViLocale() ? 'Viết ghi chú, dàn ý hoặc các bước hành động tiếp theo cho task này...' : 'Write research notes, outlines, or next action steps for this task...');
+        const cancelBtnText = t('toolNotes.cancelAction', isViLocale() ? 'Hủy' : 'Cancel');
+        const saveBtnText = t('toolNotes.saveNoteAction', isViLocale() ? 'Lưu ghi chú' : 'Save Note');
+        const headingDayText = t('toolNotes.headingDayNotes', isViLocale() ? 'Note theo ngày' : 'Day Notes');
+        const groupedByDateText = t('toolNotes.groupedByDate', isViLocale() ? 'Nhóm theo ngày' : 'Grouped by date');
+        const headingTaskText = t('toolNotes.headingTaskNotes', isViLocale() ? 'Note theo task' : 'Task Notes');
+        const attachedToTasksText = t('toolNotes.attachedToTasks', isViLocale() ? 'Được liên kết với task' : 'Attached to tasks');
+
+        root.innerHTML = `
+            <!-- Navigation Return Bar -->
+            <div class="flex items-center justify-between pb-3">
+                <button type="button" 
+                        id="btn-tool-notes-back" 
+                        onclick="if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') window.TempoApp.navigateTo('today'); else window.location.hash = '#today';"
+                        class="inline-flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
+                    <span>${escapeHTML(backToDashText)}</span>
+                </button>
+            </div>
+
+            <!-- Page Title -->
+            <div class="space-y-1 pb-4">
+                <div class="flex items-center space-x-2">
+                    <span class="text-2xl sm:text-3xl">📝</span>
+                    <h1 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">${escapeHTML(pageTitleText)}</h1>
+                </div>
+                <p class="text-xs sm:text-sm text-[#6F6B68]">
+                    ${escapeHTML(pageSubtitleText)}
+                </p>
+            </div>
+
+            <!-- 1. Dedicated Note Creation Section -->
+            <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 mb-6" data-tempo-ui="tool-notes-create-section">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-lg">✏️</span>
+                        <h2 class="font-heading text-base sm:text-lg font-bold text-[#202124]">${escapeHTML(sectionCreateText)}</h2>
+                    </div>
+                    <!-- Type Selector Pills -->
+                    <div class="inline-flex p-1 bg-[#FAF7F4] border border-[#EAE4DF] rounded-2xl space-x-1" role="tablist">
+                        <button type="button" 
+                                id="pill-type-day"
+                                onclick="window.TempoToolNotes.setCreationType('day')"
+                                class="px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${currentCreationType === 'day' ? 'bg-[#C88E7D] text-white shadow-2xs' : 'text-[#6F6B68] hover:text-[#202124]'}">
+                            📝 ${escapeHTML(tabDayText)}
+                        </button>
+                        <button type="button" 
+                                id="pill-type-task"
+                                onclick="window.TempoToolNotes.setCreationType('task')"
+                                class="px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${currentCreationType === 'task' ? 'bg-[#C88E7D] text-white shadow-2xs' : 'text-[#6F6B68] hover:text-[#202124]'}">
+                            📋 ${escapeHTML(tabTaskText)}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form -->
+                <form id="tool-notes-create-form" onsubmit="event.preventDefault(); window.TempoToolNotes.handleCreateFormSubmit();" class="space-y-4">
+                    <!-- Note Title Field -->
+                    <div class="space-y-1.5">
+                        <label for="input-note-title" class="block text-xs font-bold text-[#554741]">
+                            ${escapeHTML(titleLabelText)}
+                        </label>
+                        <input type="text" 
+                               id="input-note-title" 
+                               placeholder="${escapeHTML(titlePlaceholderText)}"
+                               class="w-full max-w-md px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white transition" />
+                    </div>
+
+                    <!-- Day Note Date Field -->
+                    <div id="form-group-day-date" class="${currentCreationType === 'day' ? 'block' : 'hidden'} space-y-1.5">
+                        <label for="input-note-date" class="block text-xs font-bold text-[#554741]">
+                            ${escapeHTML(dateLabelText)}
+                        </label>
+                        <div class="flex items-center gap-2 max-w-xs">
+                            <input type="date" 
+                                   id="input-note-date" 
+                                   value="${escapeHTML(draftDate || todayStr)}"
+                                   class="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white transition" />
+                        </div>
+                        <p class="text-[11px] text-[#8C827A]">${escapeHTML(dateHelperText)}</p>
+                    </div>
+
+                    <!-- Task Note Selector Field -->
+                    <div id="form-group-task-select" class="${currentCreationType === 'task' ? 'block' : 'hidden'} space-y-1.5">
+                        <label for="select-note-task" class="block text-xs font-bold text-[#554741]">
+                            ${escapeHTML(taskLabelText)}
+                        </label>
+                        <select id="select-note-task" 
+                                class="w-full max-w-md px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white transition">
+                            <option value="" disabled ${!draftTaskId ? 'selected' : ''}>${escapeHTML(selectTaskPlaceholder)}</option>
+                            ${availableTasks.length === 0 ? `
+                                <option value="" disabled>${escapeHTML(noActiveTasksText)}</option>
+                            ` : availableTasks.map(tItem => `
+                                <option value="${escapeHTML(tItem.id)}" ${tItem.id === draftTaskId ? 'selected' : ''}>${escapeHTML(tItem.name)}${tItem.deadlineDate ? ` (Due ${tItem.deadlineDate})` : ''}</option>
+                            `).join('')}
+                        </select>
+                        <p class="text-[11px] text-[#8C827A]">${escapeHTML(t('toolNotes.associatedTaskHelper', isViLocale() ? 'Được điền từ kế hoạch làm việc và các công việc hiện tại của bạn.' : 'Populated from your working plan and current tasks.'))}</p>
+                    </div>
+
+                    <!-- Note Textarea -->
+                    <div class="space-y-1.5">
+                        <label for="textarea-note-content" class="block text-xs font-bold text-[#554741]">
+                            ${escapeHTML(contentLabelText)}
+                        </label>
+                        <textarea id="textarea-note-content" 
+                                  rows="3" 
+                                  placeholder="${escapeHTML(contentPlaceholderText)}"
+                                  class="w-full p-3.5 text-xs sm:text-sm rounded-2xl border border-stone-200 focus:outline-none focus:border-[#C88E7D] bg-[#FEFAF8] focus:bg-white resize-y min-h-[90px] transition placeholder:text-stone-400"></textarea>
+                    </div>
+
+                    <!-- Feedback & Actions -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                        <div id="create-note-feedback" class="text-xs font-medium text-stone-500 min-h-[20px]"></div>
+                        <div class="flex items-center space-x-2.5 self-end sm:self-auto">
+                            <button type="button" 
+                                    onclick="window.TempoToolNotes.resetCreateForm()"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-[#FAF7F4] transition cursor-pointer">
+                                ${escapeHTML(cancelBtnText)}
+                            </button>
+                            <button type="submit" 
+                                    id="btn-save-note-submit"
+                                    class="px-5 py-2 rounded-xl font-bold text-xs bg-[#C88E7D] hover:bg-[#B97F6E] text-white shadow-2xs transition cursor-pointer inline-flex items-center gap-1.5">
+                                <span>${escapeHTML(saveBtnText)}</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 2. Two-Column Notes Display -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start" data-tempo-ui="tool-notes-two-columns">
+                <!-- LEFT PANEL: Day Notes -->
+                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4" data-tempo-ui="tool-notes-day-panel">
+                    <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg">📝</span>
+                            <h3 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
+                                ${escapeHTML(headingDayText)}
+                            </h3>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#F9E8E2] text-[#B87561]" id="day-notes-count-badge">
+                                ${dayNotes.length}
+                            </span>
+                        </div>
+                        <span class="text-xs text-[#8C827A]">${escapeHTML(groupedByDateText)}</span>
+                    </div>
+
+                    <!-- Scrollable List of Day Notes -->
+                    <div class="overflow-y-auto max-h-[580px] space-y-4 pr-1.5 custom-scrollbar" data-tempo-ui="day-notes-scroll-container">
+                        ${renderDayNotesListHTML(dayNotes)}
+                    </div>
+                </div>
+
+                <!-- RIGHT PANEL: Task Notes -->
+                <div class="bg-white border border-[#EAE4DF] rounded-3xl p-5 sm:p-6 shadow-xs space-y-4" data-tempo-ui="tool-notes-task-panel">
+                    <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-lg">📋</span>
+                            <h3 class="font-heading text-base sm:text-lg font-bold text-[#202124]">
+                                ${escapeHTML(headingTaskText)}
+                            </h3>
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF3C7] text-[#92400E]" id="task-notes-count-badge">
+                                ${taskNotes.length}
+                            </span>
+                        </div>
+                        <span class="text-xs text-[#8C827A]">${escapeHTML(attachedToTasksText)}</span>
+                    </div>
+
+                    <!-- Scrollable List of Task Notes -->
+                    <div class="overflow-y-auto max-h-[580px] space-y-3 pr-1.5 custom-scrollbar" data-tempo-ui="task-notes-scroll-container">
+                        ${renderTaskNotesListHTML(taskNotes)}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Restore drafts
+        if (draftTitle) {
+            const tEl = document.getElementById('input-note-title');
+            if (tEl) tEl.value = draftTitle;
+        }
+        if (draftContent) {
+            const cEl = document.getElementById('textarea-note-content');
+            if (cEl) cEl.value = draftContent;
+        }
+    }
+
+    // Escape key listener for closing modals
+    if (typeof window !== 'undefined') {
+        window.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
     }
 
     function init() {
         renderToolNotesPage();
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        setTimeout(init, 50);
+    if (typeof window !== 'undefined' && window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+        window.TempoI18n.onLanguageChange(() => {
+            const root = document.getElementById('tool-notes-root');
+            if (root) {
+                renderToolNotesPage();
+            }
+        });
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            setTimeout(init, 50);
+        }
     }
 
     return {
         getNotes,
-        getNoteForTask,
+        getNoteById,
+        getNoteForTask: (taskId) => {
+            if (!taskId) return null;
+            const notes = loadNotes();
+            return notes.find(n => String(n.taskId) === String(taskId)) || null;
+        },
         saveTaskNote,
         deleteTaskNote,
-        renderToolNotesPage
+        saveDayNote,
+        deleteDayNote,
+        updateNote,
+        deleteNote,
+        confirmDeleteNote,
+        getDayNotes,
+        getTaskNotes,
+        getAvailableTasks,
+        setCreationType,
+        handleCreateFormSubmit,
+        resetCreateForm,
+        openNoteDetailModal,
+        openNoteEditModal,
+        handleSaveEditSubmit,
+        openCreateNoteModal,
+        closeModal,
+        renderToolNotesPage,
+        getTodayLocalDateStr,
+        formatDisplayDate,
+        viewAssociatedTask
     };
 })();

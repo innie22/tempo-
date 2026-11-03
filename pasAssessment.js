@@ -345,7 +345,7 @@
                 titleEn: 'Curriculum & Workload',
                 items: [10, 11, 12],
                 description: 'Cảm giác quá tải trước khối lượng giáo trình, bài tập và áp lực bắt kịp tiến độ.',
-                actionHint: 'Chia nhỏ nhiệm vụ lớn thành các bước khả thi và ưu tiên hạn chót trong Focus Zone.'
+                actionHint: 'Chia nhỏ nhiệm vụ lớn thành các bước khả thi và ưu tiên deadline trong Focus Zone.'
             },
             {
                 key: 'examinations',
@@ -945,7 +945,7 @@
                     <!-- 1. Workload / Deadlines Suggestion -->
                     <div class="p-3.5 bg-white rounded-2xl border border-stone-200/80 space-y-2">
                         <div class="text-xs font-bold text-[#202124]">
-                            🎯 Nếu khối lượng bài vở hoặc hạn chót đang dồn dập:
+                            🎯 Nếu khối lượng bài vở hoặc deadline đang dồn dập:
                         </div>
                         <p class="text-xs text-[#5B5550] leading-relaxed">
                             Hãy chia nhỏ công việc thành từng phần việc 25 phút có thể quản lý được và ưu tiên danh sách deadline sắp tới trong Focus Zone.

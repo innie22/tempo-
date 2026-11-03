@@ -164,6 +164,7 @@ window.TempoPlanStore = (function() {
     // =========================================================================
 
     async function init(explicitUserId) {
+        clearInMemoryCache();
         // Allow re-hydrating for explicit user ID (e.g. after login/session restore)
         const currentUserId = explicitUserId || getUserId();
 
@@ -181,10 +182,16 @@ window.TempoPlanStore = (function() {
             activeDrafts['emergency'] = draftCached;
         }
 
+        const recoveryCached = readLocal(getActiveKey(currentUserId, 'recovery'));
+        if (recoveryCached) {
+            activePlans['recovery'] = recoveryCached;
+        }
+
         // If remote is available, load the authoritative active plan from Supabase
         if (isRemoteAvailable()) {
             try {
                 await loadActivePlan('emergency');
+                await loadActivePlan('recovery');
             } catch (err) {
                 console.warn("[TempoPlanStore] Remote active plan load during init warning:", err);
             }
@@ -195,28 +202,9 @@ window.TempoPlanStore = (function() {
     }
 
     function syncGuestToAuthenticated() {
-        const userId = getUserId();
-        if (userId === 'guest') return;
-
-        const guestActive = readLocal(getActiveKey('guest', 'emergency'));
-        const userActive = readLocal(getActiveKey(userId, 'emergency'));
-
-        if (guestActive && !userActive) {
-            writeLocal(getActiveKey(userId, 'emergency'), guestActive);
-            writeLocal(getActiveKey('guest', 'emergency'), null);
-            activePlans['emergency'] = guestActive;
-            console.log("[TempoPlanStore] Migrated guest active plan to authenticated user.");
-        }
-
-        const guestDraft = readLocal(getDraftKey('guest', 'emergency'));
-        const userDraft = readLocal(getDraftKey(userId, 'emergency'));
-
-        if (guestDraft && !userDraft) {
-            writeLocal(getDraftKey(userId, 'emergency'), guestDraft);
-            writeLocal(getDraftKey('guest', 'emergency'), null);
-            activeDrafts['emergency'] = guestDraft;
-            console.log("[TempoPlanStore] Migrated guest draft to authenticated user.");
-        }
+        // Invariant: Never automatically copy/migrate unauthenticated guest tasks or drafts into an authenticated account.
+        // Accounts without an explicit Working Plan must start with a clean state.
+        return;
     }
 
     // =========================================================================
@@ -352,9 +340,21 @@ window.TempoPlanStore = (function() {
         // Ensure title & timestamps
         const planId = planData.id || planData.planId || `plan_${planType}_${Date.now()}`;
         const tasks = planData.tasks || (Array.isArray(planData.plannedTasks) ? planData.plannedTasks.map(pt => pt.task).filter(Boolean) : []);
+
+        let availDays = planData.availabilityDays;
+        if (!Array.isArray(availDays) || availDays.length === 0) {
+            try {
+                const savedAvail = localStorage.getItem('tempo_availability_days');
+                if (savedAvail) availDays = JSON.parse(savedAvail);
+            } catch(e) {}
+        }
+        if (!Array.isArray(availDays)) availDays = [];
+
         const fullPlan = {
             id: planId,
             planId: planId,
+            userId: userId,
+            user_id: userId,
             planType,
             status: 'active',
             title: planData.title || (planType === 'emergency' ? 'Urgent Plan' : 'Action Plan'),
@@ -363,7 +363,7 @@ window.TempoPlanStore = (function() {
             plannedTasks: planData.plannedTasks || [],
             unallocatedTasks: planData.unallocatedTasks || [],
             unarrangedTasks: planData.unarrangedTasks || [],
-            availabilityDays: planData.availabilityDays || [],
+            availabilityDays: availDays,
             createdAt: planData.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
@@ -581,6 +581,16 @@ window.TempoPlanStore = (function() {
                         // Reconstruct plannedTasks array in sequence
                         const plannedTasks = (itemRows || []).map(pi => {
                             const taskModel = taskMap[pi.task_id] || { id: pi.task_id, name: 'Untitled Task', subtasks: [] };
+                            if (taskModel) {
+                                taskModel.scheduledDate = pi.scheduled_date;
+                                taskModel.dayDate = pi.scheduled_date;
+                                taskModel._dayDate = pi.scheduled_date;
+                                taskModel.scheduledStartTime = pi.scheduled_start;
+                                taskModel.scheduledEndTime = pi.scheduled_end;
+                                taskModel.startTime = pi.scheduled_start;
+                                taskModel.endTime = pi.scheduled_end;
+                                taskModel._endTime = pi.scheduled_end;
+                            }
                             return {
                                 task: taskModel,
                                 dayDate: pi.scheduled_date,
@@ -601,6 +611,8 @@ window.TempoPlanStore = (function() {
                         const remotePlan = {
                             id: planRow.id,
                             planId: planRow.id,
+                            userId: planRow.user_id,
+                            user_id: planRow.user_id,
                             planType: planRow.plan_type,
                             status: 'active',
                             title: planRow.title,
@@ -609,7 +621,9 @@ window.TempoPlanStore = (function() {
                             plannedTasks,
                             unallocatedTasks: planRow.metadata?.unallocatedTasks || [],
                             unarrangedTasks: planRow.metadata?.unarrangedTasks || [],
-                            availabilityDays: planRow.metadata?.availabilityDays || [],
+                            availabilityDays: (planRow.metadata?.availabilityDays && planRow.metadata.availabilityDays.length > 0)
+                                ? planRow.metadata.availabilityDays
+                                : (localPlan?.availabilityDays || []),
                             createdAt: planRow.created_at,
                             updatedAt: planRow.updated_at
                         };
@@ -633,6 +647,18 @@ window.TempoPlanStore = (function() {
 
         if (localPlan && (!localPlan.tasks || localPlan.tasks.length === 0) && Array.isArray(localPlan.plannedTasks)) {
             localPlan.tasks = localPlan.plannedTasks.map(pt => pt.task).filter(Boolean);
+        }
+        if (localPlan && (!Array.isArray(localPlan.availabilityDays) || localPlan.availabilityDays.length === 0)) {
+            try {
+                const savedAvail = localStorage.getItem('tempo_availability_days');
+                if (savedAvail) localPlan.availabilityDays = JSON.parse(savedAvail);
+            } catch(e) {}
+        }
+
+        if (localPlan && userId && userId !== 'guest') {
+            if (localPlan.userId && localPlan.userId !== userId) return null;
+            if (localPlan.user_id && localPlan.user_id !== userId) return null;
+            if (!localPlan.userId && !localPlan.user_id) return null;
         }
 
         return localPlan || null;
@@ -665,13 +691,18 @@ window.TempoPlanStore = (function() {
     }
 
     function hasActivePlan(planType = 'emergency') {
-        const userId = getUserId();
-        return !!(activePlans[planType] || readLocal(getActiveKey(userId, planType)));
+        return !!getActivePlan(planType);
     }
 
     function getActivePlan(planType = 'emergency') {
         const userId = getUserId();
-        return activePlans[planType] || readLocal(getActiveKey(userId, planType)) || null;
+        const plan = activePlans[planType] || readLocal(getActiveKey(userId, planType)) || null;
+        if (plan && userId && userId !== 'guest') {
+            if (plan.userId && plan.userId !== userId) return null;
+            if (plan.user_id && plan.user_id !== userId) return null;
+            if (!plan.userId && !plan.user_id) return null;
+        }
+        return plan;
     }
 
     function hasDraft(planType = 'emergency') {

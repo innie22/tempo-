@@ -46,19 +46,19 @@ window.TempoAuth = (function() {
             loginFooterText: 'Don\'t have an account? <button type="button" onclick="window.TempoAuth.openRegisterModal()" class="text-[#FF6B2C] font-bold hover:underline ml-1 cursor-pointer">Create account</button>',
             
             forgotPrompt: "Enter your registered email address to receive password reset instructions:",
-            forgotSent: "Password reset link has been sent to your email.",
-            fillRequired: "Please fill in all required fields.",
-            passTooShort: "Password must be at least 6 characters long.",
+            forgotSent: "Liên kết đặt lại mật khẩu đã được gửi đến email của bạn.",
+            fillRequired: "Vui lòng điền đầy đủ các thông tin bắt buộc.",
+            passTooShort: "Mật khẩu phải có ít nhất 6 ký tự.",
             emailAlreadyRegistered: "This email is already registered. Please log in instead.",
             errorNotice: "Notice",
             loginWithEmailBtn: "Log in with this email →",
             genericRegError: "Registration failed. Please verify your information and try again.",
-            invalidCredentials: "Email or password is incorrect."
+            invalidCredentials: "Email hoặc mật khẩu không chính xác."
         },
         vi: {
             regHeading: "TẠO TÀI KHOẢN TEMPO",
             regTitle: "Chào mừng đến với Tempo",
-            regSubtitle: "Quản lý căng thẳng học tập, sắp xếp hạn chót và tìm lại nhịp điệu của bạn.",
+            regSubtitle: "Quản lý căng thẳng học tập, sắp xếp deadline và tìm lại nhịp điệu của bạn.",
             regNameLabel: 'Tên hiển thị <span class="text-rose-500">*</span>',
             regNamePlaceholder: "VD: Alex hoặc Nguyễn Yến Nhi",
             regEmailLabel: 'Email <span class="text-rose-500">*</span>',
@@ -184,9 +184,9 @@ window.TempoAuth = (function() {
 
         // Update navbar auth buttons & avatar dropdown items
         const btnHeaderSignin = document.getElementById('btn-header-signin');
-        if (btnHeaderSignin) btnHeaderSignin.textContent = lang === 'vi' ? 'Đăng nhập' : 'Log in';
+        if (btnHeaderSignin) btnHeaderSignin.textContent = lang === 'vi' ? 'Đăng nhập' : 'Sign In';
         const btnHeaderRegister = document.getElementById('btn-header-register');
-        if (btnHeaderRegister) btnHeaderRegister.textContent = lang === 'vi' ? 'Đăng ký' : 'Sign up';
+        if (btnHeaderRegister) btnHeaderRegister.textContent = lang === 'vi' ? 'Đăng kí' : 'Register';
         const labelMessages = document.getElementById('label-menu-messages');
         if (labelMessages) labelMessages.textContent = lang === 'vi' ? 'Tin nhắn trực tiếp' : 'Direct Messages';
         const labelSaved = document.getElementById('label-menu-saved');
@@ -267,6 +267,15 @@ window.TempoAuth = (function() {
 
     async function syncPlanForUser(userId) {
         if (!userId) return false;
+        if (window.TempoPlanStore && typeof window.TempoPlanStore.clearInMemoryCache === 'function') {
+            window.TempoPlanStore.clearInMemoryCache();
+        }
+        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.resetFlowState === 'function') {
+            window.TempoEmergencyFlow.resetFlowState();
+        }
+        if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.resetWorkspaceState === 'function') {
+            window.TempoPlanWorkspace.resetWorkspaceState();
+        }
         if (window.TempoPlanStore && typeof window.TempoPlanStore.init === 'function') {
             await window.TempoPlanStore.init(userId);
         }
@@ -285,6 +294,9 @@ window.TempoAuth = (function() {
         }
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.resetFlowState === 'function') {
             window.TempoEmergencyFlow.resetFlowState();
+        }
+        if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.resetWorkspaceState === 'function') {
+            window.TempoPlanWorkspace.resetWorkspaceState();
         }
         if (window.TempoMode) {
             if (typeof window.TempoMode.handleSignOut === 'function') {
@@ -566,6 +578,9 @@ window.TempoAuth = (function() {
                                 };
                                 authState = 'authenticated';
                                 renderHeaderUI(currentProfile);
+                                if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                                    window.TempoTheme.loadUserTheme(currentProfile.id);
+                                }
                                 if (resolveAuthReady) resolveAuthReady();
                                 return;
                             } else {
@@ -590,6 +605,9 @@ window.TempoAuth = (function() {
                 currentUser = session.user;
                 authState = 'authenticated';
                 await loadUserProfile(session.user.id);
+                if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                    window.TempoTheme.loadUserTheme(session.user.id);
+                }
             } else {
                 currentUser = null;
                 currentProfile = null;
@@ -640,11 +658,17 @@ window.TempoAuth = (function() {
                     authState = 'anonymous';
                     renderHeaderUI(null);
                     syncPlanForSignOut();
+                    if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                        window.TempoTheme.loadUserTheme(null);
+                    }
                 } else if (newSession && newSession.user) {
                     const isNewUser = !currentUser || currentUser.id !== newSession.user.id;
                     currentUser = newSession.user;
                     authState = 'authenticated';
                     await loadUserProfile(newSession.user.id);
+                    if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                        window.TempoTheme.loadUserTheme(newSession.user.id);
+                    }
                     // Only resume intent via onAuthStateChange if this is NOT an explicit signInWithCredentials call (which handles it directly)
                     if (isNewUser && !isExplicitSignInInProgress && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
                         await syncPlanForUser(newSession.user.id);
@@ -1010,7 +1034,7 @@ window.TempoAuth = (function() {
             if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
                 window.TempoApp.triggerConfetti();
             }
-            window.TempoApp.showToast(`Account created for ${displayName.trim()}! Please sign in to continue.`);
+            window.TempoApp.showToast(`Đã tạo tài khoản cho ${displayName.trim()}! Vui lòng đăng nhập để tiếp tục.`);
             return true;
         }
 
@@ -1066,12 +1090,12 @@ window.TempoAuth = (function() {
             if (window.TempoApp && typeof window.TempoApp.triggerConfetti === 'function') {
                 window.TempoApp.triggerConfetti();
             }
-            window.TempoApp.showToast(`Account created for ${displayName.trim()}! Please sign in to continue.`);
+            window.TempoApp.showToast(`Đã tạo tài khoản cho ${displayName.trim()}! Vui lòng đăng nhập để tiếp tục.`);
             return true;
 
         } catch (err) {
             console.error("Register unexpected error:", err);
-            showRegisterError(dict.genericRegError || "An unexpected error occurred. Please try again.", false);
+            showRegisterError(dict.genericRegError || "Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.", false);
             return false;
         } finally {
             isRegistrationInProgress = false;
@@ -1092,7 +1116,7 @@ window.TempoAuth = (function() {
         if (termsConsent && !termsConsent.checked) {
             const msg = currentAuthLang === 'vi'
                 ? "Vui lòng đồng ý với Điều khoản dịch vụ và Chính sách quyền riêng tư để tạo tài khoản."
-                : "Please agree to the Terms of Service and Privacy Policy to create an account.";
+                : "Vui lòng đồng ý với Điều khoản Dịch vụ và Chính sách Quyền riêng tư để tạo tài khoản.";
             showRegisterError(msg, false);
             return;
         }
@@ -1128,17 +1152,17 @@ window.TempoAuth = (function() {
         const terms = document.getElementById('reg-student-terms').checked;
 
         if (!fullName || !email || !password) {
-            window.TempoApp.showToast("Please fill in all required fields.");
+            window.TempoApp.showToast("Vui lòng điền đầy đủ các thông tin bắt buộc.");
             return;
         }
 
         if (password !== confirmPassword) {
-            window.TempoApp.showToast("Passwords do not match. Please verify.");
+            window.TempoApp.showToast("Mật khẩu không khớp. Vui lòng kiểm tra lại.");
             return;
         }
 
         if (!terms) {
-            window.TempoApp.showToast("Please agree to the Terms of Service and Privacy Policy.");
+            window.TempoApp.showToast("Vui lòng đồng ý với Điều khoản Dịch vụ và Chính sách Quyền riêng tư.");
             return;
         }
 
@@ -1174,7 +1198,7 @@ window.TempoAuth = (function() {
             openSignInModal(normalizedEmail);
 
             window.TempoApp.triggerConfetti();
-            window.TempoApp.showToast(`Account created for ${fullName}! Please sign in to continue.`);
+            window.TempoApp.showToast(`Đã tạo tài khoản cho ${fullName}! Vui lòng đăng nhập để tiếp tục.`);
             return;
         }
 
@@ -1230,11 +1254,11 @@ window.TempoAuth = (function() {
             if (signinEmailInput) signinEmailInput.value = email;
 
             window.TempoApp.triggerConfetti();
-            window.TempoApp.showToast(`Account created for ${fullName}! Please sign in to continue.`);
+            window.TempoApp.showToast(`Đã tạo tài khoản cho ${fullName}! Vui lòng đăng nhập để tiếp tục.`);
 
         } catch (err) {
             console.error("Student register error:", err);
-            window.TempoApp.showToast("An unexpected error occurred. Please try again.");
+            window.TempoApp.showToast("Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.");
         } finally {
             isRegistrationInProgress = false;
             submitBtn.disabled = false;
@@ -1265,7 +1289,7 @@ window.TempoAuth = (function() {
         }
 
         if (password !== confirmPassword) {
-            window.TempoApp.showToast("Passwords do not match.");
+            window.TempoApp.showToast("Mật khẩu không khớp.");
             return;
         }
 
@@ -1338,7 +1362,7 @@ window.TempoAuth = (function() {
 
         } catch (err) {
             console.error("Volunteer apply error:", err);
-            window.TempoApp.showToast("Failed to submit application. Please try again.");
+            window.TempoApp.showToast("Gửi đơn đăng ký không thành công. Vui lòng thử lại.");
         } finally {
             isRegistrationInProgress = false;
             submitBtn.disabled = false;
@@ -1354,7 +1378,7 @@ window.TempoAuth = (function() {
         const dict = AUTH_I18N[currentAuthLang] || AUTH_I18N.en;
 
         if (!email || !password) {
-            showSignInError(dict.fillRequired || "Please enter both email and password.");
+            showSignInError(dict.fillRequired || "Vui lòng nhập cả email và mật khẩu.");
             return false;
         }
 
@@ -1375,7 +1399,7 @@ window.TempoAuth = (function() {
                                      localStorage.getItem('tempo_mock_account_' + email.trim());
                 
                 if (!storedMock) {
-                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    showSignInError(dict.invalidCredentials || "Email hoặc mật khẩu không chính xác.");
                     return false;
                 }
 
@@ -1383,12 +1407,12 @@ window.TempoAuth = (function() {
                 try {
                     parsed = JSON.parse(storedMock);
                 } catch (e) {
-                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    showSignInError(dict.invalidCredentials || "Email hoặc mật khẩu không chính xác.");
                     return false;
                 }
 
                 if (!parsed || parsed.password !== password) {
-                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    showSignInError(dict.invalidCredentials || "Email hoặc mật khẩu không chính xác.");
                     return false;
                 }
 
@@ -1411,8 +1435,11 @@ window.TempoAuth = (function() {
                 };
                 authState = 'authenticated';
                 renderHeaderUI(currentProfile);
+                if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                    window.TempoTheme.loadUserTheme(currentUser.id);
+                }
                 closeAllAuthModals();
-                window.TempoApp.showToast(`Welcome back, ${name}!`);
+                window.TempoApp.showToast(`Chào mừng trở lại, ${name}!`);
 
                 const intentHandled = await syncPlanForUser(currentUser.id);
                 if (!intentHandled) {
@@ -1429,7 +1456,7 @@ window.TempoAuth = (function() {
 
                 // Guard against login rejection or missing session/user
                 if (error || !data || !data.session || !data.user) {
-                    showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                    showSignInError(dict.invalidCredentials || "Email hoặc mật khẩu không chính xác.");
                     return false;
                 }
 
@@ -1437,9 +1464,12 @@ window.TempoAuth = (function() {
                 currentUser = data.user;
                 authState = 'authenticated';
                 await loadUserProfile(data.user.id);
+                if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+                    window.TempoTheme.loadUserTheme(data.user.id);
+                }
                 const intentHandled = await syncPlanForUser(data.user.id);
                 const welcomeName = currentProfile?.display_name || currentProfile?.full_name || email;
-                window.TempoApp.showToast(`Welcome back, ${welcomeName}!`);
+                window.TempoApp.showToast(`Chào mừng trở lại, ${welcomeName}!`);
 
                 if (!intentHandled) {
                     if (currentProfile?.role === 'volunteer') {
@@ -1454,7 +1484,7 @@ window.TempoAuth = (function() {
 
             } catch (err) {
                 console.error("Sign in error:", err);
-                showSignInError(dict.invalidCredentials || "Email or password is incorrect.");
+                showSignInError(dict.invalidCredentials || "Email hoặc mật khẩu không chính xác.");
                 return false;
             }
         } finally {
@@ -1512,7 +1542,7 @@ window.TempoAuth = (function() {
             }
         } catch (err) {
             console.error("Forgot password error:", err);
-            window.TempoApp.showToast("Could not send reset email. Please try again.");
+            window.TempoApp.showToast("Không thể gửi email đặt lại mật khẩu. Vui lòng thử lại.");
         }
     }
 
@@ -1539,8 +1569,11 @@ window.TempoAuth = (function() {
         renderHeaderUI(null);
 
         syncPlanForSignOut();
+        if (window.TempoTheme && typeof window.TempoTheme.loadUserTheme === 'function') {
+            window.TempoTheme.loadUserTheme(null);
+        }
 
-        window.TempoApp.showToast("You have been signed out.");
+        window.TempoApp.showToast("Bạn đã đăng xuất.");
         window.TempoApp.navigateTo('today');
     }
 

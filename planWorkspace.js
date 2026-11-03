@@ -14,8 +14,10 @@ window.TempoPlanWorkspace = (function() {
     let pendingAddedTask = null;
     let rescheduleTaskId = null;
     let rescheduleSelectedWindow = null;
+    let rescheduleSelectedSlot = null;
     let rescheduleShowAddTime = false;
     let adjustAvailShowAdd = false;
+    let repeatConfigDate = null;
     let pendingClearTaskId = null;
     let isActionProcessing = false;
     let activeLabelMenuTaskId = null;
@@ -58,11 +60,386 @@ window.TempoPlanWorkspace = (function() {
         return `${h}:${m} ${ampm}`;
     }
 
-    // Helper: Parse HH:MM to minutes
-    function parseTimeToMinutes(str) {
+    // Helper: Parse HH:MM or 12-hour AM/PM to minutes (with optional isEnd for 24:00/00:00 end of day)
+    function parseTimeToMinutes(str, isEnd) {
         if (!str || typeof str !== 'string') return 0;
-        const parts = str.split(':');
-        return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+        const trimmed = str.trim();
+        if (isEnd && (trimmed === '24:00' || trimmed === '00:00')) {
+            return 1440;
+        }
+        const isPM = /pm$/i.test(trimmed);
+        const isAM = /am$/i.test(trimmed);
+        const cleanStr = trimmed.replace(/\s*(am|pm)$/i, '');
+        const parts = cleanStr.split(':');
+        let hours = parseInt(parts[0], 10) || 0;
+        const minutes = parseInt(parts[1], 10) || 0;
+        if (isPM && hours < 12) hours += 12;
+        if (isAM && hours === 12) hours = 0;
+        const totalMinutes = hours * 60 + minutes;
+        if (isEnd && totalMinutes === 0 && (hours === 0 && minutes === 0 && (trimmed === '00:00' || trimmed === '12:00 am' || trimmed === '12:00am'))) {
+            return 1440;
+        }
+        return totalMinutes;
+    }
+
+    // Helper: Normalize date to YYYY-MM-DD
+    function normalizeDateISO(dateInput) {
+        if (!dateInput) return '';
+        if (typeof dateInput !== 'string') {
+            if (dateInput instanceof Date && !isNaN(dateInput)) {
+                const pad = n => String(n).padStart(2, '0');
+                return `${dateInput.getFullYear()}-${pad(dateInput.getMonth() + 1)}-${pad(dateInput.getDate())}`;
+            }
+            return '';
+        }
+        const clean = dateInput.split(/[T ]/)[0].trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+            return clean;
+        }
+        const parsed = new Date(clean);
+        if (!isNaN(parsed.getTime())) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+        }
+        return clean;
+    }
+
+    /**
+     * Clean up expired availability slots in Tempo Working Plan
+     * - Past dates: Remove all availability slots belonging to dates before today.
+     * - Today: Remove only time slots whose end time has already passed.
+     * - Ongoing slots: Keep slots that have started but have not ended yet.
+     * - Future slots: Keep all upcoming availability slots unchanged.
+     */
+    function cleanupExpiredAvailability(plan, refDate, refTime) {
+        if (!plan || !Array.isArray(plan.availabilityDays)) {
+            return false;
+        }
+
+        const todayStr = refDate || getLocalTodayISO();
+        const currentTimeStr = refTime || getLocalCurrentTimeStr();
+        const currentMinutes = parseTimeToMinutes(currentTimeStr, false);
+
+        let changed = false;
+        const cleanedDays = [];
+
+        for (const day of plan.availabilityDays) {
+            if (!day) continue;
+            const cleanDate = normalizeDateISO(day.date);
+            if (!cleanDate) continue;
+
+            // 1. Past dates: Remove all availability slots belonging to dates before today
+            if (cleanDate < todayStr) {
+                changed = true;
+                continue;
+            }
+
+            // 2. Today: Remove only time slots whose end time has already passed
+            if (cleanDate === todayStr) {
+                const originalBlocks = Array.isArray(day.blocks) ? day.blocks : [];
+                const validBlocks = originalBlocks.filter(block => {
+                    if (!block || !block.end) return false;
+                    const endMinutes = parseTimeToMinutes(block.end, true);
+                    const hasPassed = endMinutes <= currentMinutes;
+                    return !hasPassed;
+                });
+
+                if (validBlocks.length !== originalBlocks.length) {
+                    changed = true;
+                }
+
+                // Do not delete an entire availability day if it still contains valid future/ongoing time slots
+                if (validBlocks.length > 0) {
+                    cleanedDays.push({
+                        ...day,
+                        date: cleanDate,
+                        blocks: validBlocks
+                    });
+                } else {
+                    changed = true;
+                }
+                continue;
+            }
+
+            // 3. Future dates (cleanDate > todayStr): Keep all upcoming availability slots unchanged
+            cleanedDays.push({
+                ...day,
+                date: cleanDate
+            });
+        }
+
+        if (cleanedDays.length !== plan.availabilityDays.length) {
+            changed = true;
+        }
+
+        if (changed) {
+            plan.availabilityDays = cleanedDays;
+        }
+
+        return changed;
+    }
+
+    /**
+     * Recurrence & Copy helpers for Availability
+     */
+    function getRecurringRules() {
+        try {
+            const saved = localStorage.getItem('tempo_availability_recurring_rules');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (e) {}
+        const plan = getActivePlan();
+        if (plan && Array.isArray(plan.recurringAvailabilityRules)) {
+            return plan.recurringAvailabilityRules;
+        }
+        return [];
+    }
+
+    function saveRecurringRule(rule) {
+        const rules = getRecurringRules().filter(r => r.id !== rule.id && r.sourceDate !== rule.sourceDate);
+        rules.push(rule);
+        try {
+            localStorage.setItem('tempo_availability_recurring_rules', JSON.stringify(rules));
+        } catch (e) {}
+        const plan = getActivePlan();
+        if (plan) {
+            plan.recurringAvailabilityRules = rules;
+        }
+        return rules;
+    }
+
+    function disableRecurringRule(sourceDate) {
+        const rules = getRecurringRules();
+        const rule = rules.find(r => r.sourceDate === sourceDate || (r.startDate && r.startDate === sourceDate));
+        if (rule) {
+            rule.enabled = false;
+            try {
+                localStorage.setItem('tempo_availability_recurring_rules', JSON.stringify(rules));
+            } catch (e) {}
+            const plan = getActivePlan();
+            if (plan) {
+                plan.recurringAvailabilityRules = rules;
+                const todayStr = getLocalTodayISO();
+                (plan.availabilityDays || []).forEach(day => {
+                    if (day.date >= todayStr && Array.isArray(day.blocks)) {
+                        day.blocks = day.blocks.filter(b => !String(b.id).startsWith(`b_rec_${rule.id}`));
+                    }
+                });
+            }
+        }
+        return rules;
+    }
+
+    function getRecurringRuleForDate(dateStr) {
+        const rules = getRecurringRules();
+        return rules.find(r => r.enabled !== false && (r.sourceDate === dateStr || r.startDate === dateStr));
+    }
+
+    function applyRecurringRulesToPlan(plan) {
+        if (!plan) return false;
+        if (!Array.isArray(plan.availabilityDays)) plan.availabilityDays = [];
+
+        const rules = getRecurringRules().filter(r => r.enabled !== false && Array.isArray(r.slots) && r.slots.length > 0);
+        if (rules.length === 0) return false;
+
+        const todayStr = getLocalTodayISO();
+        let changed = false;
+
+        rules.forEach(rule => {
+            if (!rule.startDate) return;
+            const [sY, sM, sD] = rule.startDate.split('-').map(Number);
+            let curDate = new Date(sY, sM - 1, sD);
+
+            while (curDate.getDay() !== rule.weekday) {
+                curDate.setDate(curDate.getDate() + 1);
+            }
+
+            const maxWeeks = 8;
+            const maxDate = new Date(curDate.getTime() + maxWeeks * 7 * 86400000);
+            const pad = n => String(n).padStart(2, '0');
+
+            while (curDate <= maxDate) {
+                const dateStr = `${curDate.getFullYear()}-${pad(curDate.getMonth() + 1)}-${pad(curDate.getDate())}`;
+
+                if (rule.endDate && dateStr > rule.endDate) {
+                    break;
+                }
+
+                if (dateStr >= todayStr) {
+                    let day = plan.availabilityDays.find(d => d.date === dateStr);
+                    if (!day) {
+                        day = {
+                            date: dateStr,
+                            label: formatScheduledDateLabel(dateStr, isViLocale()) || dateStr,
+                            isUnavailable: false,
+                            blocks: []
+                        };
+                        plan.availabilityDays.push(day);
+                        changed = true;
+                    }
+                    if (!Array.isArray(day.blocks)) day.blocks = [];
+
+                    rule.slots.forEach((s, sIdx) => {
+                        const exists = day.blocks.some(b => b.start === s.start && b.end === s.end);
+                        if (!exists) {
+                            day.blocks.push({
+                                id: `b_rec_${rule.id}_${dateStr}_${sIdx}`,
+                                start: s.start,
+                                end: s.end
+                            });
+                            changed = true;
+                        }
+                    });
+                    day.blocks.sort((a, b) => a.start.localeCompare(b.start));
+                }
+
+                curDate.setDate(curDate.getDate() + 7);
+            }
+        });
+
+        if (changed) {
+            plan.availabilityDays.sort((a, b) => a.date.localeCompare(b.date));
+        }
+        return changed;
+    }
+
+    function copyTodayAvailabilityToTomorrow() {
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        const todayStr = getLocalTodayISO();
+        const tomorrowStr = getLocalTomorrowISO();
+
+        const todayDay = (plan.availabilityDays || []).find(d => d.date === todayStr);
+        const todayBlocks = todayDay && Array.isArray(todayDay.blocks) ? todayDay.blocks : [];
+
+        if (todayBlocks.length === 0) {
+            const noMsg = window.t ? window.t('workspace.noWorkingHours', {}, 'No working hours available to copy.') : 'No working hours available to copy.';
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast(noMsg);
+            } else {
+                alert(noMsg);
+            }
+            return;
+        }
+
+        if (!Array.isArray(plan.availabilityDays)) plan.availabilityDays = [];
+        let tomorrowDay = plan.availabilityDays.find(d => d.date === tomorrowStr);
+        if (!tomorrowDay) {
+            tomorrowDay = {
+                date: tomorrowStr,
+                label: formatScheduledDateLabel(tomorrowStr, isViLocale()) || tomorrowStr,
+                isUnavailable: false,
+                blocks: []
+            };
+            plan.availabilityDays.push(tomorrowDay);
+            plan.availabilityDays.sort((a, b) => a.date.localeCompare(b.date));
+        }
+        if (!Array.isArray(tomorrowDay.blocks)) tomorrowDay.blocks = [];
+
+        let copiedCount = 0;
+        todayBlocks.forEach(b => {
+            const exists = tomorrowDay.blocks.some(tb => tb.start === b.start && tb.end === b.end);
+            if (!exists) {
+                tomorrowDay.blocks.push({
+                    id: 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                    start: b.start,
+                    end: b.end
+                });
+                copiedCount++;
+            }
+        });
+
+        tomorrowDay.blocks.sort((a, b) => a.start.localeCompare(b.start));
+        persistPlan(plan);
+
+        const successMsg = window.t ? window.t('workspace.copiedSuccessfully', {}, 'Working hours copied successfully.') : 'Working hours copied successfully.';
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(successMsg);
+        } else {
+            alert(successMsg);
+        }
+        render();
+    }
+
+    function openRepeatWeeklyModal(dateStr) {
+        repeatConfigDate = dateStr;
+        activeModal = 'repeat-weekly-config';
+        render();
+    }
+
+    function closeRepeatWeeklyModal() {
+        activeModal = 'adjust-availability';
+        repeatConfigDate = null;
+        render();
+    }
+
+    function confirmRepeatWeekly() {
+        if (!repeatConfigDate) return;
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        const repeatEveryWeekCb = document.getElementById('pw-repeat-every-week');
+        const startDateInput = document.getElementById('pw-repeat-start-date');
+        const endDateInput = document.getElementById('pw-repeat-end-date');
+
+        const enabled = repeatEveryWeekCb ? repeatEveryWeekCb.checked : true;
+        const startDate = startDateInput ? startDateInput.value.trim() : repeatConfigDate;
+        const endDate = endDateInput ? endDateInput.value.trim() : '';
+
+        if (!enabled) {
+            disableRecurringRule(repeatConfigDate);
+            persistPlan(plan);
+            const disabledMsg = isViLocale() ? 'Đã tắt lặp lại hàng tuần.' : 'Weekly recurrence disabled.';
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast(disabledMsg);
+            }
+            closeRepeatWeeklyModal();
+            return;
+        }
+
+        const day = (plan.availabilityDays || []).find(d => d.date === repeatConfigDate);
+        const dayBlocks = day && Array.isArray(day.blocks) ? day.blocks : [];
+
+        if (dayBlocks.length === 0) {
+            const noMsg = window.t ? window.t('workspace.noWorkingHours', {}, 'No working hours available to copy.') : 'No working hours available to copy.';
+            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+                window.TempoApp.showToast(noMsg);
+            } else {
+                alert(noMsg);
+            }
+            return;
+        }
+
+        const [sY, sM, sD] = startDate.split('-').map(Number);
+        const sDateObj = new Date(sY, sM - 1, sD);
+        const weekday = sDateObj.getDay();
+
+        const existingRule = getRecurringRuleForDate(repeatConfigDate);
+        const rule = {
+            id: existingRule ? existingRule.id : 'rec_' + Date.now(),
+            sourceDate: repeatConfigDate,
+            weekday: weekday,
+            slots: dayBlocks.map(b => ({ start: b.start, end: b.end })),
+            startDate: startDate,
+            endDate: endDate || null,
+            enabled: true,
+            createdAt: Date.now()
+        };
+
+        saveRecurringRule(rule);
+        applyRecurringRulesToPlan(plan);
+        persistPlan(plan);
+
+        const successMsg = isViLocale() ? 'Đã cài đặt lặp lại hàng tuần thành công.' : 'Weekly recurrence configured successfully.';
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(successMsg);
+        } else {
+            alert(successMsg);
+        }
+        closeRepeatWeeklyModal();
     }
 
     // Helper: Format minutes to HH:MM (24-hour)
@@ -70,6 +447,17 @@ window.TempoPlanWorkspace = (function() {
         const h = Math.floor(min / 60);
         const m = min % 60;
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    // Helper: Check deadline conflict
+    function checkDeadlineConflict(task, plannedDate, plannedEndMinutes) {
+        if (!task || !task.hasDeadline || !task.deadlineDate) return false;
+        if (plannedDate > task.deadlineDate) return true;
+        if (plannedDate === task.deadlineDate && task.deadlineTime) {
+            const deadlineMin = parseTimeToMinutes(task.deadlineTime);
+            return (plannedEndMinutes || 1440) > deadlineMin;
+        }
+        return false;
     }
 
     // Helper: Format Month Day (e.g. Oct 17)
@@ -91,7 +479,7 @@ window.TempoPlanWorkspace = (function() {
         if (window.TempoI18n && typeof window.TempoI18n.formatDeadline === 'function') {
             return window.TempoI18n.formatDeadline(dateStr, timeStr);
         }
-        if (!dateStr) return 'No fixed deadline';
+        if (!dateStr) return isViLocale() ? 'Chưa có deadline' : 'No deadline';
         if (dateStr.includes(' ') && !timeStr) {
             const parts = dateStr.split(' ');
             dateStr = parts[0];
@@ -110,27 +498,298 @@ window.TempoPlanWorkspace = (function() {
         }
     }
 
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        try {
+            const saved = localStorage.getItem('tempo_language');
+            if (saved) return saved === 'vi';
+        } catch (e) {}
+        return false;
+    }
+
+    function t(path, params, fallback) {
+        if (window.TempoI18n && typeof window.TempoI18n.t === 'function') {
+            return window.TempoI18n.t(path, params, fallback);
+        }
+        if (typeof window.t === 'function') {
+            return window.t(path, params, fallback);
+        }
+        return fallback;
+    }
+
+    function getLocalTodayISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTodayISO === 'function') {
+            return window.TempoI18n.getLocalTodayISO();
+        }
+        try {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (e) {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+    }
+
+    function getLocalTomorrowISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTomorrowISO === 'function') {
+            return window.TempoI18n.getLocalTomorrowISO();
+        }
+        const todayStr = getLocalTodayISO();
+        const parts = todayStr.split('-').map(Number);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            const nextDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1));
+            const pad = n => String(n).padStart(2, '0');
+            return `${nextDate.getUTCFullYear()}-${pad(nextDate.getUTCMonth() + 1)}-${pad(nextDate.getUTCDate())}`;
+        }
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function getLocalCurrentTimeStr() {
+        try {
+            return new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(new Date());
+        } catch (e) {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+    }
+
+    function formatScheduledDateLabel(dateStr, isVi = isViLocale()) {
+        if (window.TempoI18n && typeof window.TempoI18n.formatScheduledDateLabel === 'function') {
+            return window.TempoI18n.formatScheduledDateLabel(dateStr, isVi);
+        }
+        if (!dateStr || typeof dateStr !== 'string') return '';
+        const cleanDate = dateStr.split(/[T ]/)[0].trim();
+        if (!cleanDate || cleanDate === 'unscheduled') return '';
+
+        const isViBool = (typeof isVi === 'boolean') ? isVi : (isVi === 'vi');
+        const targetLang = isViBool ? 'vi' : 'en';
+
+        let calDate = '';
+        if (window.TempoI18n && typeof window.TempoI18n.formatCalendarDate === 'function') {
+            calDate = window.TempoI18n.formatCalendarDate(cleanDate, targetLang);
+        } else {
+            const parts = cleanDate.split('-');
+            if (parts.length === 3) {
+                const pad = n => String(n).padStart(2, '0');
+                const day = pad(parts[2]);
+                const month = pad(parts[1]);
+                const year = parts[0];
+                const enMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const mIdx = parseInt(parts[1], 10) - 1;
+                calDate = isViBool ? `${day}/${month}/${year}` : `${enMonths[mIdx] || ''} ${day}, ${year}`;
+            } else {
+                calDate = cleanDate;
+            }
+        }
+
+        const todayStr = getLocalTodayISO();
+        const tomorrowStr = getLocalTomorrowISO();
+
+        if (cleanDate === todayStr) {
+            return isViBool ? `Hôm nay · ${calDate}` : `Today · ${calDate}`;
+        }
+        if (cleanDate === tomorrowStr) {
+            return isViBool ? (calDate ? `Ngày mai · ${calDate}` : 'Ngày mai') : (calDate ? `Tomorrow · ${calDate}` : 'Tomorrow');
+        }
+
+        return calDate;
+    }
+
+    function isTaskOverdue(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task || task.completed === true || task.isCompleted === true || task.status === 'completed') return false;
+
+        const hasDeadline = task.hasDeadline !== false && Boolean(task.deadlineDate || task.deadline);
+        if (!hasDeadline) return false;
+
+        const deadlineDate = task.deadlineDate || (typeof task.deadline === 'string' ? task.deadline.split(/[T ]/)[0] : null);
+        if (!deadlineDate) return false;
+
+        const todayStr = getLocalTodayISO();
+        if (deadlineDate < todayStr) return true;
+        if (deadlineDate > todayStr) return false;
+
+        // Deadline is today -> check time
+        const deadlineTime = task.deadlineTime || (typeof task.deadline === 'string' && task.deadline.includes(' ') ? task.deadline.split(' ')[1] : null);
+        if (!deadlineTime) return false;
+
+        const currentTimeStr = getLocalCurrentTimeStr();
+        return deadlineTime.substring(0, 5) < currentTimeStr.substring(0, 5);
+    }
+
+    function isTaskMissedSchedule(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task || task.completed === true || task.isCompleted === true || task.status === 'completed') return false;
+        if (isTaskOverdue(task, plan)) return false;
+
+        // Resolve scheduled date and time
+        let dayDate = null;
+        let endTime = null;
+
+        if (taskOrPt && taskOrPt.dayDate) {
+            dayDate = taskOrPt.dayDate;
+            endTime = taskOrPt.endTime || taskOrPt.scheduledEndTime;
+        } else if (plan && Array.isArray(plan.plannedTasks)) {
+            const pt = plan.plannedTasks.find(p => p.task && (p.task.id === task.id || p.id === task.id));
+            if (pt && pt.dayDate) {
+                dayDate = pt.dayDate;
+                endTime = pt.endTime || pt.scheduledEndTime;
+            }
+        }
+        if (!dayDate) {
+            if (task._dayDate || task.dayDate || task.scheduledDate) {
+                dayDate = task._dayDate || task.dayDate || task.scheduledDate;
+                endTime = task._endTime || task.endTime;
+            }
+        }
+
+        if (!dayDate || dayDate === 'unscheduled') return false;
+
+        const todayStr = getLocalTodayISO();
+        if (dayDate < todayStr) return true;
+        if (dayDate > todayStr) return false;
+
+        // Today: check if scheduled end time has passed
+        if (endTime) {
+            let time24 = endTime;
+            if (typeof endTime === 'string') {
+                const lower = endTime.toLowerCase().trim();
+                if (lower.includes('am') || lower.includes('pm')) {
+                    const isPm = lower.includes('pm');
+                    const clean = lower.replace(/am|pm/g, '').trim();
+                    const [hStr, mStr] = clean.split(':');
+                    let h = parseInt(hStr, 10);
+                    const m = mStr ? mStr.padStart(2, '0') : '00';
+                    if (isPm && h < 12) h += 12;
+                    if (!isPm && h === 12) h = 0;
+                    time24 = `${String(h).padStart(2, '0')}:${m}`;
+                }
+            }
+            const currentTimeStr = getLocalCurrentTimeStr();
+            if (time24.substring(0, 5) < currentTimeStr.substring(0, 5)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function getTaskState(taskOrPt, plan) {
+        const task = (taskOrPt && taskOrPt.task) ? taskOrPt.task : taskOrPt;
+        if (!task) return 'UNKNOWN';
+        if (task.completed === true || task.isCompleted === true || task.status === 'completed') {
+            return 'Done';
+        }
+        if (isTaskOverdue(taskOrPt, plan)) {
+            return 'Overdue';
+        }
+        if (isTaskMissedSchedule(taskOrPt, plan)) {
+            return 'Missed Schedule';
+        }
+        const dayDate = (taskOrPt && taskOrPt.dayDate) || task.dayDate || task._dayDate || task.scheduledDate;
+        const todayStr = getLocalTodayISO();
+        if (dayDate) {
+            if (dayDate === todayStr) return 'Today';
+            if (dayDate > todayStr) return 'Upcoming';
+        }
+        return 'Upcoming';
+    }
+
+    let pwDismissedMissedSchedule = new Set();
+
+    function isMissedSchedulePromptDismissed(taskId, currentScheduledDate) {
+        if (!taskId) return false;
+        if (pwDismissedMissedSchedule.has(String(taskId))) {
+            return true;
+        }
+        if (window.TempoMode && typeof window.TempoMode.isMissedSchedulePromptDismissed === 'function') {
+            if (window.TempoMode.isMissedSchedulePromptDismissed(taskId, currentScheduledDate)) return true;
+        }
+        try {
+            const stored = JSON.parse(localStorage.getItem('tempo_dismissed_missed_schedule') || '{}');
+            const entry = stored[String(taskId)];
+            if (entry && entry.scheduledDate === currentScheduledDate) {
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function dismissMissedSchedulePrompt(taskId, currentScheduledDate) {
+        if (!taskId) return;
+        pwDismissedMissedSchedule.add(String(taskId));
+        if (window.TempoMode && typeof window.TempoMode.dismissMissedSchedulePrompt === 'function') {
+            window.TempoMode.dismissMissedSchedulePrompt(taskId, currentScheduledDate);
+        }
+        try {
+            const stored = JSON.parse(localStorage.getItem('tempo_dismissed_missed_schedule') || '{}');
+            stored[String(taskId)] = {
+                scheduledDate: currentScheduledDate,
+                dismissedAt: Date.now()
+            };
+            localStorage.setItem('tempo_dismissed_missed_schedule', JSON.stringify(stored));
+        } catch (e) {}
+    }
+
+    function clearMissedScheduleDismissal(taskId) {
+        if (!taskId) return;
+        pwDismissedMissedSchedule.delete(String(taskId));
+        if (window.TempoMode && typeof window.TempoMode.clearMissedScheduleDismissal === 'function') {
+            window.TempoMode.clearMissedScheduleDismissal(taskId);
+        }
+        try {
+            const stored = JSON.parse(localStorage.getItem('tempo_dismissed_missed_schedule') || '{}');
+            delete stored[String(taskId)];
+            localStorage.setItem('tempo_dismissed_missed_schedule', JSON.stringify(stored));
+        } catch (e) {}
+    }
+
     // Helper: Today ISO string YYYY-MM-DD
     function getTodayISO() {
-        return new Date().toISOString().split('T')[0];
+        return getLocalTodayISO();
     }
 
         // Reference plan generator matching the UI specification
     function getDefaultReferencePlan() {
-        const todayStr = getTodayISO();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const todayStr = getLocalTodayISO();
+        const tomorrowStr = getLocalTomorrowISO();
 
         const defaultPlan = {
             id: 'plan_tempo_working_default',
             planId: 'plan_tempo_working_default',
             planType: 'emergency',
             title: 'Tempo Working Plan',
+            availabilityDays: [
+                {
+                    date: todayStr,
+                    label: formatScheduledDateLabel(todayStr),
+                    isUnavailable: false,
+                    blocks: [
+                        { id: 'b_today_1', start: '14:00', end: '18:00', minutes: 240 },
+                        { id: 'b_today_2', start: '19:00', end: '23:00', minutes: 240 }
+                    ]
+                }
+            ],
             plannedTasks: [
                 {
                     dayDate: todayStr,
-                    dayLabel: 'Today, Month day',
+                    dayLabel: formatScheduledDateLabel(todayStr),
                     startTime: '3:00 PM',
                     endTime: '5:30 PM',
                     executionBadge: 'Now',
@@ -158,7 +817,7 @@ window.TempoPlanWorkspace = (function() {
                 },
                 {
                     dayDate: todayStr,
-                    dayLabel: 'Today, Month day',
+                    dayLabel: formatScheduledDateLabel(todayStr),
                     startTime: '3:00 PM',
                     endTime: '5:30 PM',
                     executionBadge: 'Later',
@@ -183,7 +842,7 @@ window.TempoPlanWorkspace = (function() {
                 },
                 {
                     dayDate: tomorrowStr,
-                    dayLabel: 'Month Day',
+                    dayLabel: formatScheduledDateLabel(tomorrowStr),
                     startTime: '9:00 AM',
                     endTime: '11:30 AM',
                     executionBadge: 'Later',
@@ -243,6 +902,11 @@ window.TempoPlanWorkspace = (function() {
 
     // Load active plan from TempoPlanStore, TempoEmergencyFlow, or local storage
     function getActivePlan() {
+        const currentUserId = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+            ? window.TempoAuth.getCurrentUserId() 
+            : ((window.TempoPlanStore && typeof window.TempoPlanStore.getUserId === 'function') ? window.TempoPlanStore.getUserId() : 'guest');
+        const isAuthenticated = !!(currentUserId && currentUserId !== 'guest');
+
         let plan = null;
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getConfirmedPlan === 'function') {
             plan = window.TempoEmergencyFlow.getConfirmedPlan();
@@ -252,34 +916,81 @@ window.TempoPlanWorkspace = (function() {
         }
         if (!plan) {
             try {
-                const saved = localStorage.getItem('tempo_working_plan') || localStorage.getItem('tempo_store_active_emergency_guest');
+                const key = isAuthenticated ? `tempo_working_plan_${currentUserId}` : 'tempo_working_plan';
+                const saved = localStorage.getItem(key);
                 if (saved) plan = JSON.parse(saved);
             } catch(e) {}
         }
         if (plan) {
+            if (isAuthenticated) {
+                if (plan.userId && plan.userId !== currentUserId) return null;
+                if (plan.user_id && plan.user_id !== currentUserId) return null;
+                if (!plan.userId && !plan.user_id) return null;
+            }
             if (!Array.isArray(plan.plannedTasks)) plan.plannedTasks = [];
             if (!Array.isArray(plan.unarrangedTasks)) plan.unarrangedTasks = [];
             if (!Array.isArray(plan.tasks)) plan.tasks = [];
+
+            // Ensure plan.availabilityDays is populated & synchronized
+            if (!Array.isArray(plan.availabilityDays) || plan.availabilityDays.length === 0) {
+                if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getAvailabilityDays === 'function') {
+                    const efAvail = window.TempoEmergencyFlow.getAvailabilityDays();
+                    if (Array.isArray(efAvail) && efAvail.length > 0) {
+                        plan.availabilityDays = JSON.parse(JSON.stringify(efAvail));
+                    }
+                }
+                if (!Array.isArray(plan.availabilityDays) || plan.availabilityDays.length === 0) {
+                    try {
+                        const savedAvail = localStorage.getItem('tempo_availability_days');
+                        if (savedAvail) plan.availabilityDays = JSON.parse(savedAvail);
+                    } catch(e) {}
+                }
+            }
         }
-        if (!plan || (plan.plannedTasks.length === 0 && plan.unarrangedTasks.length === 0 && plan.tasks.length === 0)) {
-            plan = getDefaultReferencePlan();
-        }
+        // Invariant: NEVER automatically inject default or sample tasks.
+        // Return null or plan with legitimate user tasks only.
         return plan;
     }
 
     // Save active plan to TempoPlanStore & localStorage
-    function persistPlan(plan) {
+    async function persistPlan(plan) {
         if (!plan) return;
-        if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
-            window.TempoPlanStore.saveActivePlan('emergency', plan);
-            window.TempoPlanStore.saveActivePlan('recovery', plan);
+
+        // Ensure availabilityDays is saved in plan, localStorage, and emergencyFlow
+        if (Array.isArray(plan.availabilityDays)) {
+            try {
+                localStorage.setItem('tempo_availability_days', JSON.stringify(plan.availabilityDays));
+            } catch(e) {}
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setAvailabilityDays === 'function') {
+                window.TempoEmergencyFlow.setAvailabilityDays(plan.availabilityDays);
+            }
         }
+
+        // Save to user-scoped storage FIRST so data is never lost even if remote fails
+        try {
+            const currentUserId = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                ? window.TempoAuth.getCurrentUserId() 
+                : ((window.TempoPlanStore && typeof window.TempoPlanStore.getUserId === 'function') ? window.TempoPlanStore.getUserId() : 'guest');
+            if (currentUserId && currentUserId !== 'guest') {
+                plan.userId = currentUserId;
+                plan.user_id = currentUserId;
+                localStorage.setItem(`tempo_working_plan_${currentUserId}`, JSON.stringify(plan));
+            } else {
+                localStorage.setItem('tempo_working_plan', JSON.stringify(plan));
+            }
+        } catch(e) {}
+
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
             window.TempoEmergencyFlow.setConfirmedPlan(plan);
         }
-        try {
-            localStorage.setItem('tempo_working_plan', JSON.stringify(plan));
-        } catch(e) {}
+        if (window.TempoPlanStore && typeof window.TempoPlanStore.saveActivePlan === 'function') {
+            try {
+                await window.TempoPlanStore.saveActivePlan('emergency', plan);
+                await window.TempoPlanStore.saveActivePlan('recovery', plan);
+            } catch (err) {
+                console.error('[TempoPlanWorkspace] Error saving plan to store:', err);
+            }
+        }
         if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
             window.TempoMode.renderActiveModeHome();
         }
@@ -324,10 +1035,11 @@ window.TempoPlanWorkspace = (function() {
         });
 
         // Sequential slot allocation based on available days
-        let availabilityDays = null;
-        if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getAvailabilityDays === 'function') {
-            availabilityDays = window.TempoEmergencyFlow.getAvailabilityDays();
-        }
+        let availabilityDays = (plan && Array.isArray(plan.availabilityDays) && plan.availabilityDays.length > 0)
+            ? plan.availabilityDays
+            : ((window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getAvailabilityDays === 'function')
+                ? window.TempoEmergencyFlow.getAvailabilityDays()
+                : []);
         const activeDays = (availabilityDays || []).filter(d => !d.isUnavailable && d.blocks && d.blocks.length > 0);
 
         if (activeDays.length > 0) {
@@ -398,8 +1110,8 @@ window.TempoPlanWorkspace = (function() {
 
                 if (!allocated) {
                     const fallbackDay = activeDays[activeDays.length - 1] || activeDays[0];
-                    item.dayDate = fallbackDay ? fallbackDay.date : item.dayDate;
-                    item.dayLabel = fallbackDay ? fallbackDay.label : item.dayLabel;
+                    item.dayDate = item.dayDate || (fallbackDay ? fallbackDay.date : null);
+                    item.dayLabel = item.dayLabel || (fallbackDay ? fallbackDay.label : null);
                     item.executionBadge = task.userLabel === 'Now' ? 'Now' : 'Later';
                 }
             });
@@ -473,12 +1185,17 @@ window.TempoPlanWorkspace = (function() {
      * Start Adjust Plan flow
      */
     function startAdjustPlan() {
+        // Clear any open workspace-internal modal to prevent state conflicts
+        activeModal = null;
+        render();
+
+        const plan = getActivePlan();
         if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.startAdjustmentFlow === 'function') {
-            window.TempoUrmodeFlow.startAdjustmentFlow();
-        } else if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.openPlanReviewModal === 'function') {
-            window.TempoEmergencyFlow.openPlanReviewModal();
+            window.TempoUrmodeFlow.startAdjustmentFlow(plan);
+        } else if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.startAdjustmentFlow === 'function') {
+            window.TempoEmergencyFlow.startAdjustmentFlow(plan);
         } else {
-            openAdjustAvailabilityModal();
+            console.error('[TempoPlanWorkspace] Unable to start Adjust Plan: startAdjustmentFlow handler not found.');
         }
     }
 
@@ -512,6 +1229,13 @@ window.TempoPlanWorkspace = (function() {
             }
 
             try {
+                const currentUserId = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                    ? window.TempoAuth.getCurrentUserId() 
+                    : ((window.TempoPlanStore && typeof window.TempoPlanStore.getUserId === 'function') ? window.TempoPlanStore.getUserId() : 'guest');
+                if (currentUserId && currentUserId !== 'guest') {
+                    localStorage.removeItem(`tempo_working_plan_${currentUserId}`);
+                    localStorage.removeItem(`tempo_rmode_mock_tasks_${currentUserId}`);
+                }
                 localStorage.removeItem('tempo_working_plan');
                 localStorage.removeItem('tempo_active_plan');
                 localStorage.removeItem('tempo_store_active_emergency_guest');
@@ -541,6 +1265,13 @@ window.TempoPlanWorkspace = (function() {
             window.TempoApp.navigateTo('plan-workspace');
         } else {
             window.location.hash = '#plan-workspace';
+        }
+        const plan = getActivePlan();
+        if (plan) {
+            const changed = cleanupExpiredAvailability(plan);
+            if (changed) {
+                persistPlan(plan);
+            }
         }
         render();
     }
@@ -591,6 +1322,7 @@ window.TempoPlanWorkspace = (function() {
                 task.isInProgress = false;
                 task.executionStatus = 'completed';
                 task.completedAt = Date.now();
+                clearMissedScheduleDismissal(taskId);
 
                 // If the selected task became completed, select the next appropriate active task
                 if (selectedTaskId === taskId) {
@@ -821,6 +1553,8 @@ window.TempoPlanWorkspace = (function() {
         task.deadlineDate = newDate;
         task.deadlineTime = newTime;
         task.deadline = hasDeadline ? `${newDate} ${newTime || '23:59'}` : null;
+        delete task.isOverdue;
+        task.isOverdue = false;
 
         // Update shared task in tasks array
         if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getTasks === 'function') {
@@ -831,6 +1565,8 @@ window.TempoPlanWorkspace = (function() {
                 shared.deadlineDate = task.deadlineDate;
                 shared.deadlineTime = task.deadlineTime;
                 shared.deadline = task.deadline;
+                delete shared.isOverdue;
+                shared.isOverdue = false;
             }
         }
 
@@ -1374,19 +2110,240 @@ window.TempoPlanWorkspace = (function() {
      */
     function openRescheduleModal(taskId) {
         rescheduleTaskId = taskId;
+        selectedTaskId = taskId;
         rescheduleSelectedWindow = null;
+        rescheduleSelectedSlot = null;
         rescheduleShowAddTime = false;
         activeModal = 'reschedule';
+
+        const plan = getActivePlan();
+        if (plan) {
+            let taskItem = (plan.plannedTasks || []).find(pt => pt.task && (pt.task.id === taskId || pt.id === taskId));
+            const tDate = taskItem ? taskItem.dayDate : null;
+            const tStart = taskItem ? (taskItem.startTime || taskItem.scheduledStartTime) : null;
+            const tEnd = taskItem ? (taskItem.endTime || taskItem.scheduledEndTime) : null;
+            if (tDate) {
+                rescheduleSelectedWindow = tDate;
+                rescheduleSelectedSlot = {
+                    id: `slot_${tDate}`,
+                    date: tDate,
+                    start: tStart,
+                    end: tEnd
+                };
+            }
+        }
         render();
     }
 
     function closeRescheduleModal() {
         activeModal = null;
         rescheduleTaskId = null;
+        rescheduleSelectedWindow = null;
+        rescheduleSelectedSlot = null;
+        rescheduleShowAddTime = false;
         render();
     }
 
-    function scheduleTaskAsUnarranged(taskId) {
+    function toggleRescheduleAddTime(show) {
+        rescheduleShowAddTime = Boolean(show);
+        render();
+    }
+
+    function selectRescheduleSlot(date, slotId, start, end) {
+        rescheduleSelectedSlot = {
+            id: slotId,
+            date: date,
+            start: start || null,
+            end: end || null
+        };
+        rescheduleSelectedWindow = date;
+
+        // Visually update radios and labels without destroying the DOM
+        const labels = document.querySelectorAll('label[data-reschedule-slot-label]');
+        labels.forEach(lbl => {
+            const radio = lbl.querySelector('input[type="radio"]');
+            if (!radio) return;
+            const rSlotId = radio.getAttribute('data-slot-id');
+            const rDate = radio.getAttribute('data-date');
+            const isMatch = (slotId && rSlotId === slotId) || (!slotId && rDate === date);
+            radio.checked = isMatch;
+            if (isMatch) {
+                lbl.className = 'p-3 rounded-xl border border-[#FF6B2C] bg-orange-50/40 ring-1 ring-[#FF6B2C]/30 transition flex items-center space-x-3 cursor-pointer';
+            } else {
+                lbl.className = 'p-3 rounded-xl border border-gray-200 hover:border-[#FF6B2C] bg-white hover:bg-orange-50/20 transition flex items-center space-x-3 cursor-pointer';
+            }
+        });
+    }
+
+    async function saveRescheduleAvailability() {
+        const dateInput = document.getElementById('pw-resched-avail-date');
+        const startInput = document.getElementById('pw-resched-avail-start');
+        const endInput = document.getElementById('pw-resched-avail-end');
+        const errorContainer = document.getElementById('pw-resched-avail-error');
+
+        const showError = (msg) => {
+            if (errorContainer) {
+                errorContainer.textContent = msg;
+                errorContainer.classList.remove('hidden');
+            } else {
+                alert(msg);
+            }
+        };
+
+        const date = dateInput ? dateInput.value.trim() : '';
+        const start = startInput ? startInput.value.trim() : '';
+        const end = endInput ? endInput.value.trim() : '';
+        const isVi = isViLocale();
+
+        // 1. Required fields
+        if (!date || !start || !end) {
+            showError(isVi ? 'Vui lòng nhập đầy đủ ngày, thời gian bắt đầu và thời gian kết thúc.' : 'Please enter date, start time, and end time.');
+            return;
+        }
+
+        // 2. End time must be later than start time
+        if (end <= start) {
+            showError(isVi ? 'Thời gian kết thúc phải sau thời gian bắt đầu.' : 'End time must be later than start time.');
+            return;
+        }
+
+        // 3. Do not allow past time slots
+        const todayStr = getLocalTodayISO();
+        const currentTimeStr = getLocalCurrentTimeStr();
+
+        if (date < todayStr) {
+            showError(isVi ? 'Không thể thêm thời gian làm việc cho ngày đã qua.' : 'Cannot add availability for a past date.');
+            return;
+        }
+        if (date === todayStr && end <= currentTimeStr) {
+            showError(isVi ? 'Không thể thêm thời gian làm việc trong quá khứ.' : 'Cannot add availability for past time.');
+            return;
+        }
+
+        const plan = getActivePlan();
+        if (!plan) return;
+
+        // 4. Prevent duplicate or overlapping availability slots
+        if (!plan.availabilityDays) plan.availabilityDays = [];
+        let day = plan.availabilityDays.find(d => d.date === date);
+
+        if (day && Array.isArray(day.blocks)) {
+            const exactMatch = day.blocks.find(b => b.start === start && b.end === end);
+            if (exactMatch) {
+                // Exact slot already exists -> select it directly
+                rescheduleSelectedSlot = {
+                    id: exactMatch.id,
+                    date: date,
+                    start: start,
+                    end: end
+                };
+                rescheduleSelectedWindow = date;
+                rescheduleShowAddTime = false;
+                render();
+                return;
+            }
+
+            const overlapping = day.blocks.filter(b => start < b.end && end > b.start);
+            if (overlapping.length > 0) {
+                // Merge new slot with overlapping blocks seamlessly
+                let mergedStart = start;
+                let mergedEnd = end;
+                overlapping.forEach(b => {
+                    if (b.start < mergedStart) mergedStart = b.start;
+                    if (b.end > mergedEnd) mergedEnd = b.end;
+                });
+                day.blocks = day.blocks.filter(b => !(start < b.end && end > b.start));
+                const mergedId = overlapping[0].id || ('b_' + Date.now());
+                day.blocks.push({
+                    id: mergedId,
+                    start: mergedStart,
+                    end: mergedEnd
+                });
+                day.blocks.sort((a, b) => a.start.localeCompare(b.start));
+
+                await persistPlan(plan);
+
+                rescheduleSelectedSlot = {
+                    id: mergedId,
+                    date: date,
+                    start: mergedStart,
+                    end: mergedEnd
+                };
+                rescheduleSelectedWindow = date;
+                rescheduleShowAddTime = false;
+                render();
+                return;
+            }
+        }
+
+        // 5. Check conflicts with existing scheduled tasks (excluding the task currently being rescheduled)
+        if (Array.isArray(plan.plannedTasks)) {
+            for (const pt of plan.plannedTasks) {
+                const t = pt.task;
+                if (!t || t.completed === true || t.isCompleted === true || t.status === 'completed') continue;
+                if (t.id === rescheduleTaskId) continue;
+                if (pt.dayDate === date) {
+                    const ptStart = pt.startTime || pt.scheduledStartTime;
+                    const ptEnd = pt.endTime || pt.scheduledEndTime;
+                    if (ptStart && ptEnd) {
+                        if (start < ptEnd && end > ptStart) {
+                            showError(isVi
+                                ? `Khung giờ này trùng với task đã lên lịch: "${t.name}" (${formatTime12H(ptStart)} – ${formatTime12H(ptEnd)}).`
+                                : `This time slot conflicts with an already scheduled task: "${t.name}" (${formatTime12H(ptStart)} – ${formatTime12H(ptEnd)}).`);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. Validation passed -> create or update day in existing Availability
+        if (!day) {
+            day = {
+                date: date,
+                label: formatScheduledDateLabel(date, isVi) || date,
+                isUnavailable: false,
+                blocks: []
+            };
+            plan.availabilityDays.push(day);
+            plan.availabilityDays.sort((a, b) => a.date.localeCompare(b.date));
+        }
+
+        if (!Array.isArray(day.blocks)) day.blocks = [];
+        const newBlockId = 'b_' + Date.now();
+        day.blocks.push({
+            id: newBlockId,
+            start: start,
+            end: end
+        });
+        day.blocks.sort((a, b) => a.start.localeCompare(b.start));
+
+        // Sync with TempoEmergencyFlow so it has updated availability
+        if (window.TempoEmergencyFlow) {
+            if (typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+                window.TempoEmergencyFlow.setConfirmedPlan(plan);
+            }
+            if (typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+                window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+            }
+        }
+
+        // Save Availability
+        await persistPlan(plan);
+
+        // Make the newly added slot selectable in the current Reschedule Modal
+        rescheduleSelectedSlot = {
+            id: newBlockId,
+            date: date,
+            start: start,
+            end: end
+        };
+        rescheduleSelectedWindow = date;
+        rescheduleShowAddTime = false;
+        render();
+    }
+
+    async function scheduleTaskAsUnarranged(taskId) {
         const plan = getActivePlan();
         if (!plan) return;
 
@@ -1395,8 +2352,13 @@ window.TempoPlanWorkspace = (function() {
             const [item] = plan.plannedTasks.splice(ptIdx, 1);
             const task = item.task;
             task.scheduledDate = null;
+            task.dayDate = null;
+            task._dayDate = null;
             task.startTime = null;
             task.endTime = null;
+            task._endTime = null;
+            task.scheduledStartTime = null;
+            task.scheduledEndTime = null;
             task.executionBadge = null;
 
             if (!plan.unarrangedTasks) plan.unarrangedTasks = [];
@@ -1404,68 +2366,298 @@ window.TempoPlanWorkspace = (function() {
                 plan.unarrangedTasks.push(task);
             }
 
-            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
-                window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+            if (window.TempoEmergencyFlow) {
+                if (typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+                    window.TempoEmergencyFlow.setConfirmedPlan(plan);
+                }
+                if (typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+                    window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+                }
             }
 
-            persistPlan(plan);
+            clearMissedScheduleDismissal(taskId);
+            await persistPlan(plan);
         }
 
         activeModal = null;
         rescheduleTaskId = null;
+        rescheduleSelectedSlot = null;
+        rescheduleSelectedWindow = null;
         render();
     }
 
-    function executeReschedule(taskId, targetDayDate) {
-        const plan = getActivePlan();
-        if (!plan) return;
+    async function executeReschedule(taskId, targetSlotOrDay) {
+        const errorContainer = document.getElementById('pw-reschedule-error');
+        const scheduleBtn = document.getElementById('btn-execute-reschedule');
+        const isVi = isViLocale();
 
-        // Is it currently planned or unarranged?
+        const showModalError = (msg) => {
+            if (errorContainer) {
+                errorContainer.textContent = msg;
+                errorContainer.classList.remove('hidden');
+            } else {
+                alert(msg);
+            }
+        };
+
+        const hideModalError = () => {
+            if (errorContainer) {
+                errorContainer.textContent = '';
+                errorContainer.classList.add('hidden');
+            }
+        };
+
+        hideModalError();
+
+        const plan = getActivePlan();
+        if (!plan) {
+            showModalError(isVi ? 'Không tìm thấy kế hoạch làm việc.' : 'Working plan not found.');
+            return;
+        }
+
+        // Resolve selected slot
+        let selectedSlot = null;
+        if (targetSlotOrDay && typeof targetSlotOrDay === 'object') {
+            selectedSlot = targetSlotOrDay;
+        } else if (rescheduleSelectedSlot && rescheduleSelectedSlot.date) {
+            selectedSlot = rescheduleSelectedSlot;
+        } else {
+            // Check DOM checked radio
+            const checkedRadio = document.querySelector('input[name="pw_reschedule_slot"]:checked') ||
+                                 document.querySelector('input[name="pw_reschedule_day"]:checked');
+            if (checkedRadio) {
+                const rDate = checkedRadio.getAttribute('data-date') || checkedRadio.value;
+                const rStart = checkedRadio.getAttribute('data-start') || '';
+                const rEnd = checkedRadio.getAttribute('data-end') || '';
+                const rSlotId = checkedRadio.getAttribute('data-slot-id') || checkedRadio.value;
+                selectedSlot = {
+                    id: rSlotId,
+                    date: rDate,
+                    start: rStart || null,
+                    end: rEnd || null
+                };
+            } else if (typeof targetSlotOrDay === 'string' && targetSlotOrDay) {
+                selectedSlot = {
+                    id: `day_${targetSlotOrDay}`,
+                    date: targetSlotOrDay,
+                    start: null,
+                    end: null
+                };
+            }
+        }
+
+        if (!selectedSlot || !selectedSlot.date) {
+            showModalError(isVi ? 'Vui lòng chọn một khung thời gian làm việc.' : 'Please select an available time slot.');
+            return;
+        }
+
+        // If slot start/end was not provided, try to find from plan.availabilityDays
+        if ((!selectedSlot.start || !selectedSlot.end) && plan.availabilityDays) {
+            const dayObj = plan.availabilityDays.find(d => d.date === selectedSlot.date);
+            if (dayObj && Array.isArray(dayObj.blocks) && dayObj.blocks.length > 0) {
+                const blk = selectedSlot.id ? dayObj.blocks.find(b => b.id === selectedSlot.id) : dayObj.blocks[0];
+                const chosen = blk || dayObj.blocks[0];
+                if (chosen) {
+                    selectedSlot.start = chosen.start;
+                    selectedSlot.end = chosen.end;
+                    selectedSlot.id = chosen.id;
+                }
+            }
+        }
+
+        // Locate task
         let task = null;
-        const ptIdx = plan.plannedTasks.findIndex(pt => pt.task && pt.task.id === taskId);
+        const ptIdx = Array.isArray(plan.plannedTasks) ? plan.plannedTasks.findIndex(pt => pt.task && pt.task.id === taskId) : -1;
         if (ptIdx !== -1) {
-            const [item] = plan.plannedTasks.splice(ptIdx, 1);
-            task = item.task;
-        } else if (plan.unarrangedTasks) {
+            task = plan.plannedTasks[ptIdx].task;
+        } else if (Array.isArray(plan.unarrangedTasks)) {
             const unIdx = plan.unarrangedTasks.findIndex(t => (t && t.task ? t.task.id : t.id) === taskId);
             if (unIdx !== -1) {
-                const [item] = plan.unarrangedTasks.splice(unIdx, 1);
-                task = item && item.task ? item.task : item;
+                const u = plan.unarrangedTasks[unIdx];
+                task = u && u.task ? u.task : u;
             }
+        } else if (Array.isArray(plan.tasks)) {
+            task = plan.tasks.find(t => t.id === taskId);
         }
 
-        if (task && targetDayDate) {
-            // Find target day label
-            let dayLabel = targetDayDate;
-            const todayStr = getTodayISO();
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        if (!task) {
+            showModalError(isVi ? 'Không tìm thấy task cần xếp lại lịch.' : 'Task to reschedule was not found.');
+            return;
+        }
 
-            if (targetDayDate === todayStr) dayLabel = 'TODAY';
-            else if (targetDayDate === tomorrowStr) dayLabel = 'TOMORROW';
+        // Show loading state on button
+        if (scheduleBtn) {
+            scheduleBtn.disabled = true;
+            scheduleBtn.classList.add('opacity-75', 'cursor-not-allowed');
+            scheduleBtn.setAttribute('data-original-text', scheduleBtn.innerHTML);
+            scheduleBtn.innerHTML = `
+                <span class="inline-flex items-center space-x-1.5">
+                    <svg class="animate-spin h-3.5 w-3.5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>${isVi ? 'Đang lên lịch...' : 'Scheduling...'}</span>
+                </span>
+            `;
+        }
 
-            plan.plannedTasks.push({
+        try {
+            // Remove task from old plannedTasks or unarrangedTasks
+            if (ptIdx !== -1) {
+                plan.plannedTasks.splice(ptIdx, 1);
+            }
+            if (Array.isArray(plan.unarrangedTasks)) {
+                plan.unarrangedTasks = plan.unarrangedTasks.filter(t => (t && t.task ? t.task.id : t.id) !== taskId);
+            }
+
+            // Calculate task start and end times within the chosen slot
+            const targetDate = selectedSlot.date;
+            const todayStr = getLocalTodayISO();
+            const currentTimeStr = getLocalCurrentTimeStr();
+            const durationMin = typeof task.durationMinutes === 'number' && task.durationMinutes > 0 ? task.durationMinutes : 60;
+
+            let taskStart = selectedSlot.start || null;
+            let taskEnd = selectedSlot.end || null;
+            let startMin = null;
+            let endMin = null;
+
+            if (taskStart && taskEnd) {
+                let slotStartMin = parseTimeToMinutes(taskStart);
+                let slotEndMin = parseTimeToMinutes(taskEnd);
+
+                // If scheduled for Today and currentTime has passed slot start (but not slot end), adjust start
+                if (targetDate === todayStr) {
+                    const currentMin = parseTimeToMinutes(currentTimeStr);
+                    if (currentMin > slotStartMin && currentMin < slotEndMin) {
+                        slotStartMin = currentMin;
+                    }
+                }
+
+                startMin = slotStartMin;
+                endMin = Math.min(slotStartMin + durationMin, slotEndMin);
+                if (endMin <= startMin) endMin = slotEndMin;
+
+                taskStart = formatMinutesToTimeString(startMin);
+                taskEnd = formatMinutesToTimeString(endMin);
+            }
+
+            // 1. Update the task object itself
+            task.scheduledDate = targetDate;
+            task.dayDate = targetDate;
+            task._dayDate = targetDate;
+            task.scheduledStartTime = taskStart;
+            task.scheduledEndTime = taskEnd;
+            task.startTime = taskStart;
+            task.endTime = taskEnd;
+            task._endTime = taskEnd;
+            task.completed = false;
+            task.isCompleted = false;
+
+            // Preserve all deadline / due date fields strictly!
+            // task.hasDeadline, task.deadlineDate, task.deadlineTime, task.deadline are NOT modified!
+
+            // 2. Add to plan.plannedTasks
+            const dayLabel = formatScheduledDateLabel(targetDate, isVi) || targetDate;
+            const newPlannedItem = {
                 task: task,
-                dayDate: targetDayDate,
+                dayDate: targetDate,
+                date: targetDate,
                 dayLabel: dayLabel,
-                startTime: null,
-                endTime: null,
-                isOverCapacity: false,
+                startTime: taskStart,
+                endTime: taskEnd,
+                scheduledStartTime: taskStart,
+                scheduledEndTime: taskEnd,
+                startMin: startMin,
+                endMin: endMin,
+                startMinutes: startMin,
+                endMinutes: endMin,
                 executionBadge: 'LATER',
-                hasDeadlineConflict: false
-            });
+                isOverCapacity: false,
+                hasDeadlineConflict: checkDeadlineConflict(task, targetDate, endMin || 1440)
+            };
+            plan.plannedTasks.push(newPlannedItem);
 
-            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
-                window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+            // Also ensure raw tasks array in plan has updated task
+            if (Array.isArray(plan.tasks)) {
+                const tIdx = plan.tasks.findIndex(t => t.id === taskId);
+                if (tIdx !== -1) {
+                    plan.tasks[tIdx] = task;
+                } else {
+                    plan.tasks.push(task);
+                }
             }
 
-            persistPlan(plan);
-        }
+            // 3. Sync with TempoEmergencyFlow
+            if (window.TempoEmergencyFlow) {
+                if (typeof window.TempoEmergencyFlow.setConfirmedPlan === 'function') {
+                    window.TempoEmergencyFlow.setConfirmedPlan(plan);
+                }
+                if (typeof window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder === 'function') {
+                    window.TempoEmergencyFlow.recalculateTimelineSlotsPreservingOrder();
+                }
+            }
 
-        activeModal = null;
-        rescheduleTaskId = null;
+            // Guarantee explicit scheduled times are preserved
+            if (taskStart && taskEnd) {
+                newPlannedItem.startTime = taskStart;
+                newPlannedItem.endTime = taskEnd;
+                newPlannedItem.scheduledStartTime = taskStart;
+                newPlannedItem.scheduledEndTime = taskEnd;
+                if (task) {
+                    task.startTime = taskStart;
+                    task.endTime = taskEnd;
+                    task.scheduledStartTime = taskStart;
+                    task.scheduledEndTime = taskEnd;
+                }
+            }
+
+            // 4. Clear missed schedule prompt dismissal for this task
+            clearMissedScheduleDismissal(taskId);
+
+            // 5. Persist to storage & remote database (throws if failed)
+            await persistPlan(plan);
+
+            // 6. Success -> close modal and refresh UI
+            activeModal = null;
+            rescheduleTaskId = null;
+            rescheduleSelectedSlot = null;
+            rescheduleSelectedWindow = null;
+            rescheduleShowAddTime = false;
+            selectedTaskId = taskId; // Select rescheduled task in Working Plan view
+
+            render();
+
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
+        } catch (err) {
+            console.error("[TempoPlanWorkspace] Reschedule failed:", err);
+            // Failed: keep modal open, preserve selection, display clear error message
+            if (scheduleBtn) {
+                scheduleBtn.disabled = false;
+                scheduleBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                const orig = scheduleBtn.getAttribute('data-original-text');
+                scheduleBtn.innerHTML = orig || (window.t ? window.t('workspace.schedule', {}, 'Schedule') : 'Schedule');
+            }
+            showModalError(isVi
+                ? `Không thể xếp lại lịch cho task. ${err.message || 'Vui lòng thử lại.'}`
+                : `Could not reschedule task. ${err.message || 'Please try again.'}`);
+        }
+    }
+
+    function keepCurrentSchedule(taskId) {
+        if (!taskId) return;
+        const plan = getActivePlan();
+        let targetPt = null;
+        if (plan && Array.isArray(plan.plannedTasks)) {
+            targetPt = plan.plannedTasks.find(pt => pt.task && (pt.task.id === taskId || pt.id === taskId));
+        }
+        const sDate = targetPt?.dayDate || getLocalTodayISO();
+        dismissMissedSchedulePrompt(taskId, sDate);
         render();
+        if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+            window.TempoMode.renderActiveModeHome();
+        }
     }
 
     /**
@@ -1550,7 +2742,7 @@ window.TempoPlanWorkspace = (function() {
             plan.plannedTasks.push({
                 task: pendingAddedTask,
                 dayDate: targetDay,
-                dayLabel: targetDay === todayStr ? 'TODAY' : targetDay,
+                dayLabel: formatScheduledDateLabel(targetDay, isViLocale()) || (targetDay === todayStr ? 'TODAY' : targetDay),
                 startTime: null,
                 endTime: null,
                 isOverCapacity: false,
@@ -1583,6 +2775,14 @@ window.TempoPlanWorkspace = (function() {
      * Adjust Availability Modal
      */
     function openAdjustAvailabilityModal() {
+        const plan = getActivePlan();
+        if (plan) {
+            const c1 = cleanupExpiredAvailability(plan);
+            const c2 = applyRecurringRulesToPlan(plan);
+            if (c1 || c2) {
+                persistPlan(plan);
+            }
+        }
         activeModal = 'adjust-availability';
         adjustAvailShowAdd = false;
         render();
@@ -1666,8 +2866,27 @@ window.TempoPlanWorkspace = (function() {
         const mainEl = document.querySelector('main');
         if (mainEl) mainEl.style.backgroundColor = '#EFFAFF';
 
-        const plan = getActivePlan();
-        if (!plan) return;
+        let plan = getActivePlan();
+        if (!plan) {
+            const currentUserId = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                ? window.TempoAuth.getCurrentUserId() 
+                : 'guest';
+            plan = {
+                id: `plan_${currentUserId}_working`,
+                title: 'Tempo Working Plan',
+                availabilityDays: [],
+                plannedTasks: [],
+                unarrangedTasks: [],
+                tasks: []
+            };
+        }
+
+        // Automatically clean up expired availability slots on load/render
+        const availExpiredChanged = cleanupExpiredAvailability(plan);
+        const availRecurringChanged = applyRecurringRulesToPlan(plan);
+        if (availExpiredChanged || availRecurringChanged) {
+            persistPlan(plan);
+        }
 
         const plannedTasks = plan.plannedTasks || [];
         const unarrangedTasks = (plan.unarrangedTasks || []).map(u => (u && u.task ? u.task : u));
@@ -1720,21 +2939,15 @@ window.TempoPlanWorkspace = (function() {
         let selectedPlanItem = plannedTasks.find(pt => pt.task && pt.task.id === selectedTaskId);
 
         // Group active planned tasks by dayDate
-        const todayStr = getTodayISO();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const todayStr = getLocalTodayISO();
+        const tomorrowStr = getLocalTomorrowISO();
 
         const daysMap = {};
         activePlanned.forEach((item, globalIdx) => {
             item.globalIndex = globalIdx;
-            const dDate = item.dayDate || 'unscheduled';
-            let dLabel = item.dayLabel;
-            if (!dLabel) {
-                if (dDate === todayStr) dLabel = 'Today, Month day';
-                else if (dDate === tomorrowStr) dLabel = 'Tomorrow, Month day';
-                else dLabel = formatMonthDay(dDate);
-            }
+            const dDate = item.dayDate || (item.task && item.task.scheduledDate) || 'unscheduled';
+            const isVi = isViLocale();
+            let dLabel = dDate !== 'unscheduled' ? formatScheduledDateLabel(dDate, isVi) : (item.dayLabel || (isVi ? 'Lịch linh hoạt' : 'Flexible'));
 
             if (!daysMap[dDate]) {
                 daysMap[dDate] = { label: dLabel, date: dDate, items: [] };
@@ -1748,23 +2961,99 @@ window.TempoPlanWorkspace = (function() {
             selectedTask.priorityCategory === 'DO_FIRST' ||
             (selectedPlanItem && (selectedPlanItem.executionBadge === 'Now' || selectedPlanItem.planPositionBadge === 'DO THIS' || selectedPlanItem.globalIndex === 0))
         );
-        const selectedBadgeLabel = selectedTask ? (selectedTask.completed ? 'Done' : (isSelectedNow ? 'Now' : 'Later')) : '';
+        const isSelectedDone = selectedTask && (selectedTask.completed === true || selectedTask.isCompleted === true || selectedTask.status === 'completed');
+        const selectedBadgeLabel = selectedTask ? (isSelectedDone ? (isViLocale() ? 'Hoàn thành' : 'Done') : (isSelectedNow ? (isViLocale() ? 'Làm ngay' : 'Do now') : (isViLocale() ? 'Để sau' : 'Later'))) : '';
 
         // Schedule string for detail header
-        let detailScheduleStr = 'Today, Month day 3:00 PM to 5:30 PM';
-        if (selectedPlanItem && (selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime) && (selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime)) {
-            const sStart = formatTime12H(selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime);
-            const sEnd = formatTime12H(selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime);
-            const dLabel = selectedPlanItem.dayLabel || (selectedPlanItem.dayDate === todayStr ? 'Today, Month day' : formatMonthDay(selectedPlanItem.dayDate));
-            detailScheduleStr = `${dLabel} ${sStart} to ${sEnd}`;
+        let detailScheduleStr = isViLocale() ? `Lịch linh hoạt · ~${selectedTask?.durationLabel || '1h'}` : `Flexible schedule · ~${selectedTask?.durationLabel || '1h'}`;
+        if (selectedPlanItem) {
+            const itemDayDate = selectedPlanItem.dayDate;
+            const sDateLabel = itemDayDate ? formatScheduledDateLabel(itemDayDate, isViLocale()) : '';
+            if ((selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime) && (selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime)) {
+                const sStart = formatTime12H(selectedPlanItem.startTime || selectedPlanItem.scheduledStartTime);
+                const sEnd = formatTime12H(selectedPlanItem.endTime || selectedPlanItem.scheduledEndTime);
+                detailScheduleStr = `${sDateLabel || formatScheduledDateLabel(todayStr, isViLocale())} ${sStart} to ${sEnd}`;
+            } else if (sDateLabel) {
+                detailScheduleStr = `${sDateLabel}, ${isViLocale() ? 'Đã lên lịch' : 'Scheduled'}`;
+            }
         } else if (selectedTask) {
-            detailScheduleStr = `Flexible schedule · ~${selectedTask.durationLabel || '1h'}`;
+            detailScheduleStr = isViLocale() ? `Lịch linh hoạt · ~${selectedTask.durationLabel || '1h'}` : `Flexible schedule · ~${selectedTask.durationLabel || '1h'}`;
         }
 
         const selectedSubtaskCount = selectedTask && Array.isArray(selectedTask.subtasks) ? selectedTask.subtasks.length : 0;
         const selectedCompletedSubtasks = selectedTask && Array.isArray(selectedTask.subtasks) ? selectedTask.subtasks.filter(s => s.completed).length : 0;
         const savedNoteObj = selectedTask && window.TempoToolNotes ? window.TempoToolNotes.getNoteForTask(selectedTask.id) : null;
         const selectedNoteText = savedNoteObj ? savedNoteObj.text : (selectedTask && selectedTask.note && selectedTask.note !== 'Create a sheet to manage references' ? selectedTask.note : '');
+
+        // Contextual Prompt for Missed Scheduled Tasks
+        const missedItems = activePlanned.filter(pt => {
+            const t = pt.task;
+            if (!t || t.completed === true || t.isCompleted === true || t.status === 'completed') return false;
+            if (isTaskOverdue(t, plan)) return false;
+            if (!isTaskMissedSchedule(pt, plan)) return false;
+            return !isMissedSchedulePromptDismissed(t.id, pt.dayDate);
+        });
+
+        let missedScheduleBannerHTML = '';
+        if (missedItems.length > 0) {
+            const currentMissed = missedItems[0];
+            const missedTask = currentMissed.task;
+            const taskName = missedTask.name || 'Scheduled Task';
+            const isVi = isViLocale();
+            const schedDateFormatted = window.TempoI18n && typeof window.TempoI18n.formatCalendarDate === 'function'
+                ? window.TempoI18n.formatCalendarDate(currentMissed.dayDate, isVi ? 'vi' : 'en')
+                : formatScheduledDateLabel(currentMissed.dayDate, isVi);
+            let deadlineClause = '';
+            if (missedTask.hasDeadline && missedTask.deadlineDate) {
+                const dueDateFormatted = window.TempoI18n && typeof window.TempoI18n.formatCalendarDate === 'function'
+                    ? window.TempoI18n.formatCalendarDate(missedTask.deadlineDate, isVi ? 'vi' : 'en')
+                    : missedTask.deadlineDate;
+                deadlineClause = isVi ? ` Deadline vẫn là ngày ${dueDateFormatted}.` : ` Your deadline is still ${dueDateFormatted}.`;
+            }
+            const promptDescription = isVi
+                ? `Task này đã được sắp xếp vào ngày ${schedDateFormatted} nhưng chưa được hoàn thành.${deadlineClause} Bạn có muốn xếp lại lịch không?`
+                : `This task was scheduled for ${schedDateFormatted}, but it hasn't been completed yet.${deadlineClause} Would you like to reschedule it?`;
+
+            missedScheduleBannerHTML = `
+                <!-- Contextual Prompt: Missed Scheduled Task -->
+                <div class="rounded-2xl p-4 sm:p-5 soft-card-shadow transition flex flex-col md:flex-row md:items-center justify-between gap-4 border"
+                     style="background-color: #fbf9f6; border-color: #c9c2bc;"
+                     data-tempo-ui="missed-schedule-prompt">
+                    <div class="space-y-1.5 flex-1 min-w-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="w-2 h-2 rounded-full bg-[#7A6D65] inline-block"></span>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#7A6D65] text-white">
+                                ${isVi ? 'TASK QUÁ LỊCH' : 'MISSED SCHEDULE'}
+                            </span>
+                            <span class="text-xs font-bold text-stone-700 truncate">• ${escapeHTML(taskName)}</span>
+                        </div>
+                        <h3 class="font-heading text-lg sm:text-xl font-extrabold text-[#484541] tracking-tight leading-snug">
+                            ${isVi ? 'Task này đã bị quá lịch' : 'You missed this scheduled task'}
+                        </h3>
+                        <p class="text-xs sm:text-sm text-[#5D5954] leading-relaxed">
+                            ${escapeHTML(promptDescription)}
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 md:pt-0">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.openRescheduleModal('${missedTask.id}')"
+                                class="px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D99E87] hover:bg-[#C98E77] shadow-2xs transition cursor-pointer">
+                            ${isVi ? 'Xếp lại lịch' : 'Reschedule task'}
+                        </button>
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.keepCurrentSchedule('${missedTask.id}')"
+                                class="px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-white hover:bg-stone-50 text-stone-700 border border-stone-300 shadow-2xs transition cursor-pointer">
+                            ${isVi ? 'Giữ lịch hiện tại' : 'Keep current schedule'}
+                        </button>
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.toggleTaskComplete('${missedTask.id}')"
+                                class="px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs transition cursor-pointer">
+                            ${isVi ? 'Đánh dấu hoàn thành' : 'Mark as done'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
 
         root.innerHTML = `
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-5 space-y-6" data-tempo-ui="tempo-working-plan">
@@ -1774,9 +3063,9 @@ window.TempoPlanWorkspace = (function() {
                             type="button"
                             onclick="window.TempoPlanWorkspace.navigateHome()" 
                             class="text-xs sm:text-sm font-semibold text-[#6F6B68] hover:text-[#202124] flex items-center space-x-1.5 transition py-1 cursor-pointer group"
-                            title="Return to Home">
+                            title="${isViLocale() ? '← Về trang chủ' : 'Return Home'}">
                         <span class="group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Return Home</span>
+                        <span>${isViLocale() ? 'Về trang chủ' : 'Return Home'}</span>
                     </button>
                 </div>
 
@@ -1795,8 +3084,8 @@ window.TempoPlanWorkspace = (function() {
                             <div class="bg-[#D99E87] h-full rounded-full transition-all duration-300"
                                  style="width: ${progressPercent}%; min-width: ${progressPercent > 0 ? '12px' : '8px'};"></div>
                         </div>
-                        <span class="text-xs sm:text-sm font-medium text-[#6F6B68] shrink-0">
-                            ${completedTasksCount}/${totalTasksCount} Tasks
+                        <span class="text-xs sm:text-sm font-medium text-[#6F6B68] shrink-0" data-tempo-ui="tasks-progress-counter">
+                            ${completedTasksCount}/${totalTasksCount} ${isViLocale() ? 'task' : 'Tasks'}
                         </span>
                     </div>
 
@@ -1805,25 +3094,27 @@ window.TempoPlanWorkspace = (function() {
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.openAddTaskModal()"
                                 class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#92A491] hover:bg-[#829381] shadow-2xs transition cursor-pointer">
-                            Add task
+                            ${isViLocale() ? 'Thêm task' : 'Add task'}
                         </button>
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.openAdjustAvailabilityModal()"
                                 class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#8AA8B7] hover:bg-[#7A98A7] shadow-2xs transition cursor-pointer">
-                            Add availability
+                            ${isViLocale() ? 'Thêm thời gian làm việc' : 'Add availability'}
                         </button>
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.startAdjustPlan()"
                                 class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D99E87] hover:bg-[#C98E77] shadow-2xs transition cursor-pointer">
-                            Adjust Plan
+                            ${isViLocale() ? 'Điều chỉnh plan' : 'Adjust Plan'}
                         </button>
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.promptDeletePlan()"
                                 class="px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#C53B27] hover:bg-[#B03422] shadow-2xs transition cursor-pointer">
-                            Delete my plan
+                            ${isViLocale() ? 'Xóa plan' : 'Delete my plan'}
                         </button>
                     </div>
                 </div>
+
+                ${missedScheduleBannerHTML}
 
                 <!-- Main Two-Column Layout -->
                 <div class="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
@@ -1831,7 +3122,30 @@ window.TempoPlanWorkspace = (function() {
                     <div class="w-full lg:w-[48%] flex flex-col">
                         <div id="plan-workspace-task-list"
                              class="max-h-[calc(100vh-230px)] min-h-[460px] overflow-y-auto overflow-x-hidden pr-2 sm:pr-3 space-y-6 plan-custom-scroll">
-                            ${Object.keys(daysMap).map((dDate, gIdx) => {
+                            ${totalTasksCount === 0 ? `
+                                <div class="p-8 sm:p-10 text-center border border-dashed border-[#D8C7B5] rounded-3xl bg-white/60 space-y-3.5 my-4">
+                                    <div class="text-3xl">📋</div>
+                                    <h4 class="font-heading font-extrabold text-base sm:text-lg text-[#202124]">${isViLocale() ? 'Chưa có task nào trong kế hoạch' : 'No tasks in your working plan yet'}</h4>
+                                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-sm mx-auto">${isViLocale() ? 'Hãy bấm "+ Thêm task" ở trên hoặc chọn nạp task mẫu để bắt đầu.' : 'Click "+ Add Task" above or choose to load sample tasks to get started.'}</p>
+                                    <div class="pt-2 flex items-center justify-center gap-2.5">
+                                        <button type="button"
+                                                onclick="window.TempoPlanWorkspace.openAddTaskModal()"
+                                                class="px-4 py-2 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D99E87] hover:bg-[#C98E77] transition cursor-pointer">
+                                            ${isViLocale() ? '+ Thêm task' : '+ Add Task'}
+                                        </button>
+                                        <button type="button"
+                                                onclick="window.TempoPlanWorkspace.loadSampleTasks()"
+                                                class="px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm text-[#6F6B68] hover:text-[#202124] bg-stone-100 hover:bg-stone-200 transition cursor-pointer">
+                                            ${isViLocale() ? '+ Nạp task mẫu' : '+ Load sample tasks'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${Object.keys(daysMap).sort((a, b) => {
+                                if (a === 'unscheduled') return 1;
+                                if (b === 'unscheduled') return -1;
+                                return a.localeCompare(b);
+                            }).map((dDate, gIdx) => {
                                 const group = daysMap[dDate];
                                 return `
                                     <div class="space-y-3.5">
@@ -1847,7 +3161,7 @@ window.TempoPlanWorkspace = (function() {
                                                 const isSelected = selectedTaskId === task.id;
                                                 const isNow = item.executionBadge === 'Now' || item.planPositionBadge === 'DO THIS' || item.globalIndex === 0;
                                                 const badgeClass = isNow ? 'bg-[#D99E87] text-white' : 'bg-[#E8ECF1] text-[#7B96A6]';
-                                                const badgeText = isNow ? 'Now' : 'Later';
+                                                const badgeText = isNow ? (isViLocale() ? 'Làm ngay' : 'Do now') : (isViLocale() ? 'Để sau' : 'Later');
 
                                                 const startTime = item.startTime || item.scheduledStartTime;
                                                 const endTime = item.endTime || item.scheduledEndTime;
@@ -1899,13 +3213,13 @@ window.TempoPlanWorkspace = (function() {
                                                                             <button type="button"
                                                                                     onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Now');"
                                                                                     class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${isNow ? 'font-bold text-[#D99E87]' : ''}">
-                                                                                <span>Now</span>
+                                                                                <span>${isViLocale() ? 'Làm ngay' : 'Do now'}</span>
                                                                                 ${isNow ? '<span>✓</span>' : ''}
                                                                             </button>
                                                                             <button type="button"
                                                                                     onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Later');"
                                                                                     class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${!isNow ? 'font-bold text-[#7B96A6]' : ''}">
-                                                                                <span>Later</span>
+                                                                                <span>${isViLocale() ? 'Để sau' : 'Later'}</span>
                                                                                 ${!isNow ? '<span>✓</span>' : ''}
                                                                             </button>
                                                                         </div>
@@ -1915,8 +3229,12 @@ window.TempoPlanWorkspace = (function() {
 
                                                             <!-- Due date and subtasks -->
                                                             <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
-                                                                <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
-                                                                <div>${compSubCount}/${subCount} subtasks</div>
+                                                                <div class="flex items-center space-x-1.5 flex-wrap">
+                                                                    <span>Deadline: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
+                                                                    ${isTaskOverdue(task) ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${(window.t ? window.t('modes.urgent.overdueBadge') : null) || (isViLocale() ? 'TRỄ DEADLINE' : 'OVERDUE')}</span>` : ''}
+                                                                    ${!isTaskOverdue(task) && isTaskMissedSchedule(item || task, plan) ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-300">${isViLocale() ? 'TASK QUÁ LỊCH' : 'MISSED SCHEDULE'}</span>` : ''}
+                                                                </div>
+                                                                ${subCount > 0 ? `<div>${compSubCount}/${subCount} ${isViLocale() ? 'subtask' : 'Subtasks'}</div>` : ''}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1935,7 +3253,7 @@ window.TempoPlanWorkspace = (function() {
                             ${activeUnarranged.length > 0 ? `
                                 <div class="space-y-3.5 pt-2">
                                     <h3 class="font-heading font-extrabold text-base sm:text-lg text-[#D9A18B]">
-                                        Flexible / Unscheduled
+                                        ${isViLocale() ? 'Linh hoạt / Chưa lên lịch' : 'Flexible / Unscheduled'}
                                     </h3>
                                     <div class="space-y-3">
                                         ${activeUnarranged.map(task => {
@@ -1967,8 +3285,8 @@ window.TempoPlanWorkspace = (function() {
                                                                 <button type="button"
                                                                         onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${task.id}', event);"
                                                                         class="px-3 py-0.5 rounded-full text-xs font-bold bg-[#E8ECF1] text-[#7B96A6] shrink-0 cursor-pointer hover:opacity-90 transition flex items-center space-x-1"
-                                                                        title="Change priority: Now or Later">
-                                                                    <span>Later</span>
+                                                                        title="${isViLocale() ? 'Thay đổi mức độ ưu tiên: Làm ngay hoặc Để sau' : 'Change priority: Now or Later'}">
+                                                                    <span>${isViLocale() ? 'Để sau' : 'Later'}</span>
                                                                     <span class="text-[9px] opacity-75">▾</span>
                                                                 </button>
                                                                 ${activeLabelMenuTaskId === task.id ? `
@@ -1977,12 +3295,12 @@ window.TempoPlanWorkspace = (function() {
                                                                         <button type="button"
                                                                                 onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Now');"
                                                                                 class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124]">
-                                                                            <span>Now</span>
+                                                                            <span>${isViLocale() ? 'Làm ngay' : 'Do now'}</span>
                                                                         </button>
                                                                         <button type="button"
                                                                                 onclick="window.TempoPlanWorkspace.setTaskLabel('${task.id}', 'Later');"
                                                                                 class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] font-bold text-[#7B96A6]">
-                                                                            <span>Later</span>
+                                                                            <span>${isViLocale() ? 'Để sau' : 'Later'}</span>
                                                                             <span>✓</span>
                                                                         </button>
                                                                     </div>
@@ -1990,8 +3308,12 @@ window.TempoPlanWorkspace = (function() {
                                                             </div>
                                                         </div>
                                                         <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
-                                                            <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
-                                                            <div>${compSubCount}/${subCount} subtasks</div>
+                                                            <div class="flex items-center space-x-1.5 flex-wrap">
+                                                                <span>Deadline: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</span>
+                                                                ${isTaskOverdue(task) ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${(window.t ? window.t('modes.urgent.overdueBadge') : null) || (isViLocale() ? 'TRỄ DEADLINE' : 'OVERDUE')}</span>` : ''}
+                                                                ${!isTaskOverdue(task) && isTaskMissedSchedule(task, plan) ? `<span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-300">${isViLocale() ? 'TASK QUÁ LỊCH' : 'MISSED SCHEDULE'}</span>` : ''}
+                                                            </div>
+                                                            ${subCount > 0 ? `<div>${compSubCount}/${subCount} ${isViLocale() ? 'subtask' : 'Subtasks'}</div>` : ''}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2005,7 +3327,7 @@ window.TempoPlanWorkspace = (function() {
                             ${allCompleted.length > 0 ? `
                                 <div class="pt-4 border-t border-[#EEE9E7] space-y-3.5" data-tempo-ui="done-section">
                                     <h3 class="font-heading font-extrabold text-base sm:text-lg text-[#92A491] flex items-center space-x-2">
-                                        <span>Done</span>
+                                        <span>${isViLocale() ? 'Đã hoàn thành' : 'Completed'}</span>
                                         <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#E8EFE8] text-[#556B54]">(${allCompleted.length})</span>
                                     </h3>
                                     <div class="space-y-3">
@@ -2043,12 +3365,12 @@ window.TempoPlanWorkspace = (function() {
                                                                 </h4>
                                                             </div>
                                                             <span class="px-3 py-0.5 rounded-full text-xs font-bold bg-[#E8EFE8] text-[#556B54] shrink-0">
-                                                                Done
+                                                                ${isViLocale() ? 'Hoàn thành' : 'Done'}
                                                             </span>
                                                         </div>
                                                         <div class="pl-7 space-y-0.5 text-xs text-[#6F6B68]">
-                                                            <div>Due: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
-                                                            <div>${compSubCount}/${subCount} subtasks</div>
+                                                            <div>Deadline: ${formatDeadline(task.deadlineDate || task.deadline, task.deadlineTime)}</div>
+                                                            <div>${compSubCount}/${subCount} ${isViLocale() ? 'subtask' : 'Subtasks'}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2080,26 +3402,26 @@ window.TempoPlanWorkspace = (function() {
                                     <!-- Status Badge with Interactive Dropdown -->
                                     <div class="relative inline-block" data-label-menu-container>
                                         <button type="button"
-                                                ${selectedBadgeLabel === 'Done' ? '' : `onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${selectedTask.id}', event);"`}
-                                                class="px-3 py-0.5 rounded-full text-xs font-bold ${selectedBadgeLabel === 'Now' ? 'bg-[#D99E87] text-white' : (selectedBadgeLabel === 'Done' ? 'bg-[#92A491] text-white' : 'bg-[#E8ECF1] text-[#7B96A6]')} shrink-0 ${selectedBadgeLabel !== 'Done' ? 'cursor-pointer hover:opacity-90 transition flex items-center space-x-1' : ''}"
-                                                title="${selectedBadgeLabel === 'Done' ? 'Completed task' : 'Change priority: Now or Later'}">
+                                                ${isSelectedDone ? '' : `onclick="event.stopPropagation(); window.TempoPlanWorkspace.toggleLabelMenu('${selectedTask.id}', event);"`}
+                                                class="px-3 py-0.5 rounded-full text-xs font-bold ${isSelectedNow ? 'bg-[#D99E87] text-white' : (isSelectedDone ? 'bg-[#92A491] text-white' : 'bg-[#E8ECF1] text-[#7B96A6]')} shrink-0 ${!isSelectedDone ? 'cursor-pointer hover:opacity-90 transition flex items-center space-x-1' : ''}"
+                                                title="${isSelectedDone ? (isViLocale() ? 'Công việc đã hoàn thành' : 'Completed task') : (isViLocale() ? 'Thay đổi mức độ ưu tiên: Làm ngay hoặc Để sau' : 'Change priority: Now or Later')}">
                                             <span>${selectedBadgeLabel}</span>
-                                            ${selectedBadgeLabel !== 'Done' ? '<span class="text-[9px] opacity-75">▾</span>' : ''}
+                                            ${!isSelectedDone ? '<span class="text-[9px] opacity-75">▾</span>' : ''}
                                         </button>
-                                        ${activeLabelMenuTaskId === selectedTask.id && selectedBadgeLabel !== 'Done' ? `
+                                        ${activeLabelMenuTaskId === selectedTask.id && !isSelectedDone ? `
                                             <div class="absolute right-0 top-full mt-1 z-30 bg-white border border-[#E3C7A5] rounded-xl shadow-lg py-1 w-28 text-xs font-semibold overflow-hidden"
                                                  onclick="event.stopPropagation();">
                                                 <button type="button"
                                                         onclick="window.TempoPlanWorkspace.setTaskLabel('${selectedTask.id}', 'Now');"
-                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${selectedBadgeLabel === 'Now' ? 'font-bold text-[#D99E87]' : ''}">
-                                                    <span>Now</span>
-                                                    ${selectedBadgeLabel === 'Now' ? '<span>✓</span>' : ''}
+                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${isSelectedNow ? 'font-bold text-[#D99E87]' : ''}">
+                                                    <span>${isViLocale() ? 'Làm ngay' : 'Do now'}</span>
+                                                    ${isSelectedNow ? '<span>✓</span>' : ''}
                                                 </button>
                                                 <button type="button"
                                                         onclick="window.TempoPlanWorkspace.setTaskLabel('${selectedTask.id}', 'Later');"
-                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${selectedBadgeLabel === 'Later' ? 'font-bold text-[#7B96A6]' : ''}">
-                                                    <span>Later</span>
-                                                    ${selectedBadgeLabel === 'Later' ? '<span>✓</span>' : ''}
+                                                        class="w-full text-left px-3 py-1.5 hover:bg-[#FDFBF6] flex items-center justify-between text-[#202124] ${!isSelectedNow ? 'font-bold text-[#7B96A6]' : ''}">
+                                                    <span>${isViLocale() ? 'Để sau' : 'Later'}</span>
+                                                    ${!isSelectedNow ? '<span>✓</span>' : ''}
                                                 </button>
                                             </div>
                                         ` : ''}
@@ -2108,11 +3430,13 @@ window.TempoPlanWorkspace = (function() {
 
                                 <!-- Due Date Row -->
                                 <div class="flex items-center space-x-2 text-xs sm:text-sm text-[#6F6B68]">
-                                    <span>Due: ${formatDeadline(selectedTask.deadlineDate || selectedTask.deadline, selectedTask.deadlineTime)}</span>
+                                    <span>Deadline: ${formatDeadline(selectedTask.deadlineDate || selectedTask.deadline, selectedTask.deadlineTime)}</span>
+                                    ${isTaskOverdue(selectedTask) ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${(window.t ? window.t('modes.urgent.overdueBadge') : null) || (isViLocale() ? 'TRỄ DEADLINE' : 'OVERDUE')}</span>` : ''}
+                                    ${!isTaskOverdue(selectedTask) && isTaskMissedSchedule(selectedPlanItem || selectedTask, plan) ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700 border border-stone-300">${isViLocale() ? 'TASK QUÁ LỊCH' : 'MISSED SCHEDULE'}</span>` : ''}
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.toggleDeadlineEdit()"
                                             class="text-[#D99E87] font-semibold hover:underline cursor-pointer">
-                                        ${isEditingDeadline ? 'Cancel' : 'Edit due day'}
+                                        ${isEditingDeadline ? (isViLocale() ? 'Hủy' : 'Cancel') : (isViLocale() ? 'Sửa deadline' : 'Edit deadline')}
                                     </button>
                                 </div>
 
@@ -2121,23 +3445,23 @@ window.TempoPlanWorkspace = (function() {
                                     <div class="p-3 bg-white border border-[#E3C7A5] rounded-xl space-y-2 text-xs">
                                         <div class="grid grid-cols-2 gap-2">
                                             <div>
-                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Date</label>
+                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">${isViLocale() ? 'Ngày' : 'Date'}</label>
                                                 <input id="pw-edit-deadline-date" type="date" value="${selectedTask.deadlineDate || (selectedTask.deadline ? selectedTask.deadline.split(' ')[0] : '')}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                             </div>
                                             <div>
-                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">Time</label>
+                                                <label class="block text-[10px] text-gray-500 font-semibold mb-0.5">${isViLocale() ? 'Giờ' : 'Time'}</label>
                                                 <input id="pw-edit-deadline-time" type="time" value="${selectedTask.deadlineTime || (selectedTask.deadline ? selectedTask.deadline.split(' ')[1] : '23:59')}" class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg">
                                             </div>
                                         </div>
                                         <div class="flex items-center space-x-2">
                                             <input id="pw-edit-no-deadline" type="checkbox" ${!selectedTask.hasDeadline ? 'checked' : ''} class="rounded text-[#D99E87]">
-                                            <label for="pw-edit-no-deadline" class="text-xs text-stone-700">No fixed deadline</label>
+                                            <label for="pw-edit-no-deadline" class="text-xs text-stone-700">${isViLocale() ? 'Chưa có deadline' : 'No deadline'}</label>
                                         </div>
                                         <div class="flex justify-end pt-1">
                                             <button type="button"
                                                     onclick="window.TempoPlanWorkspace.saveDeadlineEdit('${selectedTask.id}')"
                                                     class="px-3 py-1 bg-[#D99E87] text-white rounded-lg text-xs font-bold hover:bg-[#C98E77]">
-                                                Save deadline
+                                                ${isViLocale() ? 'Lưu deadline' : 'Save deadline'}
                                             </button>
                                         </div>
                                     </div>
@@ -2145,40 +3469,42 @@ window.TempoPlanWorkspace = (function() {
 
                                 <!-- Subtasks Count Row -->
                                 <div class="flex items-center space-x-2 text-xs sm:text-sm text-[#6F6B68]">
-                                    <span>${selectedCompletedSubtasks}/${selectedSubtaskCount} subtasks</span>
+                                    ${selectedSubtaskCount > 0 ? `<span>${selectedCompletedSubtasks}/${selectedSubtaskCount} ${isViLocale() ? 'subtask' : 'Subtasks'}</span>` : ''}
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.openBreakTaskModal('${selectedTask.id}')"
                                             class="text-[#D99E87] font-semibold hover:underline cursor-pointer">
-                                        Edit subtask
+                                        ${isViLocale() ? (selectedSubtaskCount > 0 ? 'Chia nhỏ task' : '+ Chia nhỏ task') : (selectedSubtaskCount > 0 ? 'Break down task' : '+ Break down task')}
                                     </button>
                                 </div>
 
                                 <!-- Subtask List with Custom Scrollbar -->
-                                <div class="max-h-40 overflow-y-auto space-y-2 pr-2 plan-custom-scroll">
-                                    ${(selectedTask.subtasks || []).map(step => `
-                                        <div class="flex items-center space-x-2.5 text-xs sm:text-sm text-[#4A4540]">
-                                            <button type="button"
-                                                    onclick="window.TempoPlanWorkspace.toggleSubtask('${selectedTask.id}', '${step.id}')"
-                                                    class="w-4 h-4 rounded border border-[#E3C7A5] flex items-center justify-center text-[10px] font-bold transition shrink-0 ${step.completed ? 'bg-[#92A491] border-[#92A491] text-white' : 'bg-white border-[#E3C7A5] text-transparent hover:border-[#D99E87]'}"
-                                                    title="Toggle subtask">
-                                                ✓
-                                            </button>
-                                            <span class="${step.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(step.title)}</span>
-                                        </div>
-                                    `).join('')}
-                                </div>
+                                ${selectedSubtaskCount > 0 ? `
+                                    <div class="max-h-40 overflow-y-auto space-y-2 pr-2 plan-custom-scroll">
+                                        ${(selectedTask.subtasks || []).map(step => `
+                                            <div class="flex items-center space-x-2.5 text-xs sm:text-sm text-[#4A4540]">
+                                                <button type="button"
+                                                        onclick="window.TempoPlanWorkspace.toggleSubtask('${selectedTask.id}', '${step.id}')"
+                                                        class="w-4 h-4 rounded border border-[#E3C7A5] flex items-center justify-center text-[10px] font-bold transition shrink-0 ${step.completed ? 'bg-[#92A491] border-[#92A491] text-white' : 'bg-white border-[#E3C7A5] text-transparent hover:border-[#D99E87]'}"
+                                                        title="Toggle subtask">
+                                                    ✓
+                                                </button>
+                                                <span class="${step.completed ? 'line-through text-stone-400' : ''}">${escapeHTML(step.title)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
 
                                 <!-- Note Row -->
                                 ${selectedNoteText ? `
                                     <div class="text-xs sm:text-sm text-[#4A4540] pt-1 flex items-start justify-between gap-2 bg-[#F6F4EE]/60 border border-[#EAE4DF] rounded-xl p-2.5">
                                         <div class="min-w-0 flex-1">
-                                            <strong class="text-[#D9A18B]">Note:</strong> <span class="whitespace-pre-line text-[#4A4540]">${escapeHTML(selectedNoteText)}</span>
+                                            <strong class="text-[#D9A18B]">${isViLocale() ? 'Ghi chú:' : 'Note:'}</strong> <span class="whitespace-pre-line text-[#4A4540]">${escapeHTML(selectedNoteText)}</span>
                                         </div>
                                         <button type="button"
                                                 onclick="window.TempoPlanWorkspace.openNoteEditor('${selectedTask.id}')"
                                                 class="text-[#D99E87] hover:text-[#C98E77] text-xs font-semibold shrink-0 cursor-pointer flex items-center space-x-1"
-                                                title="Edit note">
-                                            <span>Edit note</span>
+                                                title="${isViLocale() ? 'Chỉnh sửa ghi chú' : 'Edit note'}">
+                                            <span>${isViLocale() ? 'Chỉnh sửa ghi chú' : 'Edit note'}</span>
                                             <span>✎</span>
                                         </button>
                                     </div>
@@ -2187,7 +3513,7 @@ window.TempoPlanWorkspace = (function() {
                                         <button type="button"
                                                 onclick="window.TempoPlanWorkspace.openNoteEditor('${selectedTask.id}')"
                                                 class="text-xs font-bold text-[#D9A18B] hover:underline cursor-pointer flex items-center space-x-1">
-                                            <span>+ Create a note</span>
+                                            <span>${isViLocale() ? '+ Thêm ghi chú' : '+ Add note'}</span>
                                         </button>
                                     </div>
                                 `}
@@ -2198,35 +3524,35 @@ window.TempoPlanWorkspace = (function() {
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.toggleTaskComplete('${selectedTask.id}')"
                                             class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#92A491] hover:bg-[#829381] shadow-2xs transition text-center cursor-pointer">
-                                        ${selectedTask.completed ? 'Mark as active' : 'Mark as done'}
+                                        ${selectedTask.completed ? (isViLocale() ? 'Đang thực hiện' : 'Mark as active') : (isViLocale() ? 'Hoàn thành' : 'Mark as done')}
                                     </button>
 
                                     <!-- 2. Focus now -->
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.startTaskFocus('${selectedTask.id}')"
                                             class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-[#D7A690] hover:bg-[#C98E77] shadow-2xs transition flex items-center justify-center space-x-1.5 cursor-pointer">
-                                        <span>▶ Focus now</span>
+                                        <span>▶ ${isViLocale() ? 'Làm task' : 'Focus now'}</span>
                                     </button>
 
                                     <!-- 3. Reschedule -->
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.openRescheduleModal('${selectedTask.id}')"
                                             class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-[#3A4B3D] bg-white border border-[#8D9B8A] hover:bg-stone-50 transition text-center cursor-pointer">
-                                        Reschedule
+                                        ${isViLocale() ? 'Đổi lịch' : 'Reschedule'}
                                     </button>
 
                                     <!-- 4. Clear this task -->
                                     <button type="button"
                                             onclick="window.TempoPlanWorkspace.promptClearTask('${selectedTask.id}')"
                                             class="py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-[#C53B27] bg-white border border-[#D99E87] hover:bg-rose-50/40 transition text-center cursor-pointer">
-                                        Clear this task
+                                        ${isViLocale() ? 'Xóa task này' : 'Clear this task'}
                                     </button>
                                 </div>
                             </div>
                         ` : `
                             <div class="bg-[#FDFBF6] border border-[#E3C7A5] rounded-3xl p-8 text-center text-xs text-[#6F6B68] space-y-2">
-                                <div class="font-bold text-[#202124] text-sm">No task selected</div>
-                                <p>Select a task on the left or click "Add task" above.</p>
+                                <div class="font-bold text-[#202124] text-sm">${isViLocale() ? 'Chưa chọn task nào' : 'No task selected'}</div>
+                                <p>${isViLocale() ? 'Chọn một task ở cột bên trái hoặc bấm \"+ Thêm task\" ở trên.' : 'Select a task on the left or click \"+ Add Task\" above.'}</p>
                             </div>
                         `}
                     </div>
@@ -2249,7 +3575,7 @@ window.TempoPlanWorkspace = (function() {
             const todayStr = getTodayISO();
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            const tomorrowStr = getLocalTomorrowISO();
 
             return `
                 <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2345,14 +3671,75 @@ window.TempoPlanWorkspace = (function() {
 
         if (activeModal === 'reschedule' && rescheduleTaskId) {
             let task = null;
-            const pt = plan.plannedTasks ? plan.plannedTasks.find(item => item.task && item.task.id === rescheduleTaskId) : null;
+            const pt = plan.plannedTasks ? plan.plannedTasks.find(item => item.task && (item.task.id === rescheduleTaskId || item.id === rescheduleTaskId || item.taskId === rescheduleTaskId)) : null;
             if (pt) task = pt.task;
             if (!task && plan.unarrangedTasks) {
-                task = plan.unarrangedTasks.find(t => t.id === rescheduleTaskId);
+                const u = plan.unarrangedTasks.find(t => (t && t.task ? (t.task.id === rescheduleTaskId || t.id === rescheduleTaskId) : t.id === rescheduleTaskId));
+                if (u) task = u.task ? u.task : u;
+            }
+            if (!task && plan.unallocatedTasks) {
+                const u = plan.unallocatedTasks.find(t => (t && t.task ? (t.task.id === rescheduleTaskId || t.id === rescheduleTaskId) : t.id === rescheduleTaskId));
+                if (u) task = u.task ? u.task : u;
+            }
+            if (!task && plan.tasks) {
+                task = plan.tasks.find(t => t.id === rescheduleTaskId);
             }
             if (!task) return '';
 
             const days = plan.availabilityDays || [];
+            const availableSlots = [];
+            const todayStr = getLocalTodayISO();
+            const currentTimeStr = getLocalCurrentTimeStr();
+
+            days.forEach(d => {
+                if (!d || d.date < todayStr) return; // Exclude past dates from reschedule options
+                if (Array.isArray(d.blocks) && d.blocks.length > 0) {
+                    d.blocks.forEach(b => {
+                        // For today, exclude time blocks that have already ended
+                        if (d.date === todayStr && b.end && b.end <= currentTimeStr) {
+                            return;
+                        }
+                        availableSlots.push({
+                            id: b.id,
+                            date: d.date,
+                            start: b.start,
+                            end: b.end,
+                            dayLabel: formatScheduledDateLabel(d.date, isViLocale()) || d.label || d.date,
+                            timeLabel: `${formatTime12H(b.start)} – ${formatTime12H(b.end)}`
+                        });
+                    });
+                } else if (d.date > todayStr) {
+                    availableSlots.push({
+                        id: `day_${d.date}`,
+                        date: d.date,
+                        start: null,
+                        end: null,
+                        dayLabel: formatScheduledDateLabel(d.date, isViLocale()) || d.label || d.date,
+                        timeLabel: window.t ? window.t('workspace.noTimeBlocks', {}, 'No time blocks defined') : 'No time blocks defined'
+                    });
+                }
+            });
+
+            // Default selection if not already set or match against task scheduled date
+            if (!rescheduleSelectedSlot && availableSlots.length > 0) {
+                const taskScheduledDate = pt ? pt.dayDate : (task.scheduledDate || task.dayDate);
+                const taskStartTime = pt ? (pt.startTime || pt.scheduledStartTime) : (task.startTime || task.scheduledStartTime);
+                const match = availableSlots.find(s => s.date === taskScheduledDate && (!taskStartTime || s.start === taskStartTime))
+                           || availableSlots.find(s => s.date === taskScheduledDate)
+                           || availableSlots[0];
+                rescheduleSelectedSlot = match;
+                rescheduleSelectedWindow = match.date;
+            } else if (rescheduleSelectedSlot) {
+                const match = availableSlots.find(s => s.id === rescheduleSelectedSlot.id)
+                           || availableSlots.find(s => s.date === rescheduleSelectedSlot.date && (!rescheduleSelectedSlot.start || s.start === rescheduleSelectedSlot.start))
+                           || availableSlots.find(s => s.date === rescheduleSelectedSlot.date)
+                           || availableSlots[0];
+                if (match) {
+                    rescheduleSelectedSlot = match;
+                    rescheduleSelectedWindow = match.date;
+                }
+            }
+            const currentSelectedSlotId = rescheduleSelectedSlot ? rescheduleSelectedSlot.id : '';
 
             return `
                 <div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2369,21 +3756,84 @@ window.TempoPlanWorkspace = (function() {
                             <span class="block font-bold text-gray-700 uppercase text-[10px] tracking-wider">${window.t ? window.t('workspace.yourAvailableTime', {}, 'YOUR AVAILABLE TIME') : 'YOUR AVAILABLE TIME'}</span>
 
                             <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                ${days.map(d => `
-                                    <label class="p-3 rounded-xl border border-gray-200 hover:border-[#FF6B2C] bg-white hover:bg-orange-50/30 transition flex items-center space-x-3 cursor-pointer">
-                                        <input type="radio" name="pw_reschedule_day" value="${d.date}"
-                                               ${rescheduleSelectedWindow === d.date ? 'checked' : ''}
-                                               onchange="window.TempoPlanWorkspace.selectRescheduleWindow('${d.date}')"
-                                               class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                                        <div class="flex-1">
-                                            <span class="font-bold text-[#202124] block">${escapeHTML(d.label || d.date)}</span>
-                                            <span class="text-[11px] text-[#6F6B68]">
-                                                ${d.blocks && d.blocks.length > 0 ? d.blocks.map(b => `${formatTime12H(b.start)} – ${formatTime12H(b.end)}`).join(', ') : (window.t ? window.t('workspace.noTimeBlocks', {}, 'No time blocks defined') : 'No time blocks defined')}
-                                            </span>
-                                        </div>
-                                    </label>
-                                `).join('')}
+                                ${availableSlots.length > 0 ? availableSlots.map(s => {
+                                    const isChecked = s.id === currentSelectedSlotId || (!currentSelectedSlotId && s.date === rescheduleSelectedWindow);
+                                    return `
+                                        <label data-reschedule-slot-label
+                                               onclick="window.TempoPlanWorkspace.selectRescheduleSlot('${s.date}', '${s.id}', '${s.start || ''}', '${s.end || ''}')"
+                                               class="p-3 rounded-xl border ${isChecked ? 'border-[#FF6B2C] bg-orange-50/40 ring-1 ring-[#FF6B2C]/30' : 'border-gray-200 hover:border-[#FF6B2C] bg-white hover:bg-orange-50/20'} transition flex items-center space-x-3 cursor-pointer">
+                                            <input type="radio" name="pw_reschedule_day" value="${s.date}"
+                                                   data-slot-id="${s.id}" data-date="${s.date}" data-start="${s.start || ''}" data-end="${s.end || ''}"
+                                                   ${isChecked ? 'checked' : ''}
+                                                   class="text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                                            <div class="flex-1">
+                                                <span class="font-bold text-[#202124] block">${escapeHTML(s.dayLabel)}</span>
+                                                <span class="text-[11px] text-[#6F6B68] block">${escapeHTML(s.timeLabel)}</span>
+                                            </div>
+                                        </label>
+                                    `;
+                                }).join('') : `
+                                    <div class="p-3.5 text-center rounded-xl border border-dashed border-stone-200 bg-stone-50/60 text-stone-500 text-xs">
+                                        ${isViLocale() ? 'Chưa có khung giờ làm việc khả dụng trong tương lai. Vui lòng thêm thời gian làm việc bên dưới.' : 'No available upcoming time slots. Please add availability below.'}
+                                    </div>
+                                `}
                             </div>
+
+                            <!-- Add Availability Button & Inline Form -->
+                            ${!rescheduleShowAddTime ? `
+                                <div class="pt-1">
+                                    <button type="button"
+                                            id="btn-reschedule-add-availability"
+                                            onclick="window.TempoPlanWorkspace.toggleRescheduleAddTime(true)"
+                                            class="w-full py-2.5 px-3 rounded-xl border border-dashed border-[#D99E87] hover:border-[#C98E77] bg-[#FFF8F2] hover:bg-[#FFEEDB] text-[#B83D08] text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer">
+                                        <span>${isViLocale() ? '+ Thêm thời gian làm việc' : '+ Add availability'}</span>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="p-3.5 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl space-y-2.5 animate-fade-in" id="reschedule-add-avail-form">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-[#B83D08] block text-[11px] uppercase tracking-wider">
+                                            ${isViLocale() ? 'Thêm thời gian làm việc' : 'Add availability'}
+                                        </span>
+                                        <button type="button" onclick="window.TempoPlanWorkspace.toggleRescheduleAddTime(false)" class="text-stone-400 hover:text-stone-600 text-xs font-bold p-0.5 cursor-pointer">✕</button>
+                                    </div>
+
+                                    <!-- Validation Error Message Container -->
+                                    <div id="pw-resched-avail-error" class="hidden text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-2.5 font-medium animate-fade-in"></div>
+
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div>
+                                            <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${isViLocale() ? 'Ngày' : 'Date'}</label>
+                                            <input id="pw-resched-avail-date" type="date" value="${getLocalTodayISO()}"
+                                                   class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${isViLocale() ? 'Thời gian bắt đầu' : 'Start time'}</label>
+                                            <input id="pw-resched-avail-start" type="time" value="14:00"
+                                                   class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] text-stone-600 font-semibold mb-0.5">${isViLocale() ? 'Thời gian kết thúc' : 'End time'}</label>
+                                            <input id="pw-resched-avail-end" type="time" value="16:00"
+                                                   class="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg bg-white">
+                                        </div>
+                                    </div>
+
+                                    <div class="flex items-center justify-end space-x-2 pt-1">
+                                        <button type="button"
+                                                onclick="window.TempoPlanWorkspace.toggleRescheduleAddTime(false)"
+                                                class="px-3 py-1.5 border border-gray-200 text-xs font-semibold text-gray-600 rounded-lg hover:bg-stone-50 cursor-pointer">
+                                            ${isViLocale() ? 'Hủy' : 'Cancel'}
+                                        </button>
+                                        <button type="button"
+                                                id="btn-save-reschedule-availability"
+                                                onclick="window.TempoPlanWorkspace.saveRescheduleAvailability()"
+                                                class="px-3.5 py-1.5 bg-[#D99E87] hover:bg-[#C98E77] text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer">
+                                            ${isViLocale() ? 'Lưu thời gian làm việc' : 'Save availability'}
+                                        </button>
+                                    </div>
+                                </div>
+                            `}
 
                             <!-- I'll figure it out later option -->
                             <div class="pt-2 border-t border-gray-100">
@@ -2394,14 +3844,115 @@ window.TempoPlanWorkspace = (function() {
                             </div>
                         </div>
 
+                        <!-- Reschedule Error Banner -->
+                        <div id="pw-reschedule-error" class="hidden text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-2.5 font-medium animate-fade-in"></div>
+
                         <div class="pt-3 border-t border-gray-100 flex items-center justify-end space-x-2">
-                            <button onclick="window.TempoPlanWorkspace.closeRescheduleModal()"
-                                    class="px-4 py-2 border border-gray-200 text-xs font-semibold text-gray-600 rounded-xl hover:bg-stone-50">
+                            <button type="button" onclick="window.TempoPlanWorkspace.closeRescheduleModal()"
+                                    class="px-4 py-2 border border-gray-200 text-xs font-semibold text-gray-600 rounded-xl hover:bg-stone-50 cursor-pointer">
                                 ${window.t ? window.t('common.cancel', {}, 'Cancel') : 'Cancel'}
                             </button>
-                            <button onclick="window.TempoPlanWorkspace.executeReschedule('${task.id}', window.TempoPlanWorkspace.getRescheduleSelectedWindow())"
-                                    class="btn-primary px-5 py-2 rounded-xl font-bold text-xs shadow-sm">
+                            <button type="button"
+                                    id="btn-execute-reschedule"
+                                    onclick="window.TempoPlanWorkspace.executeReschedule('${task.id}')"
+                                    class="btn-primary px-5 py-2 rounded-xl font-bold text-xs shadow-sm cursor-pointer transition">
                                 ${window.t ? window.t('workspace.schedule', {}, 'Schedule') : 'Schedule'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (activeModal === 'repeat-weekly-config' && repeatConfigDate) {
+            const day = (plan.availabilityDays || []).find(d => d.date === repeatConfigDate);
+            const dayBlocks = day && Array.isArray(day.blocks) ? day.blocks : [];
+            const existingRule = getRecurringRuleForDate(repeatConfigDate);
+            const dayLabel = formatScheduledDateLabel(repeatConfigDate, isViLocale()) || repeatConfigDate;
+
+            return `
+                <div id="modal-repeat-weekly"
+                     onclick="if (event.target === this) window.TempoPlanWorkspace.closeRepeatWeeklyModal();"
+                     class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+                     role="dialog"
+                     aria-modal="true">
+                    <div class="bg-white border border-[#EAE4DF] rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl max-w-md w-full relative">
+                        <button type="button"
+                                onclick="window.TempoPlanWorkspace.closeRepeatWeeklyModal()"
+                                class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
+                                title="Close">✕</button>
+
+                        <div class="space-y-1 pr-6">
+                            <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
+                                ${window.t ? window.t('workspace.repeatWeekly', {}, 'Repeat Weekly') : 'Repeat Weekly'}
+                            </h3>
+                            <p class="text-xs text-[#6F6B68]">
+                                ${escapeHTML(dayLabel)} (${repeatConfigDate})
+                            </p>
+                        </div>
+
+                        <!-- Current pattern summary -->
+                        <div class="p-3 bg-[#FDFBF6] border border-[#E3C7A5] rounded-xl space-y-1.5 text-xs">
+                            <div class="font-semibold text-stone-700">
+                                ${isViLocale() ? 'Khung giờ lặp lại:' : 'Working hours pattern:'}
+                            </div>
+                            <div class="text-[#202124] font-medium space-y-0.5">
+                                ${dayBlocks.length > 0 ? dayBlocks.map(b => `<div>• ${formatTime12H(b.start)} – ${formatTime12H(b.end)}</div>`).join('') : `<div class="italic text-stone-400">${window.t ? window.t('workspace.noWorkingHours', {}, 'No working hours available.') : 'No working hours available.'}</div>`}
+                            </div>
+                        </div>
+
+                        <!-- Recurrence Form Settings -->
+                        <div class="space-y-3.5 text-xs">
+                            <!-- Repeat every week checkbox -->
+                            <div class="flex items-center space-x-2.5">
+                                <input id="pw-repeat-every-week"
+                                       type="checkbox"
+                                       ${!existingRule || existingRule.enabled !== false ? 'checked' : ''}
+                                       class="w-4 h-4 rounded text-[#D99E87] focus:ring-[#D99E87] cursor-pointer">
+                                <label for="pw-repeat-every-week" class="font-bold text-stone-800 cursor-pointer">
+                                    ${window.t ? window.t('workspace.repeatEveryWeek', {}, 'Repeat every week') : 'Repeat every week'}
+                                </label>
+                            </div>
+
+                            <!-- Start date -->
+                            <div>
+                                <label class="block text-[11px] font-semibold text-stone-600 mb-1">
+                                    ${window.t ? window.t('workspace.startDate', {}, 'Start date') : 'Start date'}
+                                </label>
+                                <input id="pw-repeat-start-date"
+                                       type="date"
+                                       value="${existingRule?.startDate || repeatConfigDate}"
+                                       class="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D99E87]">
+                            </div>
+
+                            <!-- End date (optional) -->
+                            <div>
+                                <label class="block text-[11px] font-semibold text-stone-600 mb-1">
+                                    ${window.t ? window.t('workspace.endDate', {}, 'End date (optional)') : 'End date (optional)'}
+                                </label>
+                                <input id="pw-repeat-end-date"
+                                       type="date"
+                                       value="${existingRule?.endDate || ''}"
+                                       placeholder="YYYY-MM-DD"
+                                       class="w-full px-3 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D99E87]">
+                                <span class="text-[10px] text-stone-400 mt-0.5 block">
+                                    ${isViLocale() ? 'Để trống nếu muốn lặp lại liên tục.' : 'Leave empty for ongoing weekly recurrence.'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Action buttons -->
+                        <div class="flex items-center justify-end space-x-3 pt-2 border-t border-gray-100">
+                            <button type="button"
+                                    onclick="window.TempoPlanWorkspace.closeRepeatWeeklyModal()"
+                                    class="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
+                                ${window.t ? window.t('workspace.cancel', {}, 'Cancel') : 'Cancel'}
+                            </button>
+                            <button type="button"
+                                    id="btn-confirm-repeat-weekly"
+                                    onclick="window.TempoPlanWorkspace.confirmRepeatWeekly()"
+                                    class="btn-primary px-5 py-2 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer">
+                                ${window.t ? window.t('workspace.confirm', {}, 'Confirm') : 'Confirm'}
                             </button>
                         </div>
                     </div>
@@ -2421,24 +3972,66 @@ window.TempoPlanWorkspace = (function() {
                         </div>
 
                         <div class="space-y-4 text-xs">
-                            ${days.map(d => `
-                                <div class="p-3.5 bg-stone-50 rounded-2xl border border-stone-100 space-y-2">
-                                    <div class="flex items-center justify-between font-bold text-stone-800">
-                                        <span>${escapeHTML(d.label || d.date)}</span>
-                                        <span class="text-[10px] text-stone-500 uppercase tracking-wider">${d.date}</span>
-                                    </div>
+                            ${days.map(d => {
+                                const todayStr = getLocalTodayISO();
+                                const isToday = (d.date === todayStr);
+                                const dayBlocks = Array.isArray(d.blocks) ? d.blocks : [];
+                                const recurringRule = getRecurringRuleForDate(d.date);
+                                const isRecurring = !!recurringRule && recurringRule.enabled !== false;
 
-                                    <div class="space-y-1.5">
-                                        ${(d.blocks || []).map(b => `
-                                            <div class="p-2 bg-white rounded-xl border border-gray-200 flex items-center justify-between">
-                                                <span class="font-semibold text-[#202124]">${formatTime12H(b.start)} – ${formatTime12H(b.end)}</span>
-                                                <button onclick="window.TempoPlanWorkspace.removeAvailabilityBlock('${d.date}', '${b.id}')"
-                                                        class="text-stone-400 hover:text-rose-600 text-xs px-1">✕</button>
+                                return `
+                                    <div class="p-3.5 bg-stone-50 rounded-2xl border border-stone-100 space-y-2.5" data-avail-day="${d.date}">
+                                        <div class="flex flex-wrap items-center justify-between gap-2 font-bold text-stone-800">
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-xs sm:text-sm text-[#202124]">${escapeHTML(formatScheduledDateLabel(d.date, isViLocale()) || d.label || d.date)}</span>
+                                                <span class="text-[10px] text-stone-500 uppercase tracking-wider">${d.date}</span>
+                                                ${isRecurring ? `
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E8EFE8] text-[#556B54] border border-[#C5D8C3]" title="${window.t ? window.t('workspace.repeatEveryWeek', {}, 'Repeat every week') : 'Repeat every week'}">
+                                                        🔄 ${isViLocale() ? 'Hàng tuần' : 'Weekly'}
+                                                    </span>
+                                                ` : ''}
                                             </div>
-                                        `).join('')}
+
+                                            <!-- Day Actions -->
+                                            <div class="flex items-center space-x-1.5 shrink-0">
+                                                ${isToday ? `
+                                                    <button type="button"
+                                                            id="btn-copy-to-tomorrow"
+                                                            onclick="window.TempoPlanWorkspace.copyTodayAvailabilityToTomorrow()"
+                                                            class="px-2.5 py-1 rounded-xl text-xs font-semibold text-[#688270] bg-[#E8EFE8] hover:bg-[#D5E4D4] border border-[#CCDCCD] transition cursor-pointer flex items-center space-x-1"
+                                                            title="${window.t ? window.t('workspace.copyToTomorrow', {}, 'Copy to Tomorrow') : 'Copy to Tomorrow'}">
+                                                        <span>📋</span>
+                                                        <span>${window.t ? window.t('workspace.copyToTomorrow', {}, 'Copy to Tomorrow') : 'Copy to Tomorrow'}</span>
+                                                    </button>
+                                                ` : ''}
+                                                <button type="button"
+                                                        data-repeat-day="${d.date}"
+                                                        onclick="window.TempoPlanWorkspace.openRepeatWeeklyModal('${d.date}')"
+                                                        class="px-2.5 py-1 rounded-xl text-xs font-semibold ${isRecurring ? 'text-amber-800 bg-amber-100 border border-amber-300 hover:bg-amber-200' : 'text-[#8C6D62] bg-[#F7EFEA] hover:bg-[#EFE3DC] border border-[#E8D7CE]'} transition cursor-pointer flex items-center space-x-1"
+                                                        title="${window.t ? window.t('workspace.repeatWeekly', {}, 'Repeat Weekly') : 'Repeat Weekly'}">
+                                                    <span>🔄</span>
+                                                    <span>${window.t ? window.t('workspace.repeatWeekly', {}, 'Repeat Weekly') : 'Repeat Weekly'}</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="space-y-1.5">
+                                            ${dayBlocks.length > 0 ? dayBlocks.map(b => `
+                                                <div class="p-2 bg-white rounded-xl border border-gray-200 flex items-center justify-between">
+                                                    <span class="font-semibold text-[#202124]">${formatTime12H(b.start)} – ${formatTime12H(b.end)}</span>
+                                                    <button onclick="window.TempoPlanWorkspace.removeAvailabilityBlock('${d.date}', '${b.id}')"
+                                                            class="text-stone-400 hover:text-rose-600 text-xs px-1"
+                                                            title="Remove">✕</button>
+                                                </div>
+                                            `).join('') : `
+                                                <div class="text-[11px] text-stone-400 italic py-1">
+                                                    ${window.t ? window.t('workspace.noWorkingHours', {}, 'No working hours available to copy.') : 'No working hours available.'}
+                                                </div>
+                                            `}
+                                        </div>
                                     </div>
-                                </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
 
                             <!-- Add availability block form -->
                             <div class="p-3.5 bg-[#FFF8F2] border border-[#FFD2BA] rounded-2xl space-y-2">
@@ -2490,26 +4083,26 @@ window.TempoPlanWorkspace = (function() {
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.closeClearTaskConfirm()"
                                 class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
-                                title="Close"
-                                aria-label="Close">✕</button>
+                                title="${isViLocale() ? 'Đóng' : 'Close'}"
+                                aria-label="${isViLocale() ? 'Đóng' : 'Close'}">✕</button>
                         <div class="space-y-2 pr-6">
-                            <h3 id="clear-task-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Clear this task?</h3>
+                            <h3 id="clear-task-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">${isViLocale() ? 'Xác nhận gỡ task' : 'Clear Task Confirmation'}</h3>
                             <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                                This task will be removed from your Working Plan. This action cannot be undone.
+                                ${isViLocale() ? 'Task này sẽ được gỡ khỏi Kế hoạch làm việc của bạn. Hành động này không thể hoàn tác.' : 'This task will be removed from your Working Plan. This action cannot be undone.'}
                             </p>
                         </div>
                         <div class="flex items-center justify-end space-x-3 pt-2">
                             <button type="button"
                                     onclick="window.TempoPlanWorkspace.closeClearTaskConfirm()"
                                     class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
-                                Cancel
+                                ${isViLocale() ? 'Hủy' : 'Cancel'}
                             </button>
                             <button type="button"
                                     id="btn-confirm-clear-task"
                                     ${isActionProcessing ? 'disabled' : ''}
                                     onclick="window.TempoPlanWorkspace.executeClearTask()"
                                     class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#C53B27] hover:bg-[#B03422] text-white shadow-sm transition cursor-pointer inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                Clear task
+                                ${isViLocale() ? 'Xóa task này' : 'Clear task'}
                             </button>
                         </div>
                     </div>
@@ -2532,23 +4125,23 @@ window.TempoPlanWorkspace = (function() {
                                 title="Close"
                                 aria-label="Close">✕</button>
                         <div class="space-y-2 pr-6">
-                            <h3 id="delete-plan-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Delete your plan?</h3>
+                            <h3 id="delete-plan-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">${isViLocale() ? 'Xóa plan của bạn?' : 'Delete your plan?'}</h3>
                             <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                                This will permanently delete your Working Plan and its scheduled tasks. This action cannot be undone.
+                                ${isViLocale() ? 'Hành động này sẽ xóa vĩnh viễn Working Plan và các task đã lên lịch. Thao tác này không thể hoàn tác.' : 'This will permanently delete your Working Plan and its scheduled tasks. This action cannot be undone.'}
                             </p>
                         </div>
                         <div class="flex items-center justify-end space-x-3 pt-2">
                             <button type="button"
                                     onclick="window.TempoPlanWorkspace.closeDeletePlanConfirm()"
                                     class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:text-stone-900 border border-transparent hover:bg-stone-50 transition cursor-pointer">
-                                Cancel
+                                ${isViLocale() ? 'Hủy' : 'Cancel'}
                             </button>
                             <button type="button"
                                     id="btn-confirm-delete-plan"
                                     ${isActionProcessing ? 'disabled' : ''}
                                     onclick="window.TempoPlanWorkspace.executeDeletePlan()"
                                     class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#C53B27] hover:bg-[#B03422] text-white shadow-sm transition cursor-pointer inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                Delete my plan
+                                ${isViLocale() ? 'Xóa plan' : 'Delete my plan'}
                             </button>
                         </div>
                     </div>
@@ -2568,12 +4161,15 @@ window.TempoPlanWorkspace = (function() {
                         <button type="button"
                                 onclick="window.TempoPlanWorkspace.cancelDeadlineConfirm()"
                                 class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer"
-                                title="Close"
-                                aria-label="Close">✕</button>
+                                title="${isViLocale() ? 'Đóng' : 'Close'}"
+                                aria-label="${isViLocale() ? 'Đóng' : 'Close'}">✕</button>
                         <div class="space-y-2 pr-6">
-                            <h3 id="deadline-reorder-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">Update your plan?</h3>
+                            <div class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                ${isViLocale() ? 'Trùng Deadline' : 'Deadline Conflict'}
+                            </div>
+                            <h3 id="deadline-reorder-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">${isViLocale() ? 'Sắp xếp lại Deadline' : 'Deadline Reorder'}</h3>
                             <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                                Changing this deadline may affect the order of your tasks. Would you like Tempo to adjust your task priorities and reorganize your plan?
+                                ${isViLocale() ? 'Thay đổi deadline này có thể ảnh hưởng đến thứ tự các task. Bạn có muốn Tempo sắp xếp lại thứ tự ưu tiên và kế hoạch của mình không?' : 'Changing this deadline may affect the order of your tasks. Would you like Tempo to adjust your task priorities and reorganize your plan?'}
                             </p>
                         </div>
                         <div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 sm:space-x-3 pt-2">
@@ -2581,13 +4177,13 @@ window.TempoPlanWorkspace = (function() {
                                     id="btn-keep-current-priorities"
                                     onclick="window.TempoPlanWorkspace.confirmDeadlineWithoutReorder()"
                                     class="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition cursor-pointer text-center">
-                                Keep current priorities
+                                ${isViLocale() ? 'Giữ thứ tự hiện tại' : 'Keep current priorities'}
                             </button>
                             <button type="button"
                                     id="btn-confirm-update-plan"
                                     onclick="window.TempoPlanWorkspace.confirmDeadlineWithReorder()"
                                     class="w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D99E87] hover:bg-[#C98E77] text-white shadow-sm transition cursor-pointer text-center">
-                                Yes, update my plan
+                                ${isViLocale() ? 'Sắp xếp lại Deadline' : 'Yes, update my plan'}
                             </button>
                         </div>
                     </div>
@@ -2624,16 +4220,16 @@ window.TempoPlanWorkspace = (function() {
                                 aria-label="Close">✕</button>
                         <div class="space-y-1 pr-6">
                             <h3 id="note-editor-title" class="font-heading text-lg sm:text-xl font-bold text-[#202124]">
-                                ${existingNoteText ? 'Edit Task Note' : 'Create Task Note'}
+                                ${isViLocale() ? 'Chỉnh sửa ghi chú' : (existingNoteText ? 'Edit Task Note' : 'Create Task Note')}
                             </h3>
                             <p class="text-xs text-[#6F6B68]">
-                                Note for <strong class="text-[#202124]">${escapeHTML(targetTask ? targetTask.name : 'Task')}</strong>
+                                ${isViLocale() ? 'Ghi chú cho' : 'Note for'} <strong class="text-[#202124]">${escapeHTML(targetTask ? targetTask.name : 'Task')}</strong>
                             </p>
                         </div>
                         <div class="space-y-2">
                             <textarea id="pw-note-editor-text"
                                       rows="4"
-                                      placeholder="Add notes, links, or context for this task..."
+                                      placeholder="${isViLocale() ? 'Thêm ghi chú, liên kết hoặc thông tin cho task này...' : 'Add notes, links, or context for this task...'}"
                                       class="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#D99E87] focus:border-transparent text-[#202124] resize-y">${escapeHTML(existingNoteText)}</textarea>
                         </div>
                         <div class="flex items-center justify-between pt-2">
@@ -2641,20 +4237,20 @@ window.TempoPlanWorkspace = (function() {
                                 <button type="button"
                                         onclick="window.TempoPlanWorkspace.deleteNote('${noteTaskId}')"
                                         class="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline cursor-pointer">
-                                    Delete note
+                                    ${isViLocale() ? 'Xóa ghi chú' : 'Delete note'}
                                 </button>
                             ` : '<div></div>'}
                             <div class="flex items-center space-x-2">
                                 <button type="button"
                                         onclick="window.TempoPlanWorkspace.closeModal()"
                                         class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-stone-600 hover:bg-stone-100 transition cursor-pointer">
-                                    Cancel
+                                    ${isViLocale() ? 'Hủy' : 'Cancel'}
                                 </button>
                                 <button type="button"
                                         id="btn-save-task-note"
                                         onclick="window.TempoPlanWorkspace.saveNote('${noteTaskId}')"
                                         class="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#D99E87] hover:bg-[#C98E77] text-white shadow-sm transition cursor-pointer">
-                                    Save note
+                                    ${isViLocale() ? 'Lưu ghi chú' : 'Save note'}
                                 </button>
                             </div>
                         </div>
@@ -2668,10 +4264,34 @@ window.TempoPlanWorkspace = (function() {
 
     function selectRescheduleWindow(date) {
         rescheduleSelectedWindow = date;
+        const plan = getActivePlan();
+        if (plan && plan.availabilityDays) {
+            const day = plan.availabilityDays.find(d => d.date === date);
+            if (day && Array.isArray(day.blocks) && day.blocks.length > 0) {
+                const b = day.blocks[0];
+                rescheduleSelectedSlot = {
+                    id: b.id,
+                    date: date,
+                    start: b.start,
+                    end: b.end
+                };
+                return;
+            }
+        }
+        rescheduleSelectedSlot = {
+            id: `day_${date}`,
+            date: date,
+            start: null,
+            end: null
+        };
     }
 
     function getRescheduleSelectedWindow() {
-        return rescheduleSelectedWindow;
+        return rescheduleSelectedWindow || (rescheduleSelectedSlot ? rescheduleSelectedSlot.date : null);
+    }
+
+    function getRescheduleSelectedSlot() {
+        return rescheduleSelectedSlot;
     }
 
     function updateTaskName(taskId, newName) {
@@ -2711,7 +4331,26 @@ window.TempoPlanWorkspace = (function() {
             task.deadlineTime = newTime;
             task.hasDeadline = hasDeadline;
             task.deadline = hasDeadline ? `${newDate} ${newTime || '23:59'}` : null;
+            delete task.isOverdue;
+            task.isOverdue = false;
+
+            if (window.TempoEmergencyFlow && typeof window.TempoEmergencyFlow.getTasks === 'function') {
+                const rawTasks = window.TempoEmergencyFlow.getTasks();
+                const shared = rawTasks.find(t => t.id === taskId);
+                if (shared) {
+                    shared.hasDeadline = task.hasDeadline;
+                    shared.deadlineDate = task.deadlineDate;
+                    shared.deadlineTime = task.deadlineTime;
+                    shared.deadline = task.deadline;
+                    delete shared.isOverdue;
+                    shared.isOverdue = false;
+                }
+            }
+
             persistPlan(plan);
+            if (window.TempoMode && typeof window.TempoMode.renderActiveModeHome === 'function') {
+                window.TempoMode.renderActiveModeHome();
+            }
             render();
         }
     }
@@ -2739,8 +4378,20 @@ window.TempoPlanWorkspace = (function() {
     }
 
     function addNewTask(taskData) {
-        const plan = getActivePlan();
-        if (!plan) return;
+        let plan = getActivePlan();
+        if (!plan) {
+            const currentUserId = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                ? window.TempoAuth.getCurrentUserId() 
+                : 'guest';
+            plan = {
+                id: `plan_${currentUserId}_${Date.now()}`,
+                title: 'Tempo Working Plan',
+                availabilityDays: [],
+                plannedTasks: [],
+                unarrangedTasks: [],
+                tasks: []
+            };
+        }
         const taskId = 'task-' + Date.now();
         const newTask = {
             id: taskId,
@@ -2760,7 +4411,7 @@ window.TempoPlanWorkspace = (function() {
         if (taskData.fitIntoPlan) {
             plan.plannedTasks.push({
                 dayDate: getTodayISO(),
-                dayLabel: 'TODAY',
+                dayLabel: formatScheduledDateLabel(getTodayISO(), isViLocale()) || 'TODAY',
                 task: newTask,
                 allocatedMinutes: newTask.durationMinutes,
                 scheduledStartTime: '16:00',
@@ -2814,7 +4465,25 @@ window.TempoPlanWorkspace = (function() {
         }
     });
 
+    function loadSampleTasks() {
+        const samplePlan = getDefaultReferencePlan();
+        persistPlan(samplePlan);
+        render();
+        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
+            window.TempoApp.showToast(isViLocale() ? 'Đã nạp 3 task mẫu vào kế hoạch.' : 'Loaded 3 sample tasks into your plan.');
+        }
+    }
+
+    function resetWorkspaceState() {
+        selectedTaskId = null;
+        pendingAddedTask = null;
+        activeModal = null;
+    }
+
     return {
+        loadSampleTasks,
+        resetWorkspaceState,
+        getDefaultReferencePlan,
         startAdjustPlan,
         promptDeletePlan,
         closeDeletePlanConfirm,
@@ -2853,7 +4522,13 @@ window.TempoPlanWorkspace = (function() {
         isDraggingTask: () => isDraggingTask,
         reorderTasks,
         openRescheduleModal,
+        persistPlan,
+        getActivePlan,
         closeRescheduleModal,
+        toggleRescheduleAddTime,
+        saveRescheduleAvailability,
+        selectRescheduleSlot,
+        getRescheduleSelectedSlot,
         selectRescheduleWindow,
         getRescheduleSelectedWindow,
         scheduleTaskAsUnarranged,
@@ -2866,6 +4541,15 @@ window.TempoPlanWorkspace = (function() {
         addNewTask,
         openAdjustAvailabilityModal,
         closeAdjustAvailabilityModal,
+        cleanupExpiredAvailability,
+        copyTodayAvailabilityToTomorrow,
+        openRepeatWeeklyModal,
+        closeRepeatWeeklyModal,
+        confirmRepeatWeekly,
+        getRecurringRules,
+        saveRecurringRule,
+        disableRecurringRule,
+        applyRecurringRulesToPlan,
         addAvailabilityBlockInline,
         removeAvailabilityBlock,
         updateTaskName,
@@ -2882,6 +4566,16 @@ window.TempoPlanWorkspace = (function() {
         openNoteEditor,
         saveNote,
         deleteNote,
-        closeModal
+        closeModal,
+        formatScheduledDateLabel,
+        isTaskOverdue,
+        isTaskMissedSchedule,
+        getTaskState,
+        isMissedSchedulePromptDismissed,
+        dismissMissedSchedulePrompt,
+        clearMissedScheduleDismissal,
+        keepCurrentSchedule,
+        getLocalTodayISO,
+        getLocalTomorrowISO
     };
 })();

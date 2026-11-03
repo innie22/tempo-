@@ -1,0 +1,323 @@
+{
+  "id": "plan_emergency_1792238129258",
+  "planId": "plan_emergency_1792238129258",
+  "planType": "emergency",
+  "status": "active",
+  "title": "Working Plan",
+  "totalPlannedMinutes": 0,
+  "tasks": [
+    {
+      "id": "task_sample_1",
+      "name": "Statistics Assignment (Problem Set 4)",
+      "hasDeadline": true,
+      "deadlineDate": "2026-10-17",
+      "deadlineTime": "21:00",
+      "importance": "High",
+      "consequence": "Big consequences",
+      "flexibility": [
+        "Probably not"
+      ],
+      "durationMinutes": 90,
+      "durationLabel": "1 hr 30 min",
+      "priorityCategory": "DO_FIRST",
+      "isBrokenDown": false,
+      "alreadyKnowWhatToDo": false,
+      "subtasks": [],
+      "completed": false,
+      "isInProgress": false,
+      "in_progress": false,
+      "_dayDate": "2026-10-17",
+      "_dayLabel": "TODAY � OCT 17",
+      "_startTime": "7:00 PM",
+      "_endTime": "8:45 PM",
+      "_executionBadge": "UP NEXT",
+      "_keep": true,
+      "deadline": "2026-10-17 21:00",
+      "executionStatus": "completed"
+    },
+    {
+      "id": "task_sample_3",
+      "name": "Biology Chapter 6 Notes",
+      "hasDeadline": false,
+      "deadlineDate": null,
+      "deadlineTime": null,
+      "importance": "Medium",
+      "consequence": "Some consequences",
+      "flexibility": [
+        "Ask someone for help"
+      ],
+      "durationMinutes": 60,
+      "durationLabel": "1 hr",
+      "priorityCategory": "REDUCE_HELP",
+      "isBrokenDown": false,
+      "alreadyKnowWhatToDo": false,
+      "subtasks": [],
+      "_dayDate": "2026-10-18",
+      "_dayLabel": "TODAY � OCT 17",
+      "_startTime": "9:15 PM",
+      "_endTime": "10:15 AM",
+      "_executionBadge": "THEN",
+      "_keep": true,
+      "deadline": null,
+      "completed": false,
+      "isInProgress": false,
+      "in_progress": false,
+      "executionStatus": "pending",
+      "scheduledDate": "2026-10-18",
+      "dayDate": "2026-10-18",
+      "scheduledStartTime": "9:00 AM",
+      "scheduledEndTime": "10:15 AM",
+      "startTime": "9:00 AM",
+      "endTime": "10:15 AM",
+      "isCompleted": false
+    },
+    {
+      "id": "task_sample_2",
+      "name": "Marketing Report Final Draft",
+      "hasDeadline": true,
+      "deadlineDate": "2026-10-18",
+      "deadlineTime": "09:00",
+      "importance": "High",
+      "consequence": "Big consequences",
+      "flexibility": [
+        "Reduce what I need to do"
+      ],
+      "durationMinutes": 15,
+      "durationLabel": "15 min",
+      "priorityCategory": "DO_FIRST",
+      "isBrokenDown": false,
+      "alreadyKnowWhatToDo": false,
+      "subtasks": [],
+      "isUnknownDuration": true,
+      "isCustomDuration": false,
+      "isLongTerm": false,
+      "customDurationValue": 45,
+      "customDurationUnit": "minutes",
+      "_dayDate": "2026-10-17",
+      "_dayLabel": "TODAY � OCT 17",
+      "_startTime": null,
+      "_endTime": null,
+      "_executionBadge": "LATER",
+      "_keep": true,
+      "deadline": "2026-10-18 09:00",
+      "completed": true,
+      "isInProgress": false,
+      "in_progress": false,
+      "executionStatus": "pending"
+    }
+  ],
+  "plannedTasks": [
+    {
+      "dayDate": "2026-10-18",
+      "dayLabel": "Today",
+      "startTime": null,
+      "executionBadge": "UP NEXT",
+      "task": {
+        "id": "task_sample_2",
+        "name": "Marketing Report Final Draft",
+        "hasDeadline": true,
+        "deadlineDate": "2026-10-18",
+        "deadlineTime": "09:00",
+        "importance": "High",
+        "consequence": "Big consequences",
+        "flexibility": [
+          "Reduce what I need to do"
+        ],
+        "durationMinutes": 15,
+        "durationLabel": "15 min",
+        "priorityCategory": "DO_FIRST",
+        "isBrokenDown": false,
+        "alreadyKnowWhatToDo": false,
+        "subtasks": [],
+        "isUnknownDuration": true,
+        "isCustomDuration": false,
+        "isLongTerm": false,
+        "customDurationValue": 45,
+        "customDurationUnit": "minutes",
+        "_dayDate": "2026-10-17",
+        "_dayLabel": "TODAY � OCT 17",
+        "_startTime": null,
+        "_endTime": null,
+        "_executionBadge": "LATER",
+        "_keep": true,
+        "deadline": "2026-10-18 09:00",
+        "completed": true,
+        "isInProgress": false,
+        "in_progress": false,
+        "executionStatus": "completed",
+        "completedAt": 1793361916833
+      },
+      "globalIndex": 1,
+      "endTime": null,
+      "startMin": null,
+      "endMin": null,
+      "isOverCapacity": false,
+      "rhythm": null,
+      "hasDeadlineConflict": true
+    },
+    {
+      "task": {
+        "id": "task_sample_3",
+        "name": "Biology Chapter 6 Notes",
+        "hasDeadline": false,
+        "deadlineDate": null,
+        "deadlineTime": null,
+        "importance": "Medium",
+        "consequence": "Some consequences",
+        "flexibility": [
+          "Ask someone for help"
+        ],
+        "durationMinutes": 60,
+        "durationLabel": "1 hr",
+        "priorityCategory": "REDUCE_HELP",
+        "isBrokenDown": false,
+        "alreadyKnowWhatToDo": false,
+        "subtasks": [],
+        "_dayDate": "2026-10-18",
+        "_dayLabel": "TODAY � OCT 17",
+        "_startTime": "9:15 PM",
+        "_endTime": "10:15 AM",
+        "_executionBadge": "THEN",
+        "_keep": true,
+        "deadline": null,
+        "completed": false,
+        "isInProgress": false,
+        "in_progress": false,
+        "executionStatus": "pending",
+        "scheduledDate": "2026-10-18",
+        "dayDate": "2026-10-18",
+        "scheduledStartTime": "9:00 AM",
+        "scheduledEndTime": "10:15 AM",
+        "startTime": "9:00 AM",
+        "endTime": "10:15 AM",
+        "isCompleted": false
+      },
+      "dayDate": "2026-10-18",
+      "date": "2026-10-18",
+      "dayLabel": "18/10/2026",
+      "startTime": "9:00 AM",
+      "endTime": "10:15 AM",
+      "scheduledStartTime": "14:00",
+      "scheduledEndTime": "15:00",
+      "startMin": 540,
+      "endMin": 615,
+      "startMinutes": 840,
+      "endMinutes": 900,
+      "executionBadge": "THEN",
+      "isOverCapacity": false,
+      "hasDeadlineConflict": false,
+      "rhythm": {
+        "totalSpan": 75,
+        "focusedMinutes": 60,
+        "chunks": [
+          45,
+          15
+        ],
+        "breaksCount": 1,
+        "breakMinutes": 15,
+        "segments": [
+          {
+            "type": "focus",
+            "duration": 45
+          },
+          {
+            "type": "break",
+            "duration": 15
+          },
+          {
+            "type": "focus",
+            "duration": 15
+          }
+        ]
+      }
+    }
+  ],
+  "unallocatedTasks": [],
+  "unarrangedTasks": [
+    {
+      "id": "task_sample_1",
+      "name": "Statistics Assignment (Problem Set 4)",
+      "hasDeadline": true,
+      "deadlineDate": "2026-11-25",
+      "deadlineTime": "21:00",
+      "importance": "High",
+      "consequence": "Big consequences",
+      "flexibility": [
+        "Probably not"
+      ],
+      "durationMinutes": 90,
+      "durationLabel": "1 hr 30 min",
+      "priorityCategory": "DO_FIRST",
+      "isBrokenDown": false,
+      "alreadyKnowWhatToDo": false,
+      "subtasks": [],
+      "completed": false,
+      "isInProgress": false,
+      "in_progress": false,
+      "_dayDate": "2026-10-17",
+      "_dayLabel": "TODAY � OCT 17",
+      "_startTime": "7:00 PM",
+      "_endTime": "8:45 PM",
+      "_executionBadge": "UP NEXT",
+      "_keep": true,
+      "deadline": "2026-11-25 21:00",
+      "executionStatus": "pending",
+      "timeHeader": "October 18, Now",
+      "userLabel": "Now",
+      "scheduledDate": null,
+      "startTime": null,
+      "endTime": null,
+      "executionBadge": null
+    }
+  ],
+  "availabilityDays": [
+    {
+      "date": "2026-10-17",
+      "label": "TODAY � OCT 17",
+      "isUnavailable": false,
+      "preservedBlocks": [],
+      "blocks": [
+        {
+          "id": "b_1",
+          "start": "19:00",
+          "end": "23:00",
+          "minutes": 240
+        }
+      ]
+    },
+    {
+      "date": "2026-10-18",
+      "label": "TOMORROW � OCT 18",
+      "isUnavailable": false,
+      "preservedBlocks": [],
+      "blocks": [
+        {
+          "id": "b_2",
+          "start": "09:00",
+          "end": "12:00",
+          "minutes": 180
+        },
+        {
+          "id": "b_3",
+          "start": "14:00",
+          "end": "17:00",
+          "minutes": 180
+        }
+      ]
+    },
+    {
+      "date": "2026-10-31",
+      "label": "H�m nay",
+      "isUnavailable": false,
+      "blocks": [
+        {
+          "id": "b_1793451026080",
+          "start": "14:00",
+          "end": "22:00"
+        }
+      ]
+    }
+  ],
+  "createdAt": "2026-10-18T13:54:39.514Z",
+  "updatedAt": "2026-10-31T13:14:47.407Z"
+}

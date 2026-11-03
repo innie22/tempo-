@@ -28,7 +28,7 @@
         stress_sign: {
             id: 'stress_sign',
             label: 'Sign of stress',
-            pluralLabel: 'Signs of stress',
+            pluralLabel: 'Dấu hiệu căng thẳng',
             icon: '🔴',
             color: '#B83D08',
             bgColor: '#FFE9DC',
@@ -37,7 +37,7 @@
         supportive: {
             id: 'supportive',
             label: 'Supportive',
-            pluralLabel: 'Supportive habits',
+            pluralLabel: 'Thói quen hỗ trợ',
             icon: '🟢',
             color: '#166545',
             bgColor: '#EDF7F1',
@@ -81,6 +81,21 @@
     ];
 
     // =========================================================================
+    // LOCALIZATION HELPER
+    // =========================================================================
+
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        try {
+            const stored = localStorage.getItem('tempo_language') || localStorage.getItem('tempo_lang');
+            if (stored === 'vi' || stored === 'en') return stored === 'vi';
+        } catch (e) {}
+        return false;
+    }
+
+    // =========================================================================
     // STORAGE HELPERS (LOCALSTORAGE + SUPABASE)
     // =========================================================================
 
@@ -120,6 +135,10 @@
         try {
             const key = getStorageKey(type);
             localStorage.setItem(key, JSON.stringify(data));
+            const uid = getUserId();
+            if (uid === 'local_user') {
+                localStorage.setItem(`tempo_selfcheck_${type}`, JSON.stringify(data));
+            }
         } catch (e) {
             console.warn(`[SelfCheck] Error saving ${type} to storage:`, e);
         }
@@ -207,29 +226,15 @@
         groups.forEach((groupTrackers, key) => {
             if (groupTrackers.length > 1) {
                 hasMutations = true;
-                // Determine authoritative tracker:
-                // 1. If it's Tension, prefer one with check_method === 'percentage'
-                // 2. Otherwise prefer the one with the latest updated_at or created_at
+                // Determine authoritative tracker by latest updated_at or created_at
                 let authoritative = groupTrackers[0];
                 for (let i = 1; i < groupTrackers.length; i++) {
                     const candidate = groupTrackers[i];
-                    if (key === 'stress_sign::tension') {
-                        if (candidate.check_method === 'percentage' && authoritative.check_method !== 'percentage') {
-                            authoritative = candidate;
-                            continue;
-                        }
-                    }
                     const candTime = candidate.updated_at || candidate.created_at || '';
                     const authTime = authoritative.updated_at || authoritative.created_at || '';
                     if (candTime > authTime) {
                         authoritative = candidate;
                     }
-                }
-
-                // If authoritative is Tension, ensure check_method is 'percentage'
-                if (key === 'stress_sign::tension' && authoritative.check_method !== 'percentage') {
-                    authoritative.check_method = 'percentage';
-                    authoritative.updated_at = new Date().toISOString();
                 }
 
                 if (!Array.isArray(authoritative.alias_ids)) {
@@ -254,13 +259,6 @@
                         }
                     }
                 });
-            } else if (groupTrackers.length === 1 && key === 'stress_sign::tension') {
-                const singleTension = groupTrackers[0];
-                if (singleTension.check_method !== 'percentage') {
-                    singleTension.check_method = 'percentage';
-                    singleTension.updated_at = new Date().toISOString();
-                    hasMutations = true;
-                }
             }
         });
 
@@ -504,7 +502,7 @@
 
         const todayDateStr = getTodayDateStr();
         const isTension = cleanName.toLowerCase().includes('tension');
-        const effMethod = isTension ? 'percentage' : (data.check_method || CHECK_METHODS.YES_NO);
+        const effMethod = data.check_method || (isTension ? 'percentage' : CHECK_METHODS.YES_NO);
 
         const initialVersion = {
             version_id: 'cfg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
@@ -558,6 +556,12 @@
         syncTrackerToSupabase(newTracker, 'insert');
 
         refreshRecoveryHomeIfActive();
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated'));
+        } catch (e) {}
         return newTracker;
     }
 
@@ -651,6 +655,12 @@
 
         syncTrackerToSupabase(updated, 'update');
         refreshRecoveryHomeIfActive();
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated'));
+        } catch (e) {}
         return updated;
     }
 
@@ -765,6 +775,12 @@
         syncCheckinToSupabase(checkinRecord, newObsList);
 
         refreshRecoveryHomeIfActive();
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
+        try {
+            window.dispatchEvent(new CustomEvent('tempo:selfcheck-updated'));
+        } catch (e) {}
         return { checkin: checkinRecord, observations: newObsList };
     }
 
@@ -932,6 +948,9 @@
                 window.TempoMode.renderRmodeHome();
             }
         }
+        if (window.TempoMode && typeof window.TempoMode.refreshStreakCardIfPresent === 'function') {
+            window.TempoMode.refreshStreakCardIfPresent();
+        }
         if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
             const scScreen = document.getElementById('screen-stress-check');
             if (scScreen && !scScreen.classList.contains('hidden')) {
@@ -962,7 +981,7 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-[#166545] inline-block"></span>
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">SELF-CHECK</span>
                         </div>
-                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Things I'm keeping track of</h3>
+                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Những điều mình đang theo dõi</h3>
                         <p class="text-xs text-[#6F6B68]">Create a check-in that fits you. You can change or archive items anytime.</p>
                     </div>
 
@@ -977,163 +996,13 @@
 
                     <!-- Footer Actions -->
                     <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
-                        <button type="button" onclick="window.TempoRecoverySelfCheck.openTrackerModal()" class="btn-primary px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
+                        <button type="button" onclick="if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') { window.TempoSelfCheckWorkspace.openAddTracking(); } else { window.TempoRecoverySelfCheck.openTrackerModal(); }" class="btn-primary px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs inline-flex items-center space-x-2 transition cursor-pointer">
                             <span>+ Add tracker</span>
                         </button>
                         <button type="button" onclick="window.TempoRecoverySelfCheck.closeManage()" class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
                             Done
                         </button>
                     </div>
-                </div>
-            </div>
-
-            <!-- MODAL 2: ADD / EDIT TRACKER -->
-            <div id="modal-selfcheck-tracker-edit" class="fixed inset-0 z-[80] flex items-center justify-center modal-backdrop p-4 hidden" style="z-index: 80;" role="dialog" aria-modal="true">
-                <div class="tempo-card max-w-lg w-full p-6 sm:p-8 space-y-6 bg-white rounded-3xl shadow-2xl relative border border-[#EAE4DF] max-h-[90vh] overflow-y-auto">
-                    <button type="button" onclick="window.TempoRecoverySelfCheck.closeTrackerModal()" class="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-lg transition cursor-pointer" title="Close">✕</button>
-
-                    <div class="space-y-1">
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#166545]">TRACKER CONFIGURATION</span>
-                        <h3 id="selfcheck-tracker-modal-title" class="font-heading text-2xl font-extrabold text-[#202124]">Add something to track</h3>
-                    </div>
-
-                    <form id="form-selfcheck-tracker" onsubmit="window.TempoRecoverySelfCheck.handleTrackerFormSubmit(event)" class="space-y-5">
-                        <input type="hidden" id="tracker-edit-id" value="">
-
-                        <!-- Name -->
-                        <div class="space-y-1.5">
-                            <label for="tracker-input-name" class="block text-xs font-bold uppercase tracking-wider text-[#202124]">Name</label>
-                            <input type="text" id="tracker-input-name" required placeholder="e.g. Trouble focusing, Sleep quality, Water..."
-                                   class="w-full px-4 py-3 rounded-xl border border-stone-200 focus:outline-none focus:border-[#166545] focus:ring-1 focus:ring-[#166545] text-sm text-[#202124]">
-                        </div>
-
-                        <!-- Category -->
-                        <div class="space-y-1.5">
-                            <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">Category</label>
-                            <div class="grid grid-cols-3 gap-2">
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-3 text-center flex flex-col items-center space-y-1 hover:border-[#FF6B2C] has-[:checked]:border-[#B83D08] has-[:checked]:bg-[#FFE9DC]/40 transition">
-                                    <input type="radio" name="tracker_category" value="stress_sign" checked onchange="window.TempoRecoverySelfCheck.onCategoryChanged()" class="sr-only">
-                                    <span class="text-base">🔴</span>
-                                    <span class="text-xs font-bold text-[#202124]">Sign of stress</span>
-                                </label>
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-3 text-center flex flex-col items-center space-y-1 hover:border-[#166545] has-[:checked]:border-[#166545] has-[:checked]:bg-[#EDF7F1] transition">
-                                    <input type="radio" name="tracker_category" value="supportive" onchange="window.TempoRecoverySelfCheck.onCategoryChanged()" class="sr-only">
-                                    <span class="text-base">🟢</span>
-                                    <span class="text-xs font-bold text-[#202124]">Supportive</span>
-                                </label>
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-3 text-center flex flex-col items-center space-y-1 hover:border-[#1E40AF] has-[:checked]:border-[#1E40AF] has-[:checked]:bg-[#DBEAFE]/40 transition">
-                                    <input type="radio" name="tracker_category" value="neutral" onchange="window.TempoRecoverySelfCheck.onCategoryChanged()" class="sr-only">
-                                    <span class="text-base">🔵</span>
-                                    <span class="text-xs font-bold text-[#202124]">General</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Check Method -->
-                        <div class="space-y-1.5">
-                            <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">Check With</label>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-2.5 text-center flex flex-col items-center space-y-0.5 has-[:checked]:border-[#166545] has-[:checked]:bg-[#EDF7F1] transition">
-                                    <input type="radio" name="tracker_method" value="yes_no" checked onchange="window.TempoRecoverySelfCheck.onMethodChanged()" class="sr-only">
-                                    <span class="text-xs font-bold text-[#202124]">Yes / No</span>
-                                </label>
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-2.5 text-center flex flex-col items-center space-y-0.5 has-[:checked]:border-[#166545] has-[:checked]:bg-[#EDF7F1] transition">
-                                    <input type="radio" name="tracker_method" value="scale" onchange="window.TempoRecoverySelfCheck.onMethodChanged()" class="sr-only">
-                                    <span class="text-xs font-bold text-[#202124]">Scale</span>
-                                </label>
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-2.5 text-center flex flex-col items-center space-y-0.5 has-[:checked]:border-[#166545] has-[:checked]:bg-[#EDF7F1] transition">
-                                    <input type="radio" name="tracker_method" value="percentage" onchange="window.TempoRecoverySelfCheck.onMethodChanged()" class="sr-only">
-                                    <span class="text-xs font-bold text-[#202124]">Percentage</span>
-                                </label>
-                                <label class="cursor-pointer border border-stone-200 rounded-xl p-2.5 text-center flex flex-col items-center space-y-0.5 has-[:checked]:border-[#166545] has-[:checked]:bg-[#EDF7F1] transition">
-                                    <input type="radio" name="tracker_method" value="quantity" onchange="window.TempoRecoverySelfCheck.onMethodChanged()" class="sr-only">
-                                    <span class="text-xs font-bold text-[#202124]">Quantity</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Method-Specific Config Panels -->
-                        <div id="tracker-config-scale" class="space-y-3 p-4 bg-stone-50 rounded-2xl border border-stone-200 hidden">
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-[11px] font-bold text-[#6F6B68]">Scale Range</label>
-                                    <div class="flex items-center space-x-2 pt-1">
-                                        <input type="number" id="tracker-scale-min" value="1" min="0" max="10" class="w-16 px-2.5 py-1.5 rounded-lg border border-stone-300 text-xs">
-                                        <span class="text-xs text-stone-400">to</span>
-                                        <input type="number" id="tracker-scale-max" value="5" min="2" max="10" class="w-16 px-2.5 py-1.5 rounded-lg border border-stone-300 text-xs">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="block text-[11px] font-bold text-[#6F6B68]">Labels</label>
-                                    <div class="space-y-1 pt-1">
-                                        <input type="text" id="tracker-scale-min-label" placeholder="Min (Very low)" value="Very low" class="w-full px-2.5 py-1 rounded-lg border border-stone-300 text-xs">
-                                        <input type="text" id="tracker-scale-max-label" placeholder="Max (Very high)" value="Very high" class="w-full px-2.5 py-1 rounded-lg border border-stone-300 text-xs">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div id="tracker-config-quantity" class="space-y-2 p-4 bg-stone-50 rounded-2xl border border-stone-200 hidden">
-                            <label for="tracker-quantity-unit" class="block text-[11px] font-bold text-[#6F6B68]">Unit of measurement</label>
-                            <input type="text" id="tracker-quantity-unit" placeholder="e.g. glasses, hours, cups, minutes, pages..." class="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs text-[#202124]">
-                        </div>
-
-                        <!-- Direction Setting (for scale and percentage) -->
-                        <div id="tracker-config-direction" class="space-y-1.5 p-4 bg-stone-50 rounded-2xl border border-stone-200 hidden">
-                            <label class="block text-[11px] font-bold text-[#6F6B68]">Higher values mean:</label>
-                            <div class="space-y-1">
-                                <label class="flex items-center space-x-2 cursor-pointer text-xs text-[#202124]">
-                                    <input type="radio" name="tracker_direction" value="higher_concerning" checked>
-                                    <span>This sign feels stronger</span>
-                                </label>
-                                <label class="flex items-center space-x-2 cursor-pointer text-xs text-[#202124]">
-                                    <input type="radio" name="tracker_direction" value="higher_better">
-                                    <span>I'm doing better</span>
-                                </label>
-                                <label class="flex items-center space-x-2 cursor-pointer text-xs text-[#202124]">
-                                    <input type="radio" name="tracker_direction" value="neutral">
-                                    <span>Just track it</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <!-- Pattern Notices Setting (stress signs only) -->
-                        <div id="tracker-config-patterns" class="p-4 bg-[#FFFBF7] rounded-2xl border border-[#FFD2BA] space-y-1">
-                            <label class="flex items-start space-x-2.5 cursor-pointer">
-                                <input type="checkbox" id="tracker-pattern-notices" checked class="mt-0.5 rounded text-[#B83D08] focus:ring-[#B83D08]">
-                                <div>
-                                    <span class="text-xs font-bold text-[#202124]">Help me notice patterns</span>
-                                    <p class="text-[11px] text-[#6F6B68]">Keep track of when this stress sign shows up so you can spot trends over time.</p>
-                                </div>
-                            </label>
-                        </div>
-
-                        <!-- Recovery Note Item Linking (Optional, max 3) -->
-                        <div id="tracker-config-note-linking" class="space-y-2 p-4 bg-stone-50 rounded-2xl border border-stone-200">
-                            <div class="flex items-center justify-between">
-                                <label class="block text-[11px] font-bold text-[#6F6B68] uppercase tracking-wider">
-                                    Link to Recovery Note reminder
-                                </label>
-                                <span class="text-[10px] text-stone-400 font-medium">Optional · Max 3</span>
-                            </div>
-                            <p class="text-[11px] text-[#6F6B68]">
-                                If this sign shows up more often, Tempo can gently remind you what you wanted to remember.
-                            </p>
-                            <div id="tracker-note-links-container" class="space-y-1.5 pt-1">
-                                <!-- Populated dynamically from TempoRecoveryNote.getItems() -->
-                            </div>
-                        </div>
-
-                        <!-- Buttons -->
-                        <div class="pt-4 border-t border-stone-100 flex items-center justify-end space-x-3">
-                            <button type="button" onclick="window.TempoRecoverySelfCheck.closeTrackerModal()" class="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
-                                Cancel
-                            </button>
-                            <button type="submit" class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer">
-                                Save tracker
-                            </button>
-                        </div>
-                    </form>
                 </div>
             </div>
 
@@ -1154,7 +1023,7 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-[#4A6B5D] inline-block"></span>
                             <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4A6B5D]">YOUR DAILY CHECK-IN</span>
                         </div>
-                        <h3 id="selfcheck-daily-modal-title" class="font-heading text-2xl font-extrabold text-[#37352F] tracking-tight">How have things been today?</h3>
+                        <h3 id="selfcheck-daily-modal-title" class="font-heading text-2xl font-extrabold text-[#37352F] tracking-tight">Hôm nay của bạn thế nào?</h3>
                         <p id="selfcheck-daily-modal-subtitle" class="text-xs text-[#7B7672]">Check in with whatever feels useful. You don't have to answer everything.</p>
                     </div>
 
@@ -1203,7 +1072,7 @@
                                 ✓ Checked in today
                             </span>
                         </div>
-                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Today's check-in</h3>
+                        <h3 class="font-heading text-2xl font-extrabold text-[#202124]">Điểm danh hôm nay</h3>
                         <p id="selfcheck-view-summary" class="text-xs text-[#6F6B68]"></p>
                     </div>
 
@@ -1215,10 +1084,17 @@
                     </div>
 
                     <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
-                        <button type="button" onclick="window.TempoRecoverySelfCheck.openDailyCheckin(true)"
-                                class="text-xs font-bold text-[#4A6B5D] hover:text-[#3B5441] transition cursor-pointer">
-                            Edit check-in
-                        </button>
+                        <div class="flex items-center space-x-3">
+                            <button type="button" onclick="window.TempoRecoverySelfCheck.openDailyCheckin(true)"
+                                    class="text-xs font-bold text-[#4A6B5D] hover:text-[#3B5441] transition cursor-pointer">
+                                Edit check-in
+                            </button>
+                            <span class="text-stone-300">•</span>
+                            <button type="button" onclick="window.TempoRecoverySelfCheck.closeViewToday(); if (window.TempoApp && typeof window.TempoApp.navigateTo === 'function') { window.TempoApp.navigateTo('stress-check'); } else { window.location.hash = '#stress-check'; }"
+                                    class="text-xs font-semibold text-[#8C766E] hover:text-[#37352F] transition cursor-pointer">
+                                Self-check tool →
+                            </button>
+                        </div>
                         <button type="button" onclick="window.TempoRecoverySelfCheck.closeViewToday()"
                                 class="px-4 py-2 rounded-xl text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition cursor-pointer">
                             Close
@@ -1235,12 +1111,6 @@
     // =========================================================================
 
     function openManage() {
-        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('manage');
-            }
-            return;
-        }
         ensureModalsMounted();
         renderManageView();
         const modal = document.getElementById('modal-selfcheck-manage');
@@ -1355,232 +1225,26 @@
     }
 
     // =========================================================================
-    // MODAL 2: ADD / EDIT TRACKER CONTROLLER
+    // ADD / EDIT TRACKER DELEGATION TO "YOUR TRACKING ITEM" MODAL
     // =========================================================================
 
     function openTrackerModal(trackerId = null, prefill = null) {
-        if (trackerId && window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAdjustTracker === 'function') {
-            window.TempoSelfCheckWorkspace.openAdjustTracker(trackerId);
-            return;
-        }
-        ensureModalsMounted();
-        const modal = document.getElementById('modal-selfcheck-tracker-edit');
-        const form = document.getElementById('form-selfcheck-tracker');
-        const titleEl = document.getElementById('selfcheck-tracker-modal-title');
-        const idInput = document.getElementById('tracker-edit-id');
-        const nameInput = document.getElementById('tracker-input-name');
-
-        if (!modal || !form) return;
-        form.reset();
-
         if (trackerId) {
-            const tracker = getTrackerById(trackerId);
-            if (!tracker) return;
-            idInput.value = tracker.id;
-            titleEl.textContent = 'Edit tracker';
-            nameInput.value = tracker.name;
-
-            // Category radio
-            const catRadio = form.querySelector(`input[name="tracker_category"][value="${tracker.category}"]`);
-            if (catRadio) catRadio.checked = true;
-
-            // Method radio
-            const methodRadio = form.querySelector(`input[name="tracker_method"][value="${tracker.check_method}"]`);
-            if (methodRadio) methodRadio.checked = true;
-
-            // Scale config
-            document.getElementById('tracker-scale-min').value = tracker.scale_min || 1;
-            document.getElementById('tracker-scale-max').value = tracker.scale_max || 5;
-            document.getElementById('tracker-scale-min-label').value = tracker.scale_min_label || 'Very low';
-            document.getElementById('tracker-scale-max-label').value = tracker.scale_max_label || 'Very high';
-
-            // Quantity config
-            document.getElementById('tracker-quantity-unit').value = tracker.quantity_unit || '';
-
-            // Direction
-            const dirRadio = form.querySelector(`input[name="tracker_direction"][value="${tracker.direction || 'neutral'}"]`);
-            if (dirRadio) dirRadio.checked = true;
-
-            // Pattern notices
-            document.getElementById('tracker-pattern-notices').checked = Boolean(tracker.pattern_notices_enabled);
-
-            // Recovery Note linking
-            renderNoteLinkingSelector(tracker.linked_note_item_ids || []);
-        } else {
-            idInput.value = '';
-            titleEl.textContent = 'Add something to track';
-            renderNoteLinkingSelector([]);
-            if (prefill) {
-                nameInput.value = prefill.name || '';
-                if (prefill.category) {
-                    const r = form.querySelector(`input[name="tracker_category"][value="${prefill.category}"]`);
-                    if (r) r.checked = true;
-                }
-                if (prefill.check_method) {
-                    const m = form.querySelector(`input[name="tracker_method"][value="${prefill.check_method}"]`);
-                    if (m) m.checked = true;
-                }
-                if (prefill.scale_min !== undefined) {
-                    document.getElementById('tracker-scale-min').value = prefill.scale_min;
-                }
-                if (prefill.scale_max !== undefined) {
-                    document.getElementById('tracker-scale-max').value = prefill.scale_max;
-                }
-                if (prefill.scale_min_label) {
-                    document.getElementById('tracker-scale-min-label').value = prefill.scale_min_label;
-                }
-                if (prefill.scale_max_label) {
-                    document.getElementById('tracker-scale-max-label').value = prefill.scale_max_label;
-                }
-                if (prefill.quantity_unit) {
-                    document.getElementById('tracker-quantity-unit').value = prefill.quantity_unit;
-                }
-                if (prefill.direction) {
-                    const d = form.querySelector(`input[name="tracker_direction"][value="${prefill.direction}"]`);
-                    if (d) d.checked = true;
-                }
-                if (prefill.pattern_notices_enabled !== undefined) {
-                    document.getElementById('tracker-pattern-notices').checked = Boolean(prefill.pattern_notices_enabled);
-                }
-            } else {
-                nameInput.value = '';
-                form.querySelector(`input[name="tracker_category"][value="stress_sign"]`).checked = true;
-                form.querySelector(`input[name="tracker_method"][value="yes_no"]`).checked = true;
-                document.getElementById('tracker-scale-min').value = 1;
-                document.getElementById('tracker-scale-max').value = 5;
-                document.getElementById('tracker-scale-min-label').value = 'Very low';
-                document.getElementById('tracker-scale-max-label').value = 'Very high';
-                document.getElementById('tracker-quantity-unit').value = '';
-                form.querySelector(`input[name="tracker_direction"][value="higher_concerning"]`).checked = true;
-                document.getElementById('tracker-pattern-notices').checked = true;
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAdjustTracker === 'function') {
+                window.TempoSelfCheckWorkspace.openAdjustTracker(trackerId);
+                return;
             }
-        }
-
-        onCategoryChanged();
-        onMethodChanged();
-
-        modal.classList.remove('hidden');
-        nameInput.focus();
-    }
-
-    function renderNoteLinkingSelector(selectedIds = []) {
-        const container = document.getElementById('tracker-note-links-container');
-        if (!container) return;
-
-        const noteItems = (window.TempoRecoveryNote && typeof window.TempoRecoveryNote.getItems === 'function')
-            ? window.TempoRecoveryNote.getItems()
-            : [];
-
-        if (noteItems.length === 0) {
-            container.innerHTML = `
-                <p class="text-xs text-stone-400 italic">No Recovery Note items written yet. Write items in your Recovery Note to link them here.</p>
-            `;
-            return;
-        }
-
-        const idSet = new Set(selectedIds || []);
-        container.innerHTML = noteItems.map(item => {
-            const isChecked = idSet.has(item.id);
-            return `
-                <label class="flex items-start space-x-2 text-xs text-[#202124] p-1.5 rounded-lg hover:bg-white cursor-pointer transition">
-                    <input type="checkbox" name="tracker_linked_note" value="${item.id}" ${isChecked ? 'checked' : ''}
-                           onchange="window.TempoRecoverySelfCheck.onNoteLinkChanged(this)"
-                           class="mt-0.5 rounded text-[#166545] focus:ring-[#166545]">
-                    <span class="leading-tight select-none">${escapeHTML(item.text)}</span>
-                </label>
-            `;
-        }).join('');
-    }
-
-    function onNoteLinkChanged(checkbox) {
-        const checked = document.querySelectorAll('input[name="tracker_linked_note"]:checked');
-        if (checked.length > 3) {
-            checkbox.checked = false;
-            if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("You can link up to 3 Recovery Note reminders.");
+        } else {
+            if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.openAddTracking === 'function') {
+                window.TempoSelfCheckWorkspace.openAddTracking(prefill);
+                return;
             }
         }
     }
 
     function closeTrackerModal() {
-        const modal = document.getElementById('modal-selfcheck-tracker-edit');
-        if (modal) modal.classList.add('hidden');
-    }
-
-    function onCategoryChanged() {
-        const form = document.getElementById('form-selfcheck-tracker');
-        if (!form) return;
-        const cat = form.querySelector('input[name="tracker_category"]:checked')?.value;
-        const patternBox = document.getElementById('tracker-config-patterns');
-        if (patternBox) {
-            patternBox.style.display = (cat === 'stress_sign') ? 'block' : 'none';
-        }
-    }
-
-    function onMethodChanged() {
-        const form = document.getElementById('form-selfcheck-tracker');
-        if (!form) return;
-        const method = form.querySelector('input[name="tracker_method"]:checked')?.value;
-        const scaleBox = document.getElementById('tracker-config-scale');
-        const quantityBox = document.getElementById('tracker-config-quantity');
-        const directionBox = document.getElementById('tracker-config-direction');
-
-        if (scaleBox) scaleBox.classList.toggle('hidden', method !== 'scale');
-        if (quantityBox) quantityBox.classList.toggle('hidden', method !== 'quantity');
-        if (directionBox) directionBox.classList.toggle('hidden', method !== 'scale' && method !== 'percentage');
-    }
-
-    function handleTrackerFormSubmit(event) {
-        event.preventDefault();
-        const form = document.getElementById('form-selfcheck-tracker');
-        if (!form) return;
-
-        const id = document.getElementById('tracker-edit-id').value;
-        const name = document.getElementById('tracker-input-name').value.trim();
-        const category = form.querySelector('input[name="tracker_category"]:checked')?.value || 'stress_sign';
-        const check_method = form.querySelector('input[name="tracker_method"]:checked')?.value || 'yes_no';
-        const direction = form.querySelector('input[name="tracker_direction"]:checked')?.value || 'neutral';
-        const pattern_notices_enabled = document.getElementById('tracker-pattern-notices')?.checked || false;
-
-        const linkedBoxes = form.querySelectorAll('input[name="tracker_linked_note"]:checked');
-        const linked_note_item_ids = Array.from(linkedBoxes).map(cb => cb.value);
-
-        const scale_min = Number(document.getElementById('tracker-scale-min').value) || 1;
-        const scale_max = Number(document.getElementById('tracker-scale-max').value) || 5;
-        const scale_min_label = document.getElementById('tracker-scale-min-label').value.trim() || 'Very low';
-        const scale_max_label = document.getElementById('tracker-scale-max-label').value.trim() || 'Very high';
-        const quantity_unit = document.getElementById('tracker-quantity-unit').value.trim();
-
-        const payload = {
-            name,
-            category,
-            check_method,
-            direction,
-            pattern_notices_enabled: category === 'stress_sign' ? pattern_notices_enabled : false,
-            linked_note_item_ids,
-            scale_min,
-            scale_max,
-            scale_min_label,
-            scale_max_label,
-            quantity_unit
-        };
-
-        let savedTracker;
-        if (id) {
-            savedTracker = updateTracker(id, payload);
-        } else {
-            savedTracker = createTracker(payload);
-        }
-
-        closeTrackerModal();
-        renderManageView();
-
-        if (window.TempoRecoverySetup && typeof window.TempoRecoverySetup.onTrackerSaved === 'function') {
-            window.TempoRecoverySetup.onTrackerSaved(savedTracker);
-        }
-
-        if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-            window.TempoApp.showToast(id ? "Tracker updated." : "Tracker added.");
+        if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.closeAdjustModal === 'function') {
+            window.TempoSelfCheckWorkspace.closeAdjustModal();
         }
     }
 
@@ -1592,17 +1256,11 @@
     let activeDailyDraft = null;
 
     function openDailyCheckin(isEditMode = false) {
-        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('checkin', { isEdit: isEditMode });
-            }
-            return;
-        }
         ensureModalsMounted();
-        const activeTrackers = getActiveTrackers();
+        let activeTrackers = getActiveTrackers();
         if (activeTrackers.length === 0) {
-            // No active trackers -> open manage/setup
-            openManage();
+            closeDailyCheckin();
+            openSetup();
             return;
         }
 
@@ -1612,7 +1270,24 @@
 
         const todayCheckin = getTodayCheckin();
         const existingObs = todayCheckin ? getObservationsForCheckin(todayCheckin.id) : [];
-        const existingObsMap = new Map(existingObs.map(o => [o.tracker_id, o]));
+        const existingObsMap = new Map();
+        existingObs.forEach(o => {
+            if (o && o.tracker_id) {
+                existingObsMap.set(o.tracker_id, o);
+            }
+        });
+
+        // Also check aliases for existing observations
+        activeTrackers.forEach(t => {
+            if (!existingObsMap.has(t.id) && Array.isArray(t.alias_ids)) {
+                for (const aid of t.alias_ids) {
+                    if (existingObsMap.has(aid)) {
+                        existingObsMap.set(t.id, existingObsMap.get(aid));
+                        break;
+                    }
+                }
+            }
+        });
 
         // Build draft observations for active trackers
         const draftObs = {};
@@ -1671,7 +1346,7 @@
         const titleEl = document.getElementById('selfcheck-daily-modal-title');
         const subtitleEl = document.getElementById('selfcheck-daily-modal-subtitle');
         if (titleEl) {
-            titleEl.textContent = activeDailyDraft.isEditMode ? "Edit today's check-in" : "How have things been today?";
+            titleEl.textContent = activeDailyDraft.isEditMode ? "Edit today's check-in" : "Hôm nay của bạn thế nào?";
         }
         if (subtitleEl) {
             subtitleEl.textContent = activeDailyDraft.isEditMode 
@@ -1999,15 +1674,19 @@
     // =========================================================================
 
     function openViewToday() {
-        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('view');
-            }
+        ensureModalsMounted();
+        let activeTrackers = getActiveTrackers();
+        if (activeTrackers.length === 0) {
+            closeViewToday();
+            openSetup();
             return;
         }
-        ensureModalsMounted();
         const todayCheckin = getTodayCheckin();
-        const activeTrackers = getActiveTrackers();
+        if (!todayCheckin) {
+            openDailyCheckin(false);
+            return;
+        }
+
         const modal = document.getElementById('modal-selfcheck-view');
         const summaryEl = document.getElementById('selfcheck-view-summary');
         const contentEl = document.getElementById('selfcheck-view-content');
@@ -2016,9 +1695,26 @@
 
         if (!modal || !contentEl) return;
 
-        const observations = todayCheckin ? getObservationsForCheckin(todayCheckin.id) : [];
-        const obsMap = new Map(observations.map(o => [o.tracker_id, o]));
-        const answeredCount = observations.filter(o => o.status === 'answered').length;
+        const observations = getObservationsForCheckin(todayCheckin.id);
+        const obsMap = new Map();
+        observations.forEach(o => {
+            if (o && o.tracker_id) obsMap.set(o.tracker_id, o);
+        });
+        activeTrackers.forEach(t => {
+            if (!obsMap.has(t.id) && Array.isArray(t.alias_ids)) {
+                for (const aid of t.alias_ids) {
+                    if (obsMap.has(aid)) {
+                        obsMap.set(t.id, obsMap.get(aid));
+                        break;
+                    }
+                }
+            }
+        });
+
+        const answeredCount = activeTrackers.filter(t => {
+            const o = obsMap.get(t.id);
+            return o && o.status === 'answered' && o.value !== null && o.value !== undefined && o.value !== '';
+        }).length;
 
         if (summaryEl) {
             summaryEl.textContent = `You checked in on ${answeredCount} of ${activeTrackers.length} things today.`;
@@ -2100,12 +1796,6 @@
     }
 
     function openSetup() {
-        if (!window.TempoAuth || !window.TempoAuth.getCurrentUser()) {
-            if (window.TempoMode && typeof window.TempoMode.openStrack === 'function') {
-                window.TempoMode.openStrack('setup');
-            }
-            return;
-        }
         openManage();
     }
 
@@ -2121,6 +1811,333 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    /**
+     * Resolves standardized tracking summary label by tracking method.
+     * @param {string} method - 'percentage' | 'scale' | 'quantity' | 'options' | 'yes_no'
+     * @param {boolean} isVi - true if Vietnamese
+     * @returns {string} Standardized method summary label
+     */
+    function getTrackingMethodSummaryLabel(method, isVi) {
+        const norm = String(method || '').toLowerCase().replace(/[-\s]/g, '_');
+        if (norm === 'percentage') {
+            return isVi ? 'Mức trung bình' : 'Average level';
+        } else if (norm === 'scale') {
+            return isVi ? 'Điểm trung bình' : 'Average score';
+        } else if (norm === 'quantity') {
+            return isVi ? 'Tổng lượng ghi nhận' : 'Total recorded';
+        } else if (norm === 'options') {
+            return isVi ? 'Tỷ lệ lựa chọn' : 'Option distribution';
+        } else {
+            return isVi ? 'Tỷ lệ phản hồi' : 'Response distribution';
+        }
+    }
+
+    /**
+     * Resolves the canonical tracking method strictly from the tracker's saved configuration.
+     * Never infers tracking method from observation values or recorded history.
+     * @param {Object} tracker - Tracker config object
+     * @returns {string} 'percentage' | 'scale' | 'quantity' | 'options' | 'yes_no'
+     */
+    function resolveTrackerMethod(tracker) {
+        if (!tracker) return 'percentage';
+
+        // 1. Strictly read the saved tracking method from tracker configuration
+        const rawMethod = tracker.check_method || tracker.checkMethod || tracker.method || tracker.tracking_method;
+        if (rawMethod) {
+            const norm = String(rawMethod).trim().toLowerCase().replace(/[-\s]/g, '_');
+            if (norm === 'percentage' || norm === 'percent') return 'percentage';
+            if (norm === 'scale') return 'scale';
+            if (norm === 'quantity') return 'quantity';
+            if (norm === 'options') return 'options';
+            if (norm === 'yes_no' || norm === 'yesno' || norm === 'boolean') return 'yes_no';
+            return norm;
+        }
+
+        // 2. Tension uses Percentage (%)
+        const nameLower = (tracker.name || '').trim().toLowerCase();
+        if (nameLower.includes('tension')) {
+            return 'percentage';
+        }
+
+        // 3. Fallback strictly based on tracker's own static properties (never from observation values)
+        if (tracker.scale_max !== undefined || tracker.scale_min !== undefined || tracker.scale_range) {
+            return 'scale';
+        }
+        if (tracker.quantity_unit !== undefined && tracker.quantity_unit !== null && tracker.quantity_unit !== '') {
+            return 'quantity';
+        }
+        if (Array.isArray(tracker.options) && tracker.options.length > 0) {
+            return 'options';
+        }
+
+        return 'percentage';
+    }
+
+    /**
+     * Calculates standardized tracking summary metrics based on tracker method.
+     * @param {Object} tracker - Tracker config object
+     * @param {Array} observations - List of observation records
+     * @param {Object} options - Optional config { isVi }
+     * @returns {Object} { method, metricLabel, metricValue, hasData, count, ... }
+     */
+    function calculateTrackingSummary(tracker, observations, options = {}) {
+        const isVi = (typeof options.isVi === 'boolean') ? options.isVi : isViLocale();
+        const method = resolveTrackerMethod(tracker);
+        const metricLabel = getTrackingMethodSummaryLabel(method, isVi);
+
+        // Filter valid answered observations
+        const validObs = (observations || []).filter(o => 
+            o && o.status === 'answered' && o.value !== null && o.value !== undefined && o.value !== ''
+        );
+
+        if (validObs.length === 0) {
+            return {
+                method,
+                metricLabel,
+                metricValue: '—',
+                hasData: false,
+                count: 0
+            };
+        }
+
+        if (method === 'percentage') {
+            const pctVals = [];
+            validObs.forEach(o => {
+                const str = String(o.value).replace('%', '').trim();
+                const num = parseFloat(str);
+                if (!isNaN(num)) pctVals.push(num);
+            });
+            if (pctVals.length === 0) {
+                return { method, metricLabel, metricValue: '—', hasData: false, count: 0 };
+            }
+            const sum = pctVals.reduce((acc, v) => acc + v, 0);
+            const avg = Math.round(sum / pctVals.length);
+            return {
+                method,
+                metricLabel,
+                metricValue: `${avg}%`,
+                hasData: true,
+                count: pctVals.length,
+                averagePercentage: avg
+            };
+        }
+
+        if (method === 'scale') {
+            const scaleNums = [];
+            validObs.forEach(o => {
+                const num = parseFloat(o.value);
+                if (!isNaN(num)) scaleNums.push(num);
+            });
+            if (scaleNums.length === 0) {
+                return { method, metricLabel, metricValue: '—', hasData: false, count: 0 };
+            }
+            const scaleMax = (tracker && tracker.scale_max !== undefined) ? tracker.scale_max : ((tracker && tracker.scale_range === '1-10') ? 10 : 5);
+            const sum = scaleNums.reduce((acc, v) => acc + v, 0);
+            const avg = sum / scaleNums.length;
+            const avgStr = Number.isInteger(avg) ? `${avg}` : avg.toFixed(1);
+            return {
+                method,
+                metricLabel,
+                metricValue: `${avgStr}/${scaleMax}`,
+                hasData: true,
+                count: scaleNums.length,
+                averageScore: avg,
+                scaleMax
+            };
+        }
+
+        if (method === 'quantity') {
+            const qtyVals = [];
+            let foundUnit = (tracker && tracker.quantity_unit) ? tracker.quantity_unit : null;
+            validObs.forEach(o => {
+                if (o.value === 'no' || o.value === false) return;
+                const num = parseFloat(o.value);
+                if (!isNaN(num)) {
+                    qtyVals.push(num);
+                    if (!foundUnit && o.quantity_unit) foundUnit = o.quantity_unit;
+                }
+            });
+            if (qtyVals.length === 0) {
+                return { method, metricLabel, metricValue: '—', hasData: false, count: 0 };
+            }
+            const total = qtyVals.reduce((acc, v) => acc + v, 0);
+            const displayTotal = Number.isInteger(total) ? total : Number(total.toFixed(2));
+            const unit = foundUnit ? ` ${foundUnit}` : '';
+            return {
+                method,
+                metricLabel,
+                metricValue: `${displayTotal}${unit}`,
+                hasData: true,
+                count: qtyVals.length,
+                totalQuantity: total,
+                unit: foundUnit || ''
+            };
+        }
+
+        // Canonical key normalizer: trims, lowercases, replaces underscores & hyphens with single spaces
+        function canonicalizeOptionKey(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .trim()
+                .toLowerCase()
+                .replace(/[-_]+/g, ' ')
+                .replace(/\s+/g, ' ');
+        }
+
+        // Match observation value to an option in optList (resolving not_good <-> Not good, yes/no <-> Good/Not good)
+        function matchOptionToPredefined(val, options) {
+            if (val === null || val === undefined || !Array.isArray(options) || options.length === 0) return null;
+            const valStr = String(val).trim();
+            const canonVal = canonicalizeOptionKey(valStr);
+            if (!canonVal) return null;
+
+            // 1. Direct case-insensitive match
+            const direct = options.find(opt => String(opt).trim().toLowerCase() === valStr.toLowerCase());
+            if (direct) return direct;
+
+            // 2. Canonical key match (handles not_good <-> Not good, not-good <-> not good)
+            const canonMatch = options.find(opt => canonicalizeOptionKey(opt) === canonVal);
+            if (canonMatch) return canonMatch;
+
+            // 3. Predefined alias mappings (e.g. good <-> yes, not_good <-> no)
+            for (const opt of options) {
+                const canonOpt = canonicalizeOptionKey(opt);
+                if (canonOpt === 'good' || canonOpt === 'tốt') {
+                    if (['good', 'tốt', 'tot', 'yes', 'có', 'co', 'true'].includes(canonVal)) return opt;
+                } else if (canonOpt === 'not good' || canonOpt === 'chưa tốt' || canonOpt === 'chua tot') {
+                    if (['not good', 'not_good', 'not-good', 'chưa tốt', 'chua tot', 'chua_tot', 'no', 'không', 'khong', 'false'].includes(canonVal)) return opt;
+                } else if (canonOpt === 'yes' || canonOpt === 'có') {
+                    if (['yes', 'có', 'co', 'good', 'tốt', 'tot', 'true'].includes(canonVal)) return opt;
+                } else if (canonOpt === 'no' || canonOpt === 'không') {
+                    if (['no', 'không', 'khong', 'not good', 'not_good', 'not-good', 'chưa tốt', 'chua tot', 'false'].includes(canonVal)) return opt;
+                }
+            }
+
+            return null;
+        }
+
+        if (method === 'options') {
+            const total = validObs.length;
+            let optList = (tracker && Array.isArray(tracker.options) && tracker.options.length > 0)
+                ? [...tracker.options]
+                : [];
+            if (optList.length === 0) {
+                const nameLower = (tracker && tracker.name || '').toLowerCase();
+                if (nameLower.includes('sleep') || nameLower.includes('giấc ngủ')) {
+                    optList = ['Good', 'Not good'];
+                }
+            }
+
+            // Deduplicate configured optList itself in case of duplicate entries
+            const deduplicatedOpts = [];
+            optList.forEach(opt => {
+                const canon = canonicalizeOptionKey(opt);
+                if (!deduplicatedOpts.some(existing => canonicalizeOptionKey(existing) === canon)) {
+                    deduplicatedOpts.push(opt);
+                }
+            });
+            optList = deduplicatedOpts;
+
+            // Discover any genuinely new distinct custom options in observations
+            validObs.forEach(o => {
+                const valStr = String(o.value).trim();
+                if (!valStr) return;
+                const matched = matchOptionToPredefined(valStr, optList);
+                if (!matched) {
+                    const canon = canonicalizeOptionKey(valStr);
+                    const alreadyPresent = optList.some(existing => canonicalizeOptionKey(existing) === canon);
+                    if (!alreadyPresent) {
+                        let pretty = valStr;
+                        if (pretty.includes('_') || pretty.includes('-')) {
+                            pretty = pretty.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                        }
+                        optList.push(pretty);
+                    }
+                }
+            });
+
+            // If still empty, fallback
+            if (optList.length === 0) {
+                optList = ['Good', 'Not good'];
+            }
+
+            // Aggregate counts: map each observation to its normalized option
+            const counts = {};
+            optList.forEach(opt => counts[opt] = 0);
+            validObs.forEach(o => {
+                const valStr = String(o.value).trim();
+                const matched = matchOptionToPredefined(valStr, optList);
+                if (matched && counts[matched] !== undefined) {
+                    counts[matched]++;
+                } else {
+                    const canon = canonicalizeOptionKey(valStr);
+                    const matchedCanon = optList.find(opt => canonicalizeOptionKey(opt) === canon);
+                    if (matchedCanon && counts[matchedCanon] !== undefined) {
+                        counts[matchedCanon]++;
+                    } else if (counts[valStr] !== undefined) {
+                        counts[valStr]++;
+                    } else {
+                        counts[valStr] = 1;
+                    }
+                }
+            });
+
+            // Display format: display only option names and percentages separated by ' · '
+            // Example: Good (50%) · Not good (50%)
+            const distributionParts = optList.map(opt => {
+                const cnt = counts[opt] || 0;
+                const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+                return `${opt} (${pct}%)`;
+            });
+
+            return {
+                method,
+                metricLabel,
+                metricValue: distributionParts.join(' · '),
+                hasData: true,
+                count: total,
+                counts,
+                options: optList
+            };
+        }
+
+        // Default: yes_no
+        const total = validObs.length;
+        let yesCount = 0;
+        let noCount = 0;
+        validObs.forEach(o => {
+            const v = typeof o.value === 'boolean' ? o.value : String(o.value).trim().toLowerCase();
+            if (v === true || v === 'yes' || v === 'true' || v === 'có' || v === 'good' || v === 'tốt') {
+                yesCount++;
+            } else if (v === false || v === 'no' || v === 'false' || v === 'không' || v === 'not good' || v === 'not_good' || v === 'not-good' || v === 'chưa tốt' || v === 'chua tot' || v === 'chua_tot') {
+                noCount++;
+            } else {
+                if (v) yesCount++; else noCount++;
+            }
+        });
+        const totalYesNo = yesCount + noCount;
+        if (totalYesNo === 0) {
+            return { method: 'yes_no', metricLabel, metricValue: '—', hasData: false, count: 0 };
+        }
+        const yesPct = (yesCount / totalYesNo) * 100;
+        const noPct = (noCount / totalYesNo) * 100;
+        const yesPctStr = Number.isInteger(yesPct) ? `${yesPct}%` : `${yesPct.toFixed(1)}%`;
+        const noPctStr = Number.isInteger(noPct) ? `${noPct}%` : `${noPct.toFixed(1)}%`;
+        const yesLabel = isVi ? 'Có' : 'Yes';
+        const noLabel = isVi ? 'Không' : 'No';
+        const formatted = `${yesLabel} – ${yesPctStr} (${yesCount}/${totalYesNo}), ${noLabel} – ${noPctStr} (${noCount}/${totalYesNo})`;
+
+        return {
+            method: 'yes_no',
+            metricLabel,
+            metricValue: formatted,
+            hasData: true,
+            count: totalYesNo,
+            yesCount,
+            noCount
+        };
     }
 
     // =========================================================================
@@ -2141,6 +2158,9 @@
         init,
         CATEGORIES,
         CHECK_METHODS,
+        resolveTrackerMethod,
+        getTrackingMethodSummaryLabel,
+        calculateTrackingSummary,
         // Trackers API
         getTrackers,
         getActiveTrackers,
@@ -2170,10 +2190,6 @@
         closeManage,
         openTrackerModal,
         closeTrackerModal,
-        onCategoryChanged,
-        onMethodChanged,
-        onNoteLinkChanged,
-        handleTrackerFormSubmit,
         handleArchiveTracker,
         useSuggestion,
         // Setup Management & Configuration Versions

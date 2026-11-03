@@ -55,6 +55,7 @@ window.TempoApp = (function() {
         initQuickToolsDropdown();
         initMainRoutingFlow();
         initWhatIsTempoModal();
+        initGlobalModalBackdropDismissal();
 
         // Handle hash navigation with resolved user & plan state
         window.addEventListener('hashchange', handleHashChange);
@@ -155,15 +156,15 @@ window.TempoApp = (function() {
         }
 
         // Shared Authenticated Tool: Wplan (Working Plan)
-        const isWplan = (tabId === 'plan-workspace');
+        const isWplan = (tabId === 'plan-workspace' || tabId === 'tool-workplan' || tabId === 'workplan');
         if (isWplan && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
             const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
             if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
                 window.TempoMode.setPendingIntent({
-                    destination: 'plan-workspace',
+                    destination: 'tool-workplan',
                     action: 'navigate',
                     source: src,
-                    requiredParams: {},
+                    requiredParams: subTab ? { taskId: subTab } : {},
                     type: 'tool',
                     tool: 'plan-workspace',
                     sourceContext: src
@@ -203,41 +204,83 @@ window.TempoApp = (function() {
             }
         }
 
-        // Direct Messages route alias
-        if (tabId === 'direct-messages') {
-            navigateTo('posts', 'messages');
+        // Learn & Solve / Hub aliases migrated to Community
+        if (tabId === 'hub' || tabId === 'learn-solve' || tabId === 'learn') {
+            navigateTo('community', 'learn');
+            return;
+        }
+        if (tabId === 'solve' || tabId === 'tips') {
+            navigateTo('community', 'tips');
             return;
         }
 
-        // Tempo Posts / Direct Messages (Community modal experience)
+        // Direct Messages route alias
+        if (tabId === 'direct-messages') {
+            navigateTo('community', 'messages');
+            return;
+        }
+
+        // Legacy posts route alias
         if (tabId === 'posts') {
-            const section = subTab === 'messages' ? 'messages' : 'feed';
-            if (section === 'messages' && (!window.TempoAuth || !window.TempoAuth.getCurrentUser())) {
-                const src = window.TempoMode && window.TempoMode.getSourceContext ? window.TempoMode.getSourceContext() : 'entry';
-                if (window.TempoMode && typeof window.TempoMode.setPendingIntent === 'function') {
-                    window.TempoMode.setPendingIntent({
-                        destination: 'posts',
-                        action: 'navigate',
-                        source: src,
-                        requiredParams: { section: 'messages' },
-                        type: 'tool',
-                        tool: 'posts',
-                        sourceContext: src
-                    });
+            const targetTab = (subTab === 'messages') ? 'messages' : 'posts';
+            navigateTo('community', targetTab);
+            return;
+        }
+
+        // Tempo Community Unified Screen
+        if (tabId === 'community') {
+            const targetTab = subTab || 'announcement';
+            currentTab = 'community';
+            window.location.hash = (targetTab === 'announcement') ? '#community' : `#community?tab=${targetTab}`;
+
+            // Hide all screen containers
+            document.querySelectorAll('.screen-container').forEach(screen => {
+                screen.classList.add('hidden');
+            });
+
+            // Show community screen
+            const targetScreen = document.getElementById('screen-community');
+            if (targetScreen) targetScreen.classList.remove('hidden');
+
+            // Select active category in TempoCommunity controller (Requirement 5: canonical posts navigation)
+            if (window.TempoCommunity) {
+                if (targetTab === 'posts' && typeof window.TempoCommunity.navigateToPostsFeed === 'function') {
+                    window.TempoCommunity.navigateToPostsFeed();
+                } else if (typeof window.TempoCommunity.selectTab === 'function') {
+                    window.TempoCommunity.selectTab(targetTab, false);
                 }
-                if (window.TempoAuth && typeof window.TempoAuth.openSignInModal === 'function') {
-                    window.TempoAuth.openSignInModal();
-                }
-                if (typeof showToast === 'function') {
-                    showToast("Please sign in or create an account to view Direct Messages.");
-                }
-                return;
             }
 
-            if (window.TempoCommunity && typeof window.TempoCommunity.openCommunityModal === 'function') {
-                window.TempoCommunity.openCommunityModal(section);
+            // Ensure global custom background color
+            if (window.TempoTheme && typeof window.TempoTheme.ensureCurrentBackground === 'function') {
+                window.TempoTheme.ensureCurrentBackground();
             }
-            window.location.hash = section === 'messages' ? '#posts?section=messages' : '#posts';
+
+            // Update desktop nav
+            document.querySelectorAll('header nav a[data-nav]').forEach(el => {
+                const isMatch = el.dataset.nav === 'community';
+                if (isMatch) {
+                    el.classList.add('text-[#FF6B2C]', 'font-semibold', 'bg-[#FFE9DC]');
+                    el.classList.remove('text-[#6F6B68]', 'hover:text-[#202124]', 'hover:bg-[#F3F1EF]', 'text-gray-600', 'hover:text-gray-900', 'text-emerald-800', 'bg-emerald-50');
+                } else {
+                    el.classList.remove('text-[#FF6B2C]', 'font-semibold', 'bg-[#FFE9DC]', 'text-emerald-800', 'bg-emerald-50');
+                    el.classList.add('text-[#6F6B68]', 'hover:text-[#202124]', 'hover:bg-[#F3F1EF]');
+                }
+            });
+
+            // Update mobile bottom nav
+            document.querySelectorAll('nav[class*="md:hidden"] a[data-nav]').forEach(el => {
+                const isMatch = el.dataset.nav === 'community';
+                if (isMatch) {
+                    el.classList.add('text-[#FF6B2C]', 'font-semibold');
+                    el.classList.remove('text-gray-500');
+                } else {
+                    el.classList.remove('text-[#FF6B2C]', 'font-semibold');
+                    el.classList.add('text-gray-500');
+                }
+            });
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
 
@@ -306,12 +349,21 @@ window.TempoApp = (function() {
         }
 
         // Hide all screens
+        if (tabId !== 'emergency') {
+            document.body.classList.remove('reality-check-active');
+            document.body.classList.remove('prioritize-estimate-active');
+            document.body.classList.remove('priority-review-active');
+            document.body.classList.remove('available-time-active');
+            document.body.classList.remove('plan-review-active');
+        }
         document.querySelectorAll('.screen-container').forEach(screen => {
             screen.classList.add('hidden');
         });
 
         // Show active screen
-        const targetScreen = document.getElementById(`screen-${tabId}`) || (tabId === 'learn' ? document.getElementById('screen-hub') : null);
+        const targetScreen = document.getElementById(`screen-${tabId}`) ||
+                             ((tabId === 'tool-workplan' || tabId === 'workplan') ? document.getElementById('screen-plan-workspace') : null) ||
+                             (tabId === 'learn' ? document.getElementById('screen-hub') : null);
         if (targetScreen) {
             targetScreen.classList.remove('hidden');
         }
@@ -364,21 +416,23 @@ window.TempoApp = (function() {
             }
         }
 
+        // Ensure global theme background on every navigation
+        if (window.TempoTheme && typeof window.TempoTheme.ensureCurrentBackground === 'function') {
+            window.TempoTheme.ensureCurrentBackground();
+        }
+
         // If entering Plan Workspace, render workspace
-        if (tabId === 'plan-workspace') {
-            document.body.style.backgroundColor = '#EFFAFF';
-            const mainEl = document.querySelector('main');
-            if (mainEl) mainEl.style.backgroundColor = '#EFFAFF';
+        if (tabId === 'plan-workspace' || tabId === 'tool-workplan' || tabId === 'workplan') {
             if (window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.render === 'function') {
                 window.TempoPlanWorkspace.render();
+            }
+            if (subTab && window.TempoPlanWorkspace && typeof window.TempoPlanWorkspace.openRescheduleModal === 'function') {
+                window.TempoPlanWorkspace.openRescheduleModal(subTab);
             }
         }
 
         // If entering Self-check page, render workspace
         if (tabId === 'stress-check' || tabId === 'strack') {
-            document.body.style.backgroundColor = '#E6EDE7';
-            const mainEl = document.querySelector('main');
-            if (mainEl) mainEl.style.backgroundColor = '#E6EDE7';
             if (window.TempoSelfCheckWorkspace && typeof window.TempoSelfCheckWorkspace.render === 'function') {
                 window.TempoSelfCheckWorkspace.render();
             }
@@ -386,10 +440,6 @@ window.TempoApp = (function() {
             if (window.TempoMode && typeof window.TempoMode.applyModeVisibility === 'function') {
                 window.TempoMode.applyModeVisibility();
             }
-        } else if (tabId !== 'plan-workspace') {
-            document.body.style.backgroundColor = '';
-            const mainEl = document.querySelector('main');
-            if (mainEl) mainEl.style.backgroundColor = '';
         }
 
 
@@ -430,6 +480,9 @@ window.TempoApp = (function() {
             window.TempoVolunteer.render();
         }
         if (tabId === 'about') {
+            if (window.TempoI18n && typeof window.TempoI18n.updateAboutPageStaticHtml === 'function') {
+                window.TempoI18n.updateAboutPageStaticHtml();
+            }
             initAboutStackedCards();
         }
         if (tabId === 'learn') {
@@ -491,7 +544,12 @@ window.TempoApp = (function() {
         const rawHash = window.location.hash.replace('#', '');
         if (!rawHash) return;
 
-        if (rawHash.startsWith('personal-space')) {
+        if (rawHash.startsWith('community')) {
+            const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
+            const params = new URLSearchParams(queryPart);
+            const subTab = params.get('tab') || 'announcement';
+            navigateTo('community', subTab);
+        } else if (rawHash.startsWith('personal-space')) {
             const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
             const params = new URLSearchParams(queryPart);
             const subTab = params.get('tab') || 'saved';
@@ -500,9 +558,14 @@ window.TempoApp = (function() {
             const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
             const params = new URLSearchParams(queryPart);
             const section = params.get('section') || 'feed';
-            navigateTo('posts', section);
+            const targetTab = (section === 'messages') ? 'messages' : 'posts';
+            navigateTo('community', targetTab);
         } else if (rawHash.startsWith('direct-messages')) {
-            navigateTo('posts', 'messages');
+            navigateTo('community', 'messages');
+        } else if (rawHash === 'learn' || rawHash.startsWith('learn?') || rawHash === 'learn-solve' || rawHash === 'hub') {
+            navigateTo('community', 'learn');
+        } else if (rawHash === 'solve' || rawHash.startsWith('solve?') || rawHash === 'tips') {
+            navigateTo('community', 'tips');
         } else if (rawHash === 'recovery-working-plan') {
             scrollToRecoveryPlan();
         } else if (rawHash.startsWith('explore-mental-health-tests') || rawHash.startsWith('mental-health-tests')) {
@@ -514,6 +577,11 @@ window.TempoApp = (function() {
             navigateTo('my-test-results');
         } else if (rawHash === 'unclear-mode' || rawHash === 'unclear' || rawHash === 'ucheck') {
             navigateTo('ucheck');
+        } else if (rawHash.startsWith('tool-workplan') || rawHash.startsWith('workplan') || rawHash.startsWith('plan-workspace')) {
+            const queryPart = rawHash.includes('?') ? rawHash.split('?')[1] : '';
+            const params = new URLSearchParams(queryPart);
+            const taskId = params.get('taskId') || params.get('task');
+            navigateTo(rawHash.split('?')[0], taskId);
         } else {
             navigateTo(rawHash);
         }
@@ -771,6 +839,9 @@ window.TempoApp = (function() {
         function openModal() {
             const m = document.getElementById('modal-routing-selection');
             if (!m) return;
+            if (window.TempoI18n && typeof window.TempoI18n.updateStaticHtml === 'function') {
+                window.TempoI18n.updateStaticHtml();
+            }
             m.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             // Accessibility focus on first card or close button
@@ -862,6 +933,62 @@ window.TempoApp = (function() {
                 window.TempoEmergencySupport.openSOS();
             }
         }
+    }
+
+    // =========================================================================
+    // GLOBAL MODAL BACKDROP DISMISSAL (OUTSIDE-CLICK DISMISSAL)
+    // =========================================================================
+    function initGlobalModalBackdropDismissal() {
+        document.addEventListener('click', (e) => {
+            const target = e.target;
+            if (!target || !(target instanceof HTMLElement)) return;
+
+            // Check if clicked element is an active modal backdrop container
+            const isBackdrop = target.classList.contains('modal-backdrop') ||
+                (target.classList.contains('fixed') && target.classList.contains('inset-0')) ||
+                target.matches('[data-modal-backdrop], .modal-overlay, [role="dialog"], [aria-modal="true"]');
+
+            if (!isBackdrop) return;
+
+            // Ensure the click was NOT on an inner modal card
+            const innerCard = target.querySelector('.tempo-card, .modal-card, [role="document"], [data-modal-card]');
+            if (innerCard && innerCard.contains(target)) return;
+
+            // Do not dismiss if modal is in hidden state
+            if (target.classList.contains('hidden') || target.style.display === 'none') {
+                return;
+            }
+
+            // Do not dismiss if an active confirmation or destructive action is processing
+            if (target.getAttribute('data-processing') === 'true' || target.querySelector('[data-processing="true"], [aria-busy="true"], .is-processing')) {
+                return;
+            }
+
+            // Handle known module-specific modal close routines
+            if (target.id === 'modal-recovery-setup' && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.handleModalClose === 'function') {
+                window.TempoRecoverySetup.handleModalClose();
+                return;
+            }
+            if (target.id === 'modal-recovery-plan-confirm' && window.TempoRecoverySetup && typeof window.TempoRecoverySetup.closePlanConfirmModal === 'function') {
+                window.TempoRecoverySetup.closePlanConfirmModal();
+                return;
+            }
+            if (target.id === 'modal-change-mode' && window.TempoMode && typeof window.TempoMode.closeChangeModeModal === 'function') {
+                window.TempoMode.closeChangeModeModal();
+                return;
+            }
+
+            // Check for standard close buttons inside the modal
+            const closeBtn = target.querySelector('button[title="Close"], button[aria-label="Close"], button.btn-close, .btn-close-auth-modal, .btn-close-policy-modal, #btn-close-routing-modal, #btn-close-stress-relief, #btn-close-what-is-tempo, #btn-close-community-modal, #btn-close-add-habit-modal, #btn-close-article-modal, [data-modal-close]');
+            if (closeBtn && typeof closeBtn.click === 'function') {
+                closeBtn.click();
+                return;
+            }
+
+            // Safe fallback
+            target.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }, false);
     }
 
     // =========================================================================
@@ -984,6 +1111,7 @@ window.TempoApp = (function() {
             if (firstCard) firstCard.focus();
         },
         getCurrentTab: () => currentTab,
+        getCurrentRole: () => currentRole,
         handleLogoClick,
         navigateToActiveDashboard: () => {
             if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') {

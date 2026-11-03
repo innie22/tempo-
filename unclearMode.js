@@ -441,41 +441,27 @@ window.TempoUnclearMode = (function() {
         const history = loadCompletedHistory();
         const lastCheckin = history.length > 0 ? history[0] : null;
 
+        const isVi = (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') ? (window.TempoI18n.getLanguage() === 'vi') : false;
+        const activeCtx = (window.TempoMode && typeof window.TempoMode.getActiveContext === 'function') ? window.TempoMode.getActiveContext() : null;
+        const backBtnText = isVi ? 'Quay lại Dashboard' : 'Back to Dashboard';
+        const backBtnTitle = activeCtx === 'recovery'
+            ? (isVi ? 'Quay lại Recovery Mode Dashboard' : 'Back to Recovery Mode Dashboard')
+            : (activeCtx === 'emergency'
+                ? (isVi ? 'Quay lại Urgent Mode Dashboard' : 'Back to Urgent Mode Dashboard')
+                : (isVi ? 'Quay lại Dashboard' : 'Back to Dashboard'));
+
         container.innerHTML = `
             <div id="unclear-home-view" class="space-y-6">
-                <!-- Top Navigation Row: Return Home + Unclear Pill + ((SOS)) I don't feel safe -->
-                <div class="flex items-center justify-between gap-4 pb-1">
-                    <!-- Left: Return Home & Unclear Mode pill -->
-                    <div class="flex items-center space-x-3">
-                        <button type="button" 
-                                onclick="window.TempoUnclearMode.returnToHome()"
-                                class="px-5 py-2 rounded-full text-xs sm:text-sm font-bold text-[#5B5550] hover:text-[#202124] bg-white/90 hover:bg-white border border-[#E8D9CF] transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
-                                title="Return Home">
-                            <span>←</span>
-                            <span>Return Home</span>
-                        </button>
-
-                        <div id="home-mode-selector-wrapper" class="relative inline-block text-left">
-                            <button id="btn-home-mode-selector" 
-                                    type="button" 
-                                    onclick="window.TempoMode.toggleModeDropdown(event)" 
-                                    class="px-7 py-2 rounded-full text-xs sm:text-sm font-extrabold bg-[#FFF6EF] text-[#C2785C] hover:bg-[#FDEBD0] border border-[#E2B7A0] transition flex items-center space-x-1 shadow-2xs cursor-pointer"
-                                    aria-haspopup="true"
-                                    aria-expanded="false"
-                                    title="Switch Tempo Mode">
-                                <span>Unclear</span>
-                            </button>
-                            <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
-                        </div>
-                    </div>
-
-                    <!-- Right: ((SOS)) I don't feel safe -->
-                    <button type="button"
-                            onclick="window.TempoEmergencySupport.openSOS()"
-                            class="px-5 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-extrabold text-white bg-[#BD3022] hover:bg-[#A9271A] transition shadow-xs flex items-center space-x-2 cursor-pointer"
-                            title="I don't feel safe">
-                        <span class="tracking-widest font-black">((sos))</span>
-                        <span>I don’t feel safe</span>
+                <!-- Top Utility Bar: Back to Dashboard -->
+                <div class="flex items-center justify-between pb-1" data-tempo-ui="ucheck-header-bar">
+                    <button type="button" 
+                            id="btn-ucheck-back-to-dashboard"
+                            data-tempo-action="back-to-dashboard"
+                            onclick="if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') { window.TempoMode.navigateToActiveDashboard(); } else if (window.TempoApp) { window.TempoApp.navigateTo('today'); }"
+                            class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-full text-xs sm:text-sm font-bold text-[#5B5550] hover:text-[#202124] bg-white hover:bg-stone-50 border border-[#E8D9CF] transition shadow-xs cursor-pointer"
+                            title="${backBtnTitle}">
+                        <span>←</span>
+                        <span>${backBtnText}</span>
                     </button>
                 </div>
 
@@ -486,16 +472,16 @@ window.TempoUnclearMode = (function() {
                         <div class="space-y-3">
                             <div class="text-xl sm:text-2xl font-extrabold text-[#C2785C] flex items-center space-x-2">
                                 <span>👋</span>
-                                <span>Hi ${escapeHTML(userName)},</span>
+                                <span>${isVi ? `Xin chào ${escapeHTML(userName)},` : `Hi ${escapeHTML(userName)},`}</span>
                             </div>
                             <h2 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#46413C] tracking-tight leading-tight">
-                                Not sure where to start?
+                                ${isVi ? 'Bạn chưa biết nên bắt đầu từ đâu?' : 'Not sure where to start?'}
                             </h2>
                             <h3 class="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#46413C] tracking-tight leading-tight">
-                                Let’s figure it out together.
+                                ${isVi ? 'Hãy cùng tìm hiểu nhé.' : 'Let’s figure it out together.'}
                             </h3>
                             <p class="italic text-sm sm:text-base text-[#6F6B68] leading-relaxed pt-1">
-                                Let’s try a few quick check-ins to understand what you need.
+                                ${isVi ? 'Hãy thực hiện một vài câu hỏi ngắn để tìm hiểu điều bạn đang cần.' : 'Let’s try a few quick check-ins to understand what you need.'}
                             </p>
                         </div>
 
@@ -504,12 +490,12 @@ window.TempoUnclearMode = (function() {
                                 <button type="button"
                                         onclick="window.TempoUnclearMode.startNewCheckIn()"
                                         class="bg-[#829B87] hover:bg-[#728A77] text-white font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-xs transition hover:opacity-95 cursor-pointer">
-                                    Do Tempo Test
+                                    ${isVi ? 'Làm bài đánh giá Tempo' : 'Do Tempo Test'}
                                 </button>
                                 <button type="button"
                                         onclick="window.TempoApp.navigateTo('my-test-results')"
                                         class="bg-white hover:bg-stone-50 border border-[#C5BCB3] hover:border-stone-400 text-[#5B5550] font-bold text-sm sm:text-base px-6 py-3 rounded-2xl shadow-xs transition cursor-pointer">
-                                    View my results
+                                    ${isVi ? 'Xem kết quả của tôi' : 'View my results'}
                                 </button>
                             </div>
 
@@ -517,16 +503,16 @@ window.TempoUnclearMode = (function() {
                                 <div class="pt-3">
                                     <button type="button" onclick="window.TempoUnclearMode.resumeDraft('${draft.id}')"
                                             class="text-xs font-semibold text-[#FF6B2C] hover:text-[#B83D08] flex items-center space-x-1.5 transition cursor-pointer">
-                                        <span>Continue where I left off</span>
+                                        <span>${isVi ? 'Tiếp tục phần đang làm dở' : 'Continue where I left off'}</span>
                                         <span>→</span>
-                                        <span class="text-stone-400 font-normal">(${draft.current_stage} of 4 steps)</span>
+                                        <span class="text-stone-400 font-normal">(${draft.current_stage} ${isVi ? 'trên 4 bước' : 'of 4 steps'})</span>
                                     </button>
                                 </div>
                             ` : (lastCheckin && lastCheckin.completed_at ? `
                                 <div class="pt-3 text-[11px] text-stone-400 flex items-center space-x-2">
-                                    <span>Last check-in: ${new Date(lastCheckin.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                    <span>${isVi ? 'Lần check-in gần nhất:' : 'Last check-in:'} ${new Date(lastCheckin.completed_at).toLocaleDateString(isVi ? 'vi-VN' : 'en-US', { month: 'short', day: 'numeric' })}</span>
                                     <button type="button" onclick="window.TempoUnclearMode.viewCompletedCheckIn('${lastCheckin.id}')" class="text-stone-500 hover:underline">
-                                        View reflection →
+                                        ${isVi ? 'Xem lại suy ngẫm →' : 'View reflection →'}
                                     </button>
                                 </div>
                             ` : '')}
@@ -536,83 +522,33 @@ window.TempoUnclearMode = (function() {
                     <!-- Right card: Explore Mental Health Tests -->
                     <div data-card="explore-assessments" class="lg:col-span-5 flex flex-col justify-between bg-[#829B87] border border-[#728A77] rounded-[28px] p-6 sm:p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                         <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug mb-6">
-                            Explore Mental<br />Health Tests
+                            ${isVi ? 'Khám phá các bài đánh giá sức khỏe tinh thần' : 'Explore Mental <br />Health Tests'}
                         </h2>
                         <div class="space-y-3 w-full">
                             <button type="button"
                                     onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'depression')"
                                     class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
-                                Depression Assessments
+                                ${isVi ? 'Đánh giá mức độ trầm cảm' : 'Depression Assessments'}
                             </button>
                             <button type="button"
                                     onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'stress')"
                                     class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
-                                Stress Assessments
+                                ${isVi ? 'Đánh giá mức độ căng thẳng' : 'Stress Assessments'}
                             </button>
                             <button type="button"
                                     onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'anxiety')"
                                     class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
-                                Anxiety Assessments
+                                ${isVi ? 'Đánh giá mức độ lo âu' : 'Anxiety Assessments'}
                             </button>
                             <button type="button"
                                     onclick="window.TempoApp.navigateTo('explore-mental-health-tests', 'other')"
                                     class="w-full bg-white hover:bg-[#FAF9F5] text-left font-bold text-sm sm:text-base text-[#46413C] hover:text-[#202124] py-3.5 px-5 rounded-2xl shadow-xs transition cursor-pointer block">
-                                Other Assessments
+                                ${isVi ? 'Các bài đánh giá khác' : 'Other Assessments'}
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Bottom Tool Cards: Quick Relief, Learn & Solve, Tempo break -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                    <!-- 1. Quick Relief -->
-                    <div data-card="quick-relief"
-                         onclick="if (window.TempoStressRelief && window.TempoStressRelief.openModal) { window.TempoStressRelief.openModal('unclear'); } else if (window.TempoTriage && window.TempoTriage.openQuickReliefModal) { window.TempoTriage.openQuickReliefModal(); }"
-                         class="bg-[#D9E7E0] border border-[#BACAD0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
-                         title="Quick Relief">
-                        <div class="flex-1 min-w-0 pr-2">
-                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#4A6356] mb-1 group-hover:text-[#384F43] transition">
-                                Quick Relief
-                            </h3>
-                            <p class="text-xs sm:text-sm text-[#5C7568] leading-snug">
-                                Quick ways to ease stress and feel better.
-                            </p>
-                        </div>
-                        <img src="assets/quick-relief-mascot-transparent.png" alt="Quick Relief Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
-                    </div>
-
-                    <!-- 2. Learn & Solve -->
-                    <div data-card="learn-solve"
-                         onclick="if (window.TempoApp) { window.TempoApp.navigateTo('learn'); } else { window.location.hash = '#learn'; }"
-                         class="bg-[#FBEDD9] border border-[#DFCFC0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
-                         title="Learn & Solve">
-                        <div class="flex-1 min-w-0 pr-2">
-                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#6D583F] mb-1 group-hover:text-[#5B4833] transition">
-                                Learn &amp; Solve
-                            </h3>
-                            <p class="text-xs sm:text-sm text-[#7D6B54] leading-snug">
-                                Tips and tools to help you cope.
-                            </p>
-                        </div>
-                        <img src="assets/learn-solve-mascot.png" alt="Learn & Solve Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
-                    </div>
-
-                    <!-- 3. Tempo break -->
-                    <div data-card="tempo-break"
-                         onclick="if (window.TempoTools && typeof window.TempoTools.openBreak === 'function') { window.TempoTools.openBreak(); } else if (window.TempoFocusZone) { window.TempoFocusZone.openQuickEntry(); }"
-                         class="bg-[#D3DFE4] border border-[#BACAD0] rounded-[24px] overflow-hidden p-5 sm:p-6 flex items-center justify-between min-h-[160px] shadow-[0_4px_10px_-2px_rgba(75,55,40,0.05),0_10px_20px_-4px_rgba(75,55,40,0.08)] hover:shadow-md transition cursor-pointer group select-none relative"
-                         title="Tempo break">
-                        <div class="flex-1 min-w-0 pr-2">
-                            <h3 class="text-xl sm:text-2xl font-extrabold text-[#3D4E56] mb-1 group-hover:text-[#2A373E] transition">
-                                Tempo break
-                            </h3>
-                            <p class="text-xs sm:text-sm text-[#5B6C74] leading-snug">
-                                Take a break with fun activities to unwind.
-                            </p>
-                        </div>
-                        <img src="assets/tempo-break-mascot.png" alt="Tempo break Mascot" class="h-20 sm:h-24 w-auto object-contain shrink-0 select-none pointer-events-none group-hover:scale-105 transition-transform" />
-                    </div>
-                </div>
             </div>
         `;
     }
@@ -744,7 +680,9 @@ window.TempoUnclearMode = (function() {
     function returnToHome() {
         const uid = getUserId();
         sessionStorage.removeItem(`tempo_unclear_in_flow_${uid}`);
-        if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
+        if (window.TempoMode && typeof window.TempoMode.navigateToActiveDashboard === 'function') {
+            window.TempoMode.navigateToActiveDashboard();
+        } else if (window.TempoMode && typeof window.TempoMode.returnToSourceContext === 'function') {
             window.TempoMode.returnToSourceContext();
         } else if (window.TempoMode && typeof window.TempoMode.setMode === 'function') {
             window.TempoMode.setMode('default');
@@ -2142,6 +2080,14 @@ window.TempoUnclearMode = (function() {
 
     function init() {
         loadDraft();
+        if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+            window.TempoI18n.onLanguageChange(() => {
+                const umodeContent = document.getElementById('umode-home-content');
+                if (umodeContent && !umodeContent.classList.contains('hidden') && viewState === 'home') {
+                    renderHome();
+                }
+            });
+        }
     }
 
     if (document.readyState === 'loading') {

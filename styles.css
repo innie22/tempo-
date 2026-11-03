@@ -31,7 +31,8 @@
     --accent-amber-bg: var(--tempo-orange-soft);
     --accent-amber-border: #FFD2BA;
 
-    --bg-app: var(--tempo-cream);
+    --tempo-bg-color: #EAEEE8;
+    --bg-app: var(--tempo-bg-color);
     --bg-surface: var(--tempo-white);
     --bg-subtle: var(--tempo-gray);
 
@@ -52,11 +53,21 @@ html, body {
 }
 
 body {
-    background-color: #F6F0EB;
+    background-color: var(--tempo-bg-color, #EAEEE8);
     color: var(--tempo-ink);
     font-family: 'Arimo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+header.entry-header {
+    background-color: var(--tempo-bg-color, #EAEEE8);
+    transition: background-color 0.2s ease;
+}
+
+#screen-community,
+#screen-learn {
+    background-color: transparent !important;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
@@ -86,6 +97,26 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--tempo-muted);
+}
+
+/* Recovery Note subtle scrollbar */
+.recovery-note-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #D9D4D0 transparent;
+}
+.recovery-note-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.recovery-note-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.recovery-note-scroll::-webkit-scrollbar-thumb {
+    background: #D9D4D0;
+    border-radius: 9999px;
+}
+.recovery-note-scroll::-webkit-scrollbar-thumb:hover {
+    background: #93AFBC;
 }
 
 /* Card & Surface Styling */
@@ -472,13 +503,27 @@ header nav {
     background-color: #FFFFFF;
 }
 .em-choice-pill:hover {
-    border-color: #FF6B2C;
-    background-color: #FFFDFB;
+    border-color: #8EA28F;
+    background-color: #F8FAF8;
 }
 .em-choice-pill--selected {
-    border-color: #FF6B2C !important;
-    background-color: #FFF4EC !important;
-    color: #B83D08 !important;
+    border-color: #8EA28F !important;
+    background-color: #EDF4EF !important;
+    color: #244634 !important;
+    font-weight: 700 !important;
+}
+/* Warm Blush Selected Pill (Importance & Consequences ratings) */
+.em-choice-pill--blush-selected {
+    border-color: #ECC9BA !important;
+    background-color: #FAF2EE !important;
+    color: #7B4B3B !important;
+    font-weight: 700 !important;
+}
+/* Sage Green Selected Pill (Positive selections, Flexibility checks, Duration) */
+.em-choice-pill--sage-selected {
+    border-color: #8EA28F !important;
+    background-color: #EDF4EF !important;
+    color: #244634 !important;
     font-weight: 700 !important;
 }
 
@@ -1313,3 +1358,38 @@ body.is-dragging-card * {
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
+
+/* Urgent Mode - Reality Check, Prioritize Estimate, Suggested Organization, Available Time & Working Plan Stage Themes (Light Sage Green derived from #8EA28F) */
+body.reality-check-active,
+body.reality-check-active header.entry-header,
+body.prioritize-estimate-active,
+body.prioritize-estimate-active header.entry-header,
+body.priority-review-active,
+body.priority-review-active header.entry-header,
+body.available-time-active,
+body.available-time-active header.entry-header,
+body.plan-review-active,
+body.plan-review-active header.entry-header {
+    background-color: #EDF4EF !important;
+}
+
+#screen-emergency.reality-check-active,
+#screen-emergency.prioritize-estimate-active,
+#screen-emergency.priority-review-active,
+#screen-emergency.available-time-active,
+#screen-emergency.plan-review-active {
+    background-color: #EDF4EF;
+}
+
+/* Global custom background override for all pages including Urgent Mode */
+body.has-custom-bg,
+body.has-custom-bg header.entry-header,
+body.has-custom-bg #screen-emergency.reality-check-active,
+body.has-custom-bg #screen-emergency.prioritize-estimate-active,
+body.has-custom-bg #screen-emergency.priority-review-active,
+body.has-custom-bg #screen-emergency.available-time-active,
+body.has-custom-bg #screen-emergency.plan-review-active {
+    background-color: var(--tempo-bg-color) !important;
+}
+
+

@@ -33,6 +33,56 @@ window.TempoEmergencyFlow = (function() {
     let tasks = [];
     let assessmentIndex = 0;
     let availabilityDays = [];
+
+    function getTodayISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTodayISO === 'function') {
+            return window.TempoI18n.getLocalTodayISO();
+        }
+        try {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(new Date());
+        } catch (e) {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+    }
+
+    function getTomorrowISO() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLocalTomorrowISO === 'function') {
+            return window.TempoI18n.getLocalTomorrowISO();
+        }
+        const todayStr = getTodayISO();
+        const parts = todayStr.split('-').map(Number);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            const nextDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1));
+            const pad = n => String(n).padStart(2, '0');
+            return `${nextDate.getUTCFullYear()}-${pad(nextDate.getUTCMonth() + 1)}-${pad(nextDate.getUTCDate())}`;
+        }
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function isViLocale() {
+        if (window.TempoI18n && typeof window.TempoI18n.getLanguage === 'function') {
+            return window.TempoI18n.getLanguage() === 'vi';
+        }
+        if (window.TempoI18n && typeof window.TempoI18n.getCurrentLanguage === 'function') {
+            return window.TempoI18n.getCurrentLanguage() === 'vi';
+        }
+        try {
+            const stored = localStorage.getItem('tempo_language') || localStorage.getItem('tempo_auth_lang') || localStorage.getItem('tempo_lang');
+            if (stored === 'vi' || stored === 'en') return stored === 'vi';
+        } catch (e) {}
+        return true;
+    }
+
     let confirmedPlan = null;
     let breakdownIndex = 0;
     let showSubtaskDurations = true;
@@ -263,10 +313,31 @@ window.TempoEmergencyFlow = (function() {
         initDefaultAvailability();
         await restorePlanState();
 
+        if (window.TempoI18n && typeof window.TempoI18n.onLanguageChange === 'function') {
+            window.TempoI18n.onLanguageChange(onLanguageChange);
+        }
+
         // If the emergency screen is currently active in DOM, render the restored stage
         const screen = document.getElementById('screen-emergency');
         if (screen && !screen.classList.contains('hidden')) {
             goToStage(currentStage);
+        }
+    }
+
+    function onLanguageChange(lang) {
+        updatePhaseIndicator(currentStage);
+        if (currentStage === 'reality-check') {
+            renderRealityCheck();
+        } else if (currentStage === 'prioritize') {
+            renderAssessmentTask();
+        } else if (currentStage === 'priority-review') {
+            renderPriorityReview();
+        } else if (currentStage === 'available-time') {
+            renderAvailableTime();
+        } else if (currentStage === 'plan-review') {
+            renderPlanReview();
+        } else if (currentStage === 'entry') {
+            renderEntryState();
         }
     }
 
@@ -299,13 +370,13 @@ window.TempoEmergencyFlow = (function() {
             resumeBox.innerHTML = `
                 <div class="bg-white border-2 border-[#FF6B2C] rounded-[22px] p-6 space-y-4 shadow-sm">
                     <div class="flex items-center justify-between">
-                        <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-[#FFE9DC] text-[#B83D08] uppercase tracking-wider">
-                            Active Urgent Plan
+                        <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-[#DCE7DF] text-[#2B4B39] uppercase tracking-wider">
+                            ${isViLocale() ? 'Working Plan đang hoạt động' : 'Active Working Plan'}
                         </span>
                         <span class="text-xs font-bold text-[#6F6B68]">${confirmedPlan.plannedTasks.length} task${confirmedPlan.plannedTasks.length === 1 ? '' : 's'} scheduled</span>
                     </div>
                     <div class="space-y-1">
-                        <h4 class="font-heading text-lg font-bold text-[#202124]">You have an active Urgent Plan</h4>
+                        <h4 class="font-heading text-lg font-bold text-[#202124]">${isViLocale() ? 'Bạn đang có một Working Plan hoạt động' : 'You have an active Working Plan'}</h4>
                         <p class="text-xs sm:text-sm text-[#6F6B68]">
                             Your plan is active and safely saved. You can jump directly into it, or start fresh with a new plan.
                         </p>
@@ -331,7 +402,7 @@ window.TempoEmergencyFlow = (function() {
                         <span class="text-xs font-extrabold uppercase tracking-wider text-[#B83D08]">Saved Setup in Progress</span>
                     </div>
                     <div class="space-y-1">
-                        <h4 class="font-heading text-lg font-bold text-[#202124]">Pick up where you left off?</h4>
+                        <h4 class="font-heading text-lg font-bold text-[#202124]">Tiếp tục nơi bạn vừa dừng lại nhé?</h4>
                         <p class="text-xs sm:text-sm text-[#6F6B68]">
                             You have an unfinished setup with ${tasks.length} task${tasks.length === 1 ? '' : 's'} saved at <strong>${formatStageName(currentStage)}</strong>.
                         </p>
@@ -458,6 +529,57 @@ window.TempoEmergencyFlow = (function() {
             targetEl.classList.remove('hidden');
         }
 
+        // Apply or remove Reality Check / Prioritize Estimate page background (Light Sage Green derived from #8EA28F)
+        if (stageName === 'reality-check') {
+            document.body.classList.add('reality-check-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.add('reality-check-active');
+        } else {
+            document.body.classList.remove('reality-check-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.remove('reality-check-active');
+        }
+
+        if (stageName === 'prioritize') {
+            document.body.classList.add('prioritize-estimate-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.add('prioritize-estimate-active');
+        } else {
+            document.body.classList.remove('prioritize-estimate-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.remove('prioritize-estimate-active');
+        }
+
+        if (stageName === 'priority-review') {
+            document.body.classList.add('priority-review-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.add('priority-review-active');
+        } else {
+            document.body.classList.remove('priority-review-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.remove('priority-review-active');
+        }
+
+        if (stageName === 'available-time') {
+            document.body.classList.add('available-time-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.add('available-time-active');
+        } else {
+            document.body.classList.remove('available-time-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.remove('available-time-active');
+        }
+
+        if (stageName === 'plan-review') {
+            document.body.classList.add('plan-review-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.add('plan-review-active');
+        } else {
+            document.body.classList.remove('plan-review-active');
+            const screen = document.getElementById('screen-emergency');
+            if (screen) screen.classList.remove('plan-review-active');
+        }
+
         // Update Lightweight Phase Indicator
         updatePhaseIndicator(stageName);
 
@@ -472,6 +594,7 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function updatePhaseIndicator(stage) {
+        const isVi = isViLocale();
         const phases = {
             'reset': ['entry'],
             'organize': ['reality-check', 'prioritize', 'priority-review'],
@@ -479,17 +602,39 @@ window.TempoEmergencyFlow = (function() {
             'ready': ['handoff']
         };
 
+        const phaseLabels = {
+            'reset': isVi ? 'Thư giãn' : 'RESET',
+            'organize': isVi ? 'Sắp xếp' : 'ORGANIZE',
+            'plan': isVi ? 'Lên kế hoạch' : 'PLAN',
+            'ready': isVi ? 'Sẵn sàng' : 'READY'
+        };
+
         const activePhaseKey = Object.keys(phases).find(key => phases[key].includes(stage)) || 'reset';
 
         ['reset', 'organize', 'plan', 'ready'].forEach(key => {
             const pill = document.getElementById(`em-phase-${key}`);
             if (!pill) return;
+            pill.textContent = phaseLabels[key];
             if (key === activePhaseKey) {
-                pill.className = 'px-3 py-1 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-[11px] uppercase tracking-wider transition-colors';
+                if (stage === 'reality-check' || stage === 'prioritize' || stage === 'priority-review' || stage === 'available-time' || stage === 'plan-review') {
+                    pill.className = 'px-3 py-1 rounded-full bg-[#DCE7DF] text-[#2B4B39] border border-[#8EA28F]/40 font-bold text-[11px] uppercase tracking-wider transition-colors';
+                } else {
+                    pill.className = 'px-3 py-1 rounded-full bg-[#FFE9DC] text-[#B83D08] font-bold text-[11px] uppercase tracking-wider transition-colors';
+                }
             } else {
                 pill.className = 'px-3 py-1 rounded-full text-[#8E8A85] font-semibold text-[11px] uppercase tracking-wider transition-colors';
             }
         });
+
+        // Flow Shell Header labels
+        const backHomeEl = document.getElementById('em-header-back-home');
+        if (backHomeEl) {
+            backHomeEl.textContent = isVi ? 'Về trang chủ' : 'Back to Home';
+        }
+        const sosLabelEl = document.getElementById('em-header-sos-label');
+        if (sosLabelEl) {
+            sosLabelEl.textContent = isVi ? 'Hỗ trợ SOS' : 'SOS Support';
+        }
     }
 
     function renderStageView(stage) {
@@ -530,36 +675,40 @@ window.TempoEmergencyFlow = (function() {
     function renderRealityCheck() {
         const container = document.getElementById('emergency-stage-reality-check');
         if (!container) return;
+        const isVi = isViLocale();
 
         // Default deadline: tomorrow at 21:00
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const defaultDateStr = tomorrow.toISOString().split('T')[0];
+        const defaultDateStr = getTomorrowISO();
+
+        const existingTaskName = document.getElementById('rc-task-name')?.value || '';
 
         container.innerHTML = `
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT MODE</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#4A6B5D]">${isVi ? 'CHẾ ĐỘ KHẨN CẤP' : 'URGENT MODE'}</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Reality Check
+                        ${isVi ? 'Trút bỏ suy nghĩ' : 'Reality Check'}
                     </h2>
                     <h3 class="font-heading text-xl sm:text-2xl font-bold text-[#202124]">
-                        Get everything out of your head.
+                        ${isVi ? 'Đưa mọi điều đang khiến bạn bận tâm ra khỏi đầu.' : 'Get everything out of your head.'}
                     </h3>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        Add what you need to get done. We'll organize it next.
+                    <p class="text-xs sm:text-sm text-[#5C665F] max-w-md mx-auto leading-relaxed">
+                        ${isVi ? "Liệt kê những việc bạn cần hoàn thành. Tempo sẽ giúp bạn sắp xếp chúng." : "Add what you need to get done. We'll organize it next."}
                     </p>
                 </div>
 
                 <!-- Input Card -->
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] p-5 sm:p-6 space-y-4 shadow-sm">
+                <div class="bg-white border border-[#D5DED7] rounded-[22px] p-5 sm:p-6 space-y-4 shadow-xs">
                     <div class="space-y-1.5">
                         <label for="rc-task-name" class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                            What do you need to get done?
+                            ${isVi ? 'Bạn cần hoàn thành những việc gì?' : 'What do you need to get done?'}
                         </label>
-                        <input id="rc-task-name" type="text" placeholder="e.g. Marketing Report, Statistics Lab, Chapter 4 Reading..."
-                               class="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] bg-[#FFFDFB]">
+                        <input id="rc-task-name" type="text" value="${escapeHTML(existingTaskName)}"
+                               placeholder="${isVi ? 'VD: Báo cáo Marketing, Bài tập Thống kê, Đọc chương 4...' : 'e.g. Marketing Report, Statistics Lab, Chapter 4 Reading...'}"
+                               class="w-full px-4 py-3 text-sm border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8EA28F] focus:border-[#8EA28F] bg-[#FEFDFB] text-[#202124] placeholder-[#8E8A85]">
                     </div>
 
                     <!-- Deadline Inputs -->
@@ -569,13 +718,13 @@ window.TempoEmergencyFlow = (function() {
                         </label>
                         <div class="flex flex-wrap items-center gap-3">
                             <input id="rc-deadline-date" type="date" value="${defaultDateStr}"
-                                   class="px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] bg-white">
+                                   class="px-3.5 py-2 text-xs border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] bg-white text-[#202124]">
                             <input id="rc-deadline-time" type="time" value="21:00"
-                                   class="px-3.5 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] bg-white">
-                            <label class="flex items-center space-x-2 text-xs text-[#6F6B68] cursor-pointer pl-1">
+                                   class="px-3.5 py-2 text-xs border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] bg-white text-[#202124]">
+                            <label class="flex items-center space-x-2 text-xs text-[#5C665F] cursor-pointer pl-1">
                                 <input id="rc-no-deadline-cb" type="checkbox" onchange="window.TempoEmergencyFlow.toggleNoDeadline(this.checked)"
-                                       class="rounded text-[#FF6B2C] focus:ring-[#FF6B2C]">
-                                <span>No fixed deadline</span>
+                                       class="rounded text-[#4A6B5D] focus:ring-[#8EA28F] border-gray-300">
+                                <span>${isVi ? 'Chưa có deadline' : 'No fixed deadline'}</span>
                             </label>
                         </div>
                     </div>
@@ -583,11 +732,11 @@ window.TempoEmergencyFlow = (function() {
                     <!-- Add Button & Sample Shortcut -->
                     <div class="pt-2 flex items-center justify-between">
                         <button onclick="window.TempoEmergencyFlow.addRealityCheckTask()" 
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm flex items-center space-x-1.5 transition">
-                            <span>+ Add task</span>
+                                class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-xs flex items-center space-x-1.5 transition cursor-pointer">
+                            <span>${isVi ? '+ Thêm task' : '+ Add task'}</span>
                         </button>
-                        <button onclick="window.TempoEmergencyFlow.loadSampleTasks()" class="text-xs text-[#FF6B2C] hover:underline font-medium">
-                            + Load 3 sample tasks
+                        <button onclick="window.TempoEmergencyFlow.loadSampleTasks()" class="text-xs text-[#4A6B5D] hover:text-[#385347] hover:underline font-semibold transition cursor-pointer">
+                            ${isVi ? '+ Thêm 3 task mẫu' : '+ Load 3 sample tasks'}
                         </button>
                     </div>
                 </div>
@@ -595,8 +744,8 @@ window.TempoEmergencyFlow = (function() {
                 <!-- Added Tasks List -->
                 <div class="space-y-3">
                     <div class="flex items-center justify-between px-1">
-                        <h4 class="text-xs font-bold uppercase tracking-wider text-[#6F6B68]">
-                            Added Tasks (<span id="rc-task-count">${tasks.length}</span>)
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-[#5C665F]">
+                            ${isVi ? 'Task đã thêm' : 'Added Tasks'} (<span id="rc-task-count">${tasks.length}</span>)
                         </h4>
                     </div>
 
@@ -606,15 +755,15 @@ window.TempoEmergencyFlow = (function() {
                 </div>
 
                 <!-- Primary CTA -->
-                <div class="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#EAE4DF]">
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#D5DED7]">
                     <button onclick="window.TempoEmergencyFlow.goToStage('entry')" 
-                            class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition">
-                        ← Back to Reset
+                            class="text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition cursor-pointer">
+                        ${isVi ? '← Quay lại Thư giãn' : '← Back to Reset'}
                     </button>
                     <button id="btn-rc-continue" onclick="window.TempoEmergencyFlow.continueFromRealityCheck()"
                             ${tasks.length === 0 ? 'disabled' : ''}
-                            class="${tasks.length === 0 ? 'opacity-50 cursor-not-allowed bg-stone-300 text-stone-500' : 'btn-primary'} px-7 py-3.5 rounded-xl font-bold text-sm shadow-sm flex items-center space-x-2 transition">
-                        <span>I've added everything</span>
+                            class="${tasks.length === 0 ? 'opacity-50 cursor-not-allowed bg-stone-300 text-stone-500' : 'bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs cursor-pointer'} px-7 py-3.5 rounded-xl font-bold text-sm flex items-center space-x-2 transition">
+                        <span>${isVi ? 'Tôi đã thêm tất cả' : "I've added everything"}</span>
                         <span>→</span>
                     </button>
                 </div>
@@ -623,10 +772,11 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function renderTaskListHTML() {
+        const isVi = isViLocale();
         if (tasks.length === 0) {
             return `
-                <div class="p-6 bg-white/70 border border-dashed border-[#EAE4DF] rounded-2xl text-center text-xs text-[#6F6B68]">
-                    No tasks added yet. Enter your tasks above to get them out of your head.
+                <div class="p-6 bg-white/80 border border-dashed border-[#CAD5CD] rounded-2xl text-center text-xs text-[#5C665F]">
+                    ${isVi ? 'Chưa có task nào. Hãy nhập những task cần làm ở phía trên nhé.' : 'No tasks added yet. Enter your tasks above to get them out of your head.'}
                 </div>
             `;
         }
@@ -634,15 +784,15 @@ window.TempoEmergencyFlow = (function() {
         return tasks.map(t => {
             if (editingRealityCheckTaskId === t.id) {
                 return `
-                    <div class="p-4 sm:p-5 bg-[#FFF8F2] border-2 border-[#FF6B2C]/40 rounded-2xl shadow-sm space-y-4 transition" data-task-id="${t.id}" data-editing="true">
+                    <div class="p-4 sm:p-5 bg-white border-2 border-[#8EA28F]/60 rounded-2xl shadow-xs space-y-4 transition" data-task-id="${t.id}" data-editing="true">
                         <div class="space-y-1">
                             <label for="em-edit-rc-name-${t.id}" class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                                Task Name
+                                ${isVi ? 'Tên task' : 'Task Name'}
                             </label>
                             <input id="em-edit-rc-name-${t.id}" type="text"
                                    value="${escapeHTML(t.name)}"
-                                   placeholder="What do you need to get done?"
-                                   class="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF6B2C] bg-white text-[#202124]">
+                                   placeholder="${isVi ? 'Bạn cần hoàn thành những việc gì?' : 'What do you need to get done?'}"
+                                   class="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8EA28F] focus:border-[#8EA28F] bg-white text-[#202124]">
                             <div id="em-edit-rc-error-${t.id}" class="text-[11px] text-rose-500 font-semibold hidden pt-0.5"></div>
                         </div>
 
@@ -653,28 +803,28 @@ window.TempoEmergencyFlow = (function() {
                             <div class="flex flex-wrap items-center gap-2.5">
                                 <input id="em-edit-rc-date-${t.id}" type="date" value="${t.deadlineDate || ''}"
                                        ${!t.hasDeadline ? 'disabled' : ''}
-                                       class="px-3 py-1.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] font-medium transition ${!t.hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                       class="px-3 py-1.5 text-xs border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] font-medium transition ${!t.hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
                                 <input id="em-edit-rc-time-${t.id}" type="time" value="${t.deadlineTime || ''}"
                                        ${!t.hasDeadline ? 'disabled' : ''}
-                                       class="px-3 py-1.5 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#FF6B2C] font-medium transition ${!t.hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
-                                <label class="flex items-center space-x-1.5 text-xs text-[#6F6B68] cursor-pointer select-none pl-1">
+                                       class="px-3 py-1.5 text-xs border border-[#CAD5CD] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] font-medium transition ${!t.hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                <label class="flex items-center space-x-1.5 text-xs text-[#5C665F] cursor-pointer select-none pl-1">
                                     <input id="em-edit-rc-nodeadline-${t.id}" type="checkbox"
                                            ${!t.hasDeadline ? 'checked' : ''}
                                            onchange="window.TempoEmergencyFlow.toggleRcEditNoDeadline('${t.id}', this.checked)"
-                                           class="w-4 h-4 rounded text-[#FF6B2C] focus:ring-[#FF6B2C] border-gray-300">
-                                    <span>No fixed deadline</span>
+                                           class="w-4 h-4 rounded text-[#4A6B5D] focus:ring-[#8EA28F] border-gray-300">
+                                    <span>${isVi ? 'Chưa có deadline' : 'No fixed deadline'}</span>
                                 </label>
                             </div>
                         </div>
 
-                        <div class="flex items-center justify-end space-x-2 pt-1 border-t border-[#FFD2BA]/40">
+                        <div class="flex items-center justify-end space-x-2 pt-1 border-t border-[#D5DED7]">
                             <button onclick="window.TempoEmergencyFlow.cancelRealityCheckTaskEdit()"
-                                    class="px-3.5 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-stone-200/60 rounded-xl transition">
-                                Cancel
+                                    class="px-3.5 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-stone-200/60 rounded-xl transition cursor-pointer">
+                                ${isVi ? 'Hủy' : 'Cancel'}
                             </button>
                             <button onclick="window.TempoEmergencyFlow.saveRealityCheckTaskEdit('${t.id}')"
-                                    class="btn-primary px-4 py-1.5 text-xs font-bold rounded-xl shadow-sm transition">
-                                Save
+                                    class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-4 py-1.5 text-xs font-bold rounded-xl shadow-xs transition cursor-pointer">
+                                ${isVi ? 'Lưu' : 'Save'}
                             </button>
                         </div>
                     </div>
@@ -682,26 +832,26 @@ window.TempoEmergencyFlow = (function() {
             }
 
             const deadlineText = t.hasDeadline 
-                ? `Due ${formatHumanDeadline(t.deadlineDate, t.deadlineTime)}`
-                : '🌱 No fixed deadline';
+                ? `Deadline ${formatHumanDeadline(t.deadlineDate, t.deadlineTime, isVi)}`
+                : (isVi ? '🌱 Chưa có deadline' : '🌱 No fixed deadline');
 
             return `
-                <div class="p-3.5 bg-white border border-[#EAE4DF] hover:border-[#D8D2CD] rounded-2xl flex items-center justify-between gap-3 shadow-sm transition" data-task-id="${t.id}">
+                <div class="p-3.5 bg-white border border-[#D5DED7] hover:border-[#CAD5CD] rounded-2xl flex items-center justify-between gap-3 shadow-2xs transition" data-task-id="${t.id}">
                     <div class="space-y-1 min-w-0">
                         <h5 class="text-xs sm:text-sm font-bold text-[#202124] truncate">${escapeHTML(t.name)}</h5>
-                        <p class="text-[11px] text-[#6F6B68] flex items-center space-x-1">
+                        <p class="text-[11px] text-[#5C665F] flex items-center space-x-1">
                             <span>🕒</span>
                             <span>${deadlineText}</span>
                         </p>
                     </div>
                     <div class="flex items-center space-x-2 shrink-0">
                         <button onclick="window.TempoEmergencyFlow.editRealityCheckTask('${t.id}')" 
-                                class="px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-stone-100 rounded-lg transition">
-                            Edit
+                                class="px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:text-gray-900 hover:bg-stone-100 rounded-lg transition cursor-pointer">
+                            ${isVi ? 'Sửa' : 'Edit'}
                         </button>
                         <button onclick="window.TempoEmergencyFlow.removeRealityCheckTask('${t.id}')" 
-                                class="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition">
-                            Remove
+                                class="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition cursor-pointer">
+                            ${isVi ? 'Xóa' : 'Remove'}
                         </button>
                     </div>
                 </div>
@@ -728,7 +878,7 @@ window.TempoEmergencyFlow = (function() {
 
         const name = nameInput ? nameInput.value.trim() : '';
         if (!name) {
-            if (window.TempoApp) window.TempoApp.showToast("Please enter a task name.");
+            if (window.TempoApp) window.TempoApp.showToast("Vui lòng nhập tên công việc.");
             return;
         }
 
@@ -800,7 +950,7 @@ window.TempoEmergencyFlow = (function() {
             if (!isChecked && !dateInput.value) {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
-                dateInput.value = tomorrow.toISOString().split('T')[0];
+                dateInput.value = getTomorrowISO();
                 if (!timeInput.value) timeInput.value = '21:00';
             }
         }
@@ -816,7 +966,7 @@ window.TempoEmergencyFlow = (function() {
         const newName = nameInput ? nameInput.value.trim() : '';
         if (!newName) {
             if (errDiv) {
-                errDiv.textContent = "Please enter a task name.";
+                errDiv.textContent = "Vui lòng nhập tên công việc.";
                 errDiv.classList.remove('hidden');
             }
             if (nameInput) nameInput.focus();
@@ -840,12 +990,8 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function loadSampleTasks() {
-        const today = new Date();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const todayStr = getTodayISO();
+        const tomorrowStr = getTomorrowISO();
 
         tasks = [
             {
@@ -904,7 +1050,8 @@ window.TempoEmergencyFlow = (function() {
 
     function continueFromRealityCheck() {
         if (tasks.length === 0) {
-            if (window.TempoApp) window.TempoApp.showToast("Please add at least one task to continue.");
+            const isVi = isViLocale();
+            if (window.TempoApp) window.TempoApp.showToast(isVi ? "Vui lòng thêm ít nhất một task để tiếp tục." : "Please add at least one task to continue.");
             return;
         }
         assessmentIndex = 0;
@@ -914,6 +1061,40 @@ window.TempoEmergencyFlow = (function() {
     // =========================================================================
     // STAGE 3: PRIORITIZE + ESTIMATE (One-Task-At-A-Time Assessment)
     // =========================================================================
+    function formatTaskDurationDisplay(task, isVi = isViLocale()) {
+        if (!task) return '';
+        if (task.isUnknownDuration) {
+            return isVi ? 'Không chắc' : 'Not sure';
+        }
+        if (task.isCustomDuration) {
+            const val = task.customDurationValue || 45;
+            const unit = task.customDurationUnit || 'minutes';
+            if (isVi) {
+                const unitMap = { minutes: 'phút', hours: 'giờ', days: 'ngày', weeks: 'tuần', months: 'tháng' };
+                return `${val} ${unitMap[unit] || unit}`;
+            } else {
+                if (unit === 'minutes') return `${val} min`;
+                if (unit === 'hours') return val === 1 ? '1 hour' : `${val} hours`;
+                if (unit === 'days') return val === 1 ? '1 day' : `${val} days`;
+                if (unit === 'weeks') return val === 1 ? '1 week' : `${val} weeks`;
+                if (unit === 'months') return val === 1 ? '1 month' : `${val} months`;
+                return `${val} ${unit}`;
+            }
+        }
+        if (task.durationMinutes) {
+            const mins = task.durationMinutes;
+            if (isVi) {
+                if (mins < 60) return `${mins} phút`;
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                return m > 0 ? `${h} giờ ${m} phút` : `${h} giờ`;
+            } else {
+                return formatDurationMinutes(mins);
+            }
+        }
+        return isVi ? 'Không chắc' : 'Not sure';
+    }
+
     function renderAssessmentTask() {
         const container = document.getElementById('emergency-stage-prioritize');
         if (!container) return;
@@ -928,65 +1109,70 @@ window.TempoEmergencyFlow = (function() {
         }
 
         const task = tasks[assessmentIndex];
+        const isVi = isViLocale();
         const relativeDueText = task.hasDeadline
-            ? calculateRelativeDueText(task.deadlineDate, task.deadlineTime)
-            : 'No fixed deadline (explore at your own pace)';
+            ? calculateRelativeDueText(task.deadlineDate, task.deadlineTime, isVi)
+            : (isVi ? 'Chưa có deadline (linh hoạt theo tiến độ của bạn)' : 'No fixed deadline (explore at your own pace)');
 
         container.innerHTML = `
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Secondary Back Navigation -->
                 <div class="flex items-center justify-between">
                     ${assessmentIndex > 0 
-                        ? `<button onclick="window.TempoEmergencyFlow.previousAssessmentTask()" class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group"><span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span><span>Previous task</span></button>`
-                        : `<button onclick="window.TempoEmergencyFlow.goToStage('reality-check')" class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group"><span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span><span>Back to Reality Check</span></button>`
+                        ? `<button onclick="window.TempoEmergencyFlow.previousAssessmentTask()" class="inline-flex items-center text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition py-1 group"><span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span><span>${isVi ? 'Task trước' : 'Previous task'}</span></button>`
+                        : `<button onclick="window.TempoEmergencyFlow.goToStage('reality-check')" class="inline-flex items-center text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition py-1 group"><span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span><span>${isVi ? 'Quay lại Trút bỏ suy nghĩ' : 'Back to Reality Check'}</span></button>`
                     }
                 </div>
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">PRIORITIZE & ESTIMATE</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#3D6B52]">${isVi ? 'ƯU TIÊN & ƯỚC LƯỢNG' : 'PRIORITIZE & ESTIMATE'}</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Let's figure out what needs your attention first.
+                        ${isVi ? 'Hãy xác định những việc cần được ưu tiên trước.' : "Let's figure out what needs your attention first."}
                     </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68]">
-                        We'll look at one task at a time.
+                    <p class="text-xs sm:text-sm text-[#5C665F]">
+                        ${isVi ? 'Chúng ta sẽ xem xét từng task một.' : "We'll look at one task at a time."}
                     </p>
                 </div>
 
                 <!-- Progress Pill -->
-                <div class="flex items-center justify-between text-xs text-[#6F6B68] px-1">
-                    <span class="font-bold text-[#FF6B2C]">Task ${assessmentIndex + 1} of ${tasks.length}</span>
-                    <span>${Math.round(((assessmentIndex + 1) / tasks.length) * 100)}% evaluated</span>
+                <div class="flex items-center justify-between text-xs text-[#5C665F] px-1">
+                    <span class="font-bold text-[#446A7B]">${isVi ? `Task ${assessmentIndex + 1}/${tasks.length}` : `Task ${assessmentIndex + 1} of ${tasks.length}`}</span>
+                    <span>${isVi ? `Đã đánh giá ${Math.round(((assessmentIndex + 1) / tasks.length) * 100)}%` : `${Math.round(((assessmentIndex + 1) / tasks.length) * 100)}% evaluated`}</span>
                 </div>
 
-                <!-- Task Card Preview -->
-                <div class="bg-[#FFF8F2] border border-[#FFD2BA]/60 rounded-2xl p-4 sm:p-5 space-y-1">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-[#B83D08]">Current Task</span>
+                <!-- Task Card Preview: Warm Blush subtle highlight -->
+                <div class="bg-[#FCF6F2] border border-[#ECC9BA] rounded-2xl p-4 sm:p-5 space-y-1 shadow-2xs">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-[#8A5645]">${isVi ? 'TASK HIỆN TẠI' : 'CURRENT TASK'}</span>
                     <h3 class="font-heading text-lg sm:text-xl font-bold text-[#202124]">${escapeHTML(task.name)}</h3>
-                    <p class="text-xs text-[#6F6B68] flex items-center space-x-1.5 flex-wrap">
+                    <p class="text-xs text-[#5C665F] flex items-center space-x-1.5 flex-wrap">
                         <span>🕒</span>
                         <span class="font-semibold text-gray-800">${relativeDueText}</span>
                         <span>•</span>
                         <button type="button"
                                 onclick="window.TempoEmergencyFlow.openDeadlineModal('${task.id}')"
-                                class="text-[#FF6B2C] hover:underline font-semibold text-[11px] transition">
-                            Edit deadline
+                                class="text-[#446A7B] hover:text-[#2D4D5C] hover:underline font-semibold text-[11px] transition cursor-pointer">
+                            ${isVi ? 'Sửa Deadline' : 'Edit deadline'}
                         </button>
                     </p>
                 </div>
 
                 <!-- 4 Questions Card -->
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] p-5 sm:p-7 space-y-6 shadow-sm">
+                <div class="bg-white border border-[#E2DDD7] rounded-[22px] p-5 sm:p-7 space-y-6 shadow-sm">
                     <!-- Q1: Importance -->
                     <div class="space-y-2">
                         <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                            1. How important is this task?
+                            ${isVi ? '1. TASK NÀY QUAN TRỌNG NHƯ THẾ NÀO?' : '1. HOW IMPORTANT IS THIS TASK?'}
                         </label>
                         <div class="grid grid-cols-3 gap-2.5">
-                            ${['High', 'Medium', 'Low'].map(opt => `
-                                <div onclick="window.TempoEmergencyFlow.setAssessmentOption('importance', '${opt}')"
-                                     class="em-choice-pill p-3 rounded-xl text-center text-xs font-semibold ${task.importance === opt ? 'em-choice-pill--selected' : 'text-gray-700'}">
-                                    ${opt}
+                            ${[
+                                { val: 'High', label: isVi ? 'Cao' : 'High' },
+                                { val: 'Medium', label: isVi ? 'Trung bình' : 'Medium' },
+                                { val: 'Low', label: isVi ? 'Thấp' : 'Low' }
+                            ].map(opt => `
+                                <div onclick="window.TempoEmergencyFlow.setAssessmentOption('importance', '${opt.val}')"
+                                     class="em-choice-pill p-3 rounded-xl text-center text-xs font-semibold ${task.importance === opt.val ? 'em-choice-pill--blush-selected' : 'text-gray-700'}">
+                                    ${opt.label}
                                 </div>
                             `).join('')}
                         </div>
@@ -995,13 +1181,18 @@ window.TempoEmergencyFlow = (function() {
                     <!-- Q2: Consequences -->
                     <div class="space-y-2">
                         <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                            2. What happens if it's late or unfinished?
+                            ${isVi ? '2. ĐIỀU GÌ XẢY RA NẾU TASK BỊ TRỄ HOẶC CHƯA HOÀN THÀNH?' : "2. WHAT HAPPENS IF IT'S LATE OR UNFINISHED?"}
                         </label>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            ${['Big consequences', 'Some consequences', 'Not much', 'Not sure'].map(opt => `
-                                <div onclick="window.TempoEmergencyFlow.setAssessmentOption('consequence', '${opt}')"
-                                     class="em-choice-pill p-3 rounded-xl text-center text-xs font-semibold ${task.consequence === opt ? 'em-choice-pill--selected' : 'text-gray-700'}">
-                                    ${opt}
+                            ${[
+                                { val: 'Big consequences', label: isVi ? 'Hậu quả nghiêm trọng' : 'Big consequences' },
+                                { val: 'Some consequences', label: isVi ? 'Có một số hậu quả' : 'Some consequences' },
+                                { val: 'Not much', label: isVi ? 'Không đáng kể' : 'Not much' },
+                                { val: 'Not sure', label: isVi ? 'Không chắc' : 'Not sure' }
+                            ].map(opt => `
+                                <div onclick="window.TempoEmergencyFlow.setAssessmentOption('consequence', '${opt.val}')"
+                                     class="em-choice-pill p-3 rounded-xl text-center text-xs font-semibold ${task.consequence === opt.val ? 'em-choice-pill--blush-selected' : 'text-gray-700'}">
+                                    ${opt.label}
                                 </div>
                             `).join('')}
                         </div>
@@ -1010,22 +1201,23 @@ window.TempoEmergencyFlow = (function() {
                     <!-- Q3: Flexibility (Multi-select) -->
                     <div class="space-y-2">
                         <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                            3. Can anything about this task change? <span class="text-[11px] font-normal text-[#6F6B68]">(Select all that apply)</span>
+                            ${isVi ? '3. CÓ ĐIỀU GÌ Ở TASK NÀY CÓ THỂ THAY ĐỔI ĐƯỢC KHÔNG?' : '3. CAN ANYTHING ABOUT THIS TASK CHANGE?'}
+                            <span class="text-[11px] font-normal text-[#5C665F]">(${isVi ? 'CHỌN TẤT CẢ ĐÁP ÁN PHÙ HỢP' : 'SELECT ALL THAT APPLY'})</span>
                         </label>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             ${[
-                                'Reduce what I need to do',
-                                'Ask someone for help',
-                                'Move / negotiate the deadline',
-                                'Probably not',
-                                'Not sure'
+                                { val: 'Reduce what I need to do', label: isVi ? 'Giảm bớt khối lượng việc cần làm' : 'Reduce what I need to do' },
+                                { val: 'Ask someone for help', label: isVi ? 'Nhờ người khác hỗ trợ' : 'Ask someone for help' },
+                                { val: 'Move / negotiate the deadline', label: isVi ? 'Dời / thương lượng lại Deadline' : 'Move / negotiate the deadline' },
+                                { val: 'Probably not', label: isVi ? 'Hầu như không thể thay đổi' : 'Probably not' },
+                                { val: 'Not sure', label: isVi ? 'Không chắc' : 'Not sure' }
                             ].map(opt => {
-                                const isSelected = task.flexibility && task.flexibility.includes(opt);
+                                const isSelected = task.flexibility && task.flexibility.includes(opt.val);
                                 return `
-                                    <div onclick="window.TempoEmergencyFlow.toggleAssessmentFlexibility('${opt}')"
-                                         class="em-choice-pill p-3 rounded-xl flex items-center justify-between text-xs font-medium ${isSelected ? 'em-choice-pill--selected' : 'text-gray-700'}">
-                                        <span>${opt}</span>
-                                        <span>${isSelected ? '✓' : '+'}</span>
+                                    <div onclick="window.TempoEmergencyFlow.toggleAssessmentFlexibility('${opt.val}')"
+                                         class="em-choice-pill p-3 rounded-xl flex items-center justify-between text-xs font-medium ${isSelected ? 'em-choice-pill--sage-selected' : 'text-gray-700'}">
+                                        <span>${opt.label}</span>
+                                        <span class="font-bold">${isSelected ? '✓' : '+'}</span>
                                     </div>
                                 `;
                             }).join('')}
@@ -1036,18 +1228,18 @@ window.TempoEmergencyFlow = (function() {
                     <div class="space-y-2 pt-2 border-t border-gray-100">
                         <div class="space-y-0.5">
                             <label class="block text-xs font-bold uppercase tracking-wider text-[#202124]">
-                                4. How long do you think you'll need?
+                                ${isVi ? '4. Bạn nghĩ mình sẽ cần bao nhiêu thời gian?' : "4. How long do you think you'll need?"}
                             </label>
-                            <p class="text-xs text-[#6F6B68]">A rough estimate is enough. You can adjust this later.</p>
+                            <p class="text-xs text-[#5C665F]">${isVi ? 'Chỉ cần ước lượng gần đúng. Bạn có thể điều chỉnh sau.' : 'A rough estimate is enough. You can adjust this later.'}</p>
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
                             ${[
-                                { label: '30 min', val: 30 },
-                                { label: '1h', val: 60 },
-                                { label: '2h', val: 120 },
-                                { label: '3h', val: 180 },
-                                { label: 'Custom', val: 'custom' },
-                                { label: 'Not sure', val: 'unknown' }
+                                { label: isVi ? '30 phút' : '30 min', val: 30 },
+                                { label: isVi ? '1 giờ' : '1h', val: 60 },
+                                { label: isVi ? '2 giờ' : '2h', val: 120 },
+                                { label: isVi ? '3 giờ' : '3h', val: 180 },
+                                { label: isVi ? 'Tùy chỉnh' : 'Custom', val: 'custom' },
+                                { label: isVi ? 'Không chắc' : 'Not sure', val: 'unknown' }
                             ].map(dur => {
                                 let isSelected = false;
                                 if (dur.val === 'custom') {
@@ -1059,7 +1251,7 @@ window.TempoEmergencyFlow = (function() {
                                 }
                                 return `
                                     <div onclick="window.TempoEmergencyFlow.setAssessmentDuration('${dur.val}')"
-                                         class="em-choice-pill p-2.5 rounded-xl text-center text-xs font-semibold ${isSelected ? 'em-choice-pill--selected' : 'text-gray-700'}">
+                                         class="em-choice-pill p-2.5 rounded-xl text-center text-xs font-semibold ${isSelected ? 'em-choice-pill--sage-selected' : 'text-gray-700'}">
                                         ${dur.label}
                                     </div>
                                 `;
@@ -1068,25 +1260,25 @@ window.TempoEmergencyFlow = (function() {
 
                         <!-- Custom duration input box -->
                         <div id="em-custom-duration-box" class="${task.isCustomDuration ? '' : 'hidden'} pt-2 space-y-1.5">
-                            <label class="block text-xs font-semibold text-gray-700">Custom estimate</label>
+                            <label class="block text-xs font-semibold text-gray-700">${isVi ? 'Ước lượng tùy chỉnh' : 'Custom estimate'}</label>
                             <div class="flex items-center space-x-2">
                                 <input id="em-custom-value-input" type="number" min="1" step="any"
                                        value="${task.customDurationValue || 45}"
                                        oninput="window.TempoEmergencyFlow.handleCustomDurationChange(this.value, null)"
-                                       placeholder="Value"
-                                       class="w-24 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-center font-bold focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none">
+                                       placeholder="${isVi ? 'Số lượng' : 'Value'}"
+                                       class="w-24 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-center font-bold focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none">
                                 <select id="em-custom-unit-select"
                                         onchange="window.TempoEmergencyFlow.handleCustomDurationChange(null, this.value)"
-                                        class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none">
-                                    <option value="minutes" ${(task.customDurationUnit || 'minutes') === 'minutes' ? 'selected' : ''}>minutes</option>
-                                    <option value="hours" ${task.customDurationUnit === 'hours' ? 'selected' : ''}>hours</option>
-                                    <option value="days" ${task.customDurationUnit === 'days' ? 'selected' : ''}>days</option>
-                                    <option value="weeks" ${task.customDurationUnit === 'weeks' ? 'selected' : ''}>weeks</option>
-                                    <option value="months" ${task.customDurationUnit === 'months' ? 'selected' : ''}>months</option>
+                                        class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none">
+                                    <option value="minutes" ${(task.customDurationUnit || 'minutes') === 'minutes' ? 'selected' : ''}>${isVi ? 'phút' : 'minutes'}</option>
+                                    <option value="hours" ${task.customDurationUnit === 'hours' ? 'selected' : ''}>${isVi ? 'giờ' : 'hours'}</option>
+                                    <option value="days" ${task.customDurationUnit === 'days' ? 'selected' : ''}>${isVi ? 'ngày' : 'days'}</option>
+                                    <option value="weeks" ${task.customDurationUnit === 'weeks' ? 'selected' : ''}>${isVi ? 'tuần' : 'weeks'}</option>
+                                    <option value="months" ${task.customDurationUnit === 'months' ? 'selected' : ''}>${isVi ? 'tháng' : 'months'}</option>
                                 </select>
                             </div>
-                            <p class="text-[11px] text-[#6F6B68] font-medium" id="em-custom-preview-label">
-                                Current estimate: <strong>${task.durationLabel || '45 minutes'}</strong>
+                            <p class="text-[11px] text-[#5C665F] font-medium" id="em-custom-preview-label">
+                                ${isVi ? 'Ước lượng hiện tại:' : 'Current estimate:'} <strong>${formatTaskDurationDisplay(task, isVi)}</strong>
                             </p>
                         </div>
                     </div>
@@ -1095,12 +1287,12 @@ window.TempoEmergencyFlow = (function() {
                 <!-- Navigation Controls -->
                 <div class="pt-2 flex items-center justify-between">
                     ${assessmentIndex > 0 
-                        ? `<button onclick="window.TempoEmergencyFlow.previousAssessmentTask()" class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124]">← Previous task</button>`
-                        : `<button onclick="window.TempoEmergencyFlow.goToStage('reality-check')" class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124]">← Reality Check</button>`
+                        ? `<button onclick="window.TempoEmergencyFlow.previousAssessmentTask()" class="text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition cursor-pointer">← ${isVi ? 'Task trước' : 'Previous task'}</button>`
+                        : `<button onclick="window.TempoEmergencyFlow.goToStage('reality-check')" class="text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition cursor-pointer">← ${isVi ? 'Quay lại Trút bỏ suy nghĩ' : 'Back to Reality Check'}</button>`
                     }
                     <button onclick="window.TempoEmergencyFlow.saveAssessmentAndNext()" 
-                            class="btn-primary px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm flex items-center space-x-1.5 transition">
-                        <span>${assessmentIndex === tasks.length - 1 ? 'Review Priority Categories →' : 'Save & next task →'}</span>
+                            class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-7 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center space-x-1.5 transition cursor-pointer">
+                        <span>${assessmentIndex === tasks.length - 1 ? (isVi ? 'Xem các nhóm ưu tiên →' : 'Review Priority Categories →') : (isVi ? 'Lưu & task tiếp theo →' : 'Save & next task →')}</span>
                     </button>
                 </div>
             </div>
@@ -1206,7 +1398,8 @@ window.TempoEmergencyFlow = (function() {
 
         const preview = document.getElementById('em-custom-preview-label');
         if (preview) {
-            preview.innerHTML = `Current estimate: <strong>${task.durationLabel}</strong>`;
+            const isVi = isViLocale();
+            preview.innerHTML = `${isVi ? 'Ước lượng hiện tại:' : 'Current estimate:'} <strong>${formatTaskDurationDisplay(task, isVi)}</strong>`;
         }
     }
 
@@ -1257,11 +1450,41 @@ window.TempoEmergencyFlow = (function() {
         const container = document.getElementById('emergency-stage-priority-review');
         if (!container) return;
 
+        const isVi = isViLocale();
+
         const categories = [
-            { key: 'DO_FIRST', label: '🔴 DO FIRST', badge: 'bg-rose-50 text-rose-800 border-rose-200', desc: 'Urgent pressure with high impact. Needs immediate focus.' },
-            { key: 'PLAN', label: '🟡 PLAN', badge: 'bg-amber-50 text-amber-800 border-amber-200', desc: 'Important work. Schedule dedicated blocks before deadlines.' },
-            { key: 'REDUCE_HELP', label: '🟠 REDUCE / GET HELP', badge: 'bg-orange-50 text-orange-800 border-orange-200', desc: 'Scope can be trimmed, simplified, or delegated with peer help.' },
-            { key: 'LATER', label: '⚪ LATER', badge: 'bg-stone-100 text-stone-700 border-stone-200', desc: 'Lower immediate stakes. Can be safely addressed after the crunch.' }
+            { 
+                key: 'DO_FIRST', 
+                label: isVi ? 'LÀM TRƯỚC' : 'DO FIRST', 
+                icon: '🔴', 
+                badge: 'bg-[#FDF2EC] text-[#783626] border-[#ECC9BA]', 
+                cardBorder: 'border-[#E7D6CE]',
+                desc: isVi ? 'Áp lực cấp bách và có ảnh hưởng lớn. Cần được ưu tiên ngay.' : 'Urgent pressure with high impact. Needs immediate focus.' 
+            },
+            { 
+                key: 'PLAN', 
+                label: isVi ? 'LÊN KẾ HOẠCH' : 'PLAN', 
+                icon: '🟢', 
+                badge: 'bg-[#EDF4EF] text-[#244634] border-[#8EA28F]/40', 
+                cardBorder: 'border-[#D5E2D9]',
+                desc: isVi ? 'Công việc quan trọng. Hãy dành thời gian cụ thể để hoàn thành trước Deadline.' : 'Important work. Schedule dedicated blocks before deadlines.' 
+            },
+            { 
+                key: 'REDUCE_HELP', 
+                label: isVi ? 'GIẢM BỚT / NHỜ HỖ TRỢ' : 'REDUCE / GET HELP', 
+                icon: '🔵', 
+                badge: 'bg-[#EEF4F7] text-[#2B4E5E] border-[#93AFBC]/40', 
+                cardBorder: 'border-[#D4E3EA]',
+                desc: isVi ? 'Phạm vi việc có thể thu gọn, đơn giản hóa hoặc nhờ người khác hỗ trợ.' : 'Scope can be trimmed, simplified, or delegated with peer help.' 
+            },
+            { 
+                key: 'LATER', 
+                label: isVi ? 'LÀM SAU' : 'LATER', 
+                icon: '⚪', 
+                badge: 'bg-[#F5F3F0] text-[#55524E] border-[#DDD8D2]', 
+                cardBorder: 'border-[#EAE4DF]',
+                desc: isVi ? 'Ít cấp bách hơn ở thời điểm này. Có thể xử lý an tâm sau khi vượt qua giai đoạn cao điểm.' : 'Lower immediate stakes. Can be safely addressed after the crunch.' 
+            }
         ];
 
         container.innerHTML = `
@@ -1269,20 +1492,20 @@ window.TempoEmergencyFlow = (function() {
                 <!-- Secondary Back Navigation -->
                 <div class="flex items-center justify-between">
                     <button onclick="window.TempoEmergencyFlow.goToStage('prioritize')" 
-                            class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
+                            class="inline-flex items-center text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition py-1 group cursor-pointer">
                         <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Back to Assessment</span>
+                        <span>${isVi ? 'Quay lại phần đánh giá' : 'Back to Assessment'}</span>
                     </button>
                 </div>
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">PRIORITY REVIEW</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#3D6B52]">${isVi ? 'XEM LẠI MỨC ĐỘ ƯU TIÊN' : 'PRIORITY REVIEW'}</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Suggested Organization
+                        ${isVi ? 'Cách sắp xếp được đề xuất' : 'Suggested Organization'}
                     </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        Here is how Tempo grouped your tasks based on your answers. You can change any category if something feels off.
+                    <p class="text-xs sm:text-sm text-[#5C665F] max-w-md mx-auto leading-relaxed">
+                        ${isVi ? 'Đây là cách Tempo phân nhóm các task dựa trên câu trả lời của bạn. Bạn có thể thay đổi nhóm nếu cảm thấy chưa phù hợp.' : 'Here is how Tempo grouped your tasks based on your answers. You can change any category if something feels off.'}
                     </p>
                 </div>
 
@@ -1290,46 +1513,52 @@ window.TempoEmergencyFlow = (function() {
                 <div class="space-y-5">
                     ${categories.map(cat => {
                         const catTasks = tasks.filter(t => t.priorityCategory === cat.key);
+                        const countText = isVi ? `${catTasks.length} task` : `${catTasks.length} task${catTasks.length === 1 ? '' : 's'}`;
                         return `
-                            <div class="bg-white border border-[#EAE4DF] rounded-2xl p-4 sm:p-5 space-y-3 shadow-sm">
+                            <div class="bg-white border ${cat.cardBorder} rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
                                 <div class="flex items-center justify-between pb-2 border-b border-gray-100">
                                     <div class="space-y-0.5">
-                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border ${cat.badge}">${cat.label}</span>
-                                        <p class="text-[11px] text-[#6F6B68] mt-1">${cat.desc}</p>
+                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border ${cat.badge}">${cat.icon} ${cat.label}</span>
+                                        <p class="text-[11px] text-[#5C665F] mt-1">${cat.desc}</p>
                                     </div>
-                                    <span class="text-xs font-bold text-gray-500">${catTasks.length} task${catTasks.length === 1 ? '' : 's'}</span>
+                                    <span class="text-xs font-bold text-[#5C665F]">${countText}</span>
                                 </div>
 
                                 <div class="space-y-2">
-                                    ${catTasks.length === 0 ? `<p class="text-xs text-gray-400 italic py-1">No tasks in this category.</p>` : ''}
-                                    ${catTasks.map(t => `
-                                        <div class="p-3 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                            <div class="space-y-1 min-w-0">
-                                                <h5 class="text-xs sm:text-sm font-bold text-[#202124] truncate">${escapeHTML(t.name)}</h5>
-                                                <p class="text-[11px] text-[#6F6B68] flex items-center space-x-1.5 flex-wrap">
-                                                    <span>🕒 ${t.hasDeadline ? formatHumanDeadline(t.deadlineDate, t.deadlineTime) : 'No fixed deadline'}</span>
-                                                    <button type="button"
-                                                            onclick="window.TempoEmergencyFlow.openDeadlineModal('${t.id}')"
-                                                            class="text-[#FF6B2C] hover:underline font-semibold text-[11px] transition">
-                                                        Edit
-                                                    </button>
-                                                    <span>•</span>
-                                                    <span>⏱️ ~${t.durationLabel}</span>
-                                                </p>
+                                    ${catTasks.length === 0 ? `<p class="text-xs text-gray-400 italic py-1">${isVi ? 'Chưa có task nào trong nhóm này.' : 'No tasks in this category.'}</p>` : ''}
+                                    ${catTasks.map(t => {
+                                        const dueText = t.hasDeadline
+                                            ? `Deadline ${formatHumanDeadline(t.deadlineDate, t.deadlineTime, isVi)}`
+                                            : (isVi ? 'Chưa có deadline' : 'No fixed deadline');
+                                        return `
+                                            <div class="p-3 bg-[#FCFBF9] border border-[#E8E3DF] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                <div class="space-y-1 min-w-0">
+                                                    <h5 class="text-xs sm:text-sm font-bold text-[#202124] truncate">${escapeHTML(t.name)}</h5>
+                                                    <p class="text-[11px] text-[#5C665F] flex items-center space-x-1.5 flex-wrap">
+                                                        <span>🕒 ${dueText}</span>
+                                                        <button type="button"
+                                                                onclick="window.TempoEmergencyFlow.openDeadlineModal('${t.id}')"
+                                                                class="text-[#446A7B] hover:text-[#2D4D5C] hover:underline font-semibold text-[11px] transition cursor-pointer">
+                                                            ${isVi ? 'Sửa Deadline' : 'Edit'}
+                                                        </button>
+                                                        <span>•</span>
+                                                        <span>⏱️ ~${formatTaskDurationDisplay(t, isVi)}</span>
+                                                    </p>
+                                                </div>
+                                                <!-- Reassign Dropdown -->
+                                                <div class="shrink-0 flex items-center space-x-1.5">
+                                                    <label class="text-[10px] text-gray-500 uppercase font-semibold">${isVi ? 'PHÂN LOẠI:' : 'CATEGORY:'}</label>
+                                                    <select onchange="window.TempoEmergencyFlow.reassignTaskCategory('${t.id}', this.value)"
+                                                            class="text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] cursor-pointer">
+                                                        <option value="DO_FIRST" ${t.priorityCategory === 'DO_FIRST' ? 'selected' : ''}>${isVi ? 'LÀM TRƯỚC' : 'DO FIRST'}</option>
+                                                        <option value="PLAN" ${t.priorityCategory === 'PLAN' ? 'selected' : ''}>${isVi ? 'LÊN KẾ HOẠCH' : 'PLAN'}</option>
+                                                        <option value="REDUCE_HELP" ${t.priorityCategory === 'REDUCE_HELP' ? 'selected' : ''}>${isVi ? 'GIẢM BỚT / NHỜ HỖ TRỢ' : 'REDUCE / HELP'}</option>
+                                                        <option value="LATER" ${t.priorityCategory === 'LATER' ? 'selected' : ''}>${isVi ? 'LÀM SAU' : 'LATER'}</option>
+                                                    </select>
+                                                </div>
                                             </div>
-                                            <!-- Reassign Dropdown -->
-                                            <div class="shrink-0 flex items-center space-x-1.5">
-                                                <label class="text-[10px] text-gray-500 uppercase font-semibold">Category:</label>
-                                                <select onchange="window.TempoEmergencyFlow.reassignTaskCategory('${t.id}', this.value)"
-                                                        class="text-xs font-semibold border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
-                                                    <option value="DO_FIRST" ${t.priorityCategory === 'DO_FIRST' ? 'selected' : ''}>DO FIRST</option>
-                                                    <option value="PLAN" ${t.priorityCategory === 'PLAN' ? 'selected' : ''}>PLAN</option>
-                                                    <option value="REDUCE_HELP" ${t.priorityCategory === 'REDUCE_HELP' ? 'selected' : ''}>REDUCE / HELP</option>
-                                                    <option value="LATER" ${t.priorityCategory === 'LATER' ? 'selected' : ''}>LATER</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    `).join('')}
+                                        `;
+                                    }).join('')}
                                 </div>
                             </div>
                         `;
@@ -1338,12 +1567,12 @@ window.TempoEmergencyFlow = (function() {
 
                 <!-- Navigation Controls -->
                 <div class="pt-4 flex items-center justify-between border-t border-[#EAE4DF]">
-                    <button onclick="window.TempoEmergencyFlow.goToStage('prioritize')" class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124]">
-                        ← Back to Assessment
+                    <button onclick="window.TempoEmergencyFlow.goToStage('prioritize')" class="text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition cursor-pointer">
+                        ← ${isVi ? 'Quay lại phần đánh giá' : 'Back to Assessment'}
                     </button>
                     <button onclick="window.TempoEmergencyFlow.goToStage('available-time')" 
-                            class="btn-primary px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm flex items-center space-x-1.5 transition">
-                        <span>Continue to Available Time →</span>
+                            class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-7 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center space-x-1.5 transition cursor-pointer">
+                        <span>${isVi ? 'Tiếp tục đến Thời gian làm việc →' : 'Continue to Available Time →'}</span>
                     </button>
                 </div>
             </div>
@@ -1366,32 +1595,46 @@ window.TempoEmergencyFlow = (function() {
     // =========================================================================
     // STAGE 5: AVAILABLE TIME (When Can You Actually Work?)
     // =========================================================================
-    function formatDayLabel(dateStr) {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    function formatDayLabel(dateStr, isVi = isViLocale()) {
+        const todayStr = getTodayISO();
+        const tomorrowStr = getTomorrowISO();
 
         const [y, m, d] = dateStr.split('-').map(Number);
         const targetDate = new Date(y, m - 1, d);
 
-        const monthDay = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
-        const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+        if (isVi) {
+            const viWeekdays = ['CN', 'THỨ 2', 'THỨ 3', 'THỨ 4', 'THỨ 5', 'THỨ 6', 'THỨ 7'];
+            const viWeekday = viWeekdays[targetDate.getDay()] || '';
+            const monthDay = `${d} THG ${m}`;
 
-        if (dateStr === todayStr) {
-            return `TODAY · ${monthDay}`;
-        } else if (dateStr === tomorrowStr) {
-            return `TOMORROW · ${monthDay}`;
+            if (dateStr === todayStr) {
+                return `HÔM NAY · ${monthDay}`;
+            } else if (dateStr === tomorrowStr) {
+                return `NGÀY MAI · ${monthDay}`;
+            } else {
+                return `${viWeekday} · ${monthDay}`;
+            }
         } else {
-            return `${weekday} · ${monthDay}`;
+            const enMonths = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+            const enWeekdays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+            const enMonth = enMonths[targetDate.getMonth()] || targetDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+            const weekday = enWeekdays[targetDate.getDay()] || targetDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+            const monthDay = `${enMonth} ${d}`;
+
+            if (dateStr === todayStr) {
+                return `TODAY · ${monthDay}`;
+            } else if (dateStr === tomorrowStr) {
+                return `TOMORROW · ${monthDay}`;
+            } else {
+                return `${weekday} · ${monthDay}`;
+            }
         }
     }
 
     function getSuggestedNextDayStr() {
         if (!availabilityDays || availabilityDays.length === 0) {
             const today = new Date();
-            return today.toISOString().split('T')[0];
+            return getTodayISO();
         }
         const sortedDates = availabilityDays.map(d => d.date).sort();
         const maxDateStr = sortedDates[sortedDates.length - 1];
@@ -1404,12 +1647,38 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function initDefaultAvailability() {
-        const today = new Date();
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // If availability is already loaded and valid, don't clobber it
+        if (Array.isArray(availabilityDays) && availabilityDays.length > 0) {
+            return;
+        }
 
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        // Try to load persisted availabilityDays from confirmedPlan, localStorage tempo_availability_days, or tempo_working_plan
+        try {
+            if (confirmedPlan && Array.isArray(confirmedPlan.availabilityDays) && confirmedPlan.availabilityDays.length > 0) {
+                availabilityDays = JSON.parse(JSON.stringify(confirmedPlan.availabilityDays));
+                return;
+            }
+            const storedAvail = localStorage.getItem('tempo_availability_days');
+            if (storedAvail) {
+                const parsed = JSON.parse(storedAvail);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    availabilityDays = parsed;
+                    return;
+                }
+            }
+            const storedPlan = localStorage.getItem('tempo_working_plan');
+            if (storedPlan) {
+                const parsed = JSON.parse(storedPlan);
+                if (parsed && Array.isArray(parsed.availabilityDays) && parsed.availabilityDays.length > 0) {
+                    availabilityDays = parsed.availabilityDays;
+                    return;
+                }
+            }
+        } catch(e) {}
+
+        const today = new Date();
+        const todayStr = getTodayISO();
+        const tomorrowStr = getTomorrowISO();
 
         const todayLabel = formatDayLabel(todayStr);
         const tomorrowLabel = formatDayLabel(tomorrowStr);
@@ -1451,57 +1720,58 @@ window.TempoEmergencyFlow = (function() {
         const container = document.getElementById('emergency-stage-available-time');
         if (!container) return;
 
+        const isVi = isViLocale();
         const totalAvailableMin = calculateTotalAvailableMinutes();
         const totalWorkloadMin = calculateTotalWorkloadMinutes();
         const unknownCount = getUnknownTasksCount();
         const allUnavailable = availabilityDays.length > 0 && availabilityDays.every(d => d.isUnavailable);
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayISO();
 
         container.innerHTML = `
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Secondary Back Navigation -->
                 <div class="flex items-center justify-between">
                     <button onclick="window.TempoEmergencyFlow.goToStage('priority-review')" 
-                            class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
+                            class="inline-flex items-center text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition py-1 group cursor-pointer">
                         <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>Back to Priority Review</span>
+                        <span>${isVi ? 'Quay lại phần phân loại ưu tiên' : 'Back to Priority Review'}</span>
                     </button>
                 </div>
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">AVAILABLE TIME</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#3D6B52]">${isVi ? 'THỜI GIAN CÓ THỂ SẮP XẾP' : 'AVAILABLE TIME'}</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        When can you actually work on this?
+                        ${isVi ? 'Bạn thực sự có thể dành thời gian làm việc khi nào?' : 'When can you actually work on this?'}
                     </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        Tell Tempo when you're available. We'll build the plan around your time — not the other way around.
+                    <p class="text-xs sm:text-sm text-[#5C665F] max-w-md mx-auto leading-relaxed">
+                        ${isVi ? 'Cho Tempo biết thời gian bạn có thể làm việc. Chúng tôi sẽ xây dựng kế hoạch dựa trên lịch trình của bạn — không phải ngược lại.' : "Tell Tempo when you're available. We'll build the plan around your time — not the other way around."}
                     </p>
                 </div>
 
                 <!-- Shortcuts Card -->
-                <div class="p-3 bg-white border border-[#EAE4DF] rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span class="font-semibold text-gray-700">Quick shortcuts:</span>
+                <div class="p-3 bg-white border border-[#E8E3DF] rounded-2xl flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
+                    <span class="font-semibold text-gray-700">${isVi ? 'Thao tác nhanh' : 'Quick shortcuts'}:</span>
                     <div class="flex flex-wrap gap-2">
-                        <button onclick="window.TempoEmergencyFlow.shortcutFreeRestOfToday()" 
-                                class="px-3 py-1.5 bg-[#FFF4EC] text-[#B83D08] hover:bg-[#FFE8D9] rounded-xl font-bold transition">
-                            ⚡ Free for rest of today
+                        <button type="button" onclick="window.TempoEmergencyFlow.shortcutFreeRestOfToday()" 
+                                class="px-3.5 py-1.5 bg-[#FDF2EC] text-[#783626] border border-[#ECC9BA] hover:bg-[#FAE8DE] rounded-xl font-bold transition cursor-pointer">
+                            ⚡ ${isVi ? 'Rảnh trong thời gian còn lại hôm nay' : 'Free for rest of today'}
                         </button>
-                        <button onclick="window.TempoEmergencyFlow.shortcutCopyTodayToTomorrow()" 
-                                class="px-3 py-1.5 bg-stone-100 text-stone-700 hover:bg-stone-200 rounded-xl font-semibold transition">
-                            📋 Copy today to tomorrow
+                        <button type="button" onclick="window.TempoEmergencyFlow.shortcutCopyTodayToTomorrow()" 
+                                class="px-3.5 py-1.5 bg-[#EEF4F7] text-[#2B4E5E] border border-[#93AFBC]/40 hover:bg-[#E1EDF2] rounded-xl font-semibold transition cursor-pointer">
+                            📋 ${isVi ? 'Sao chép lịch hôm nay sang ngày mai' : 'Copy today to tomorrow'}
                         </button>
                     </div>
                 </div>
 
                 <!-- All Unavailable Notice Banner (if all days unavailable) -->
                 ${allUnavailable ? `
-                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-2 text-xs text-amber-900">
-                        <p class="font-bold">You haven't added any available work time yet.</p>
-                        <p class="text-amber-800">Add at least one time block so Tempo can organize your tasks effectively.</p>
+                    <div class="p-4 bg-[#FDF2EC] border border-[#ECC9BA] rounded-2xl text-center space-y-2 text-xs text-[#783626]">
+                        <p class="font-bold">${isVi ? 'Bạn chưa thêm thời gian làm việc nào.' : "You haven't added any available work time yet."}</p>
+                        <p class="text-stone-600">${isVi ? 'Hãy thêm ít nhất một khung giờ để Tempo có thể sắp xếp các task hiệu quả.' : 'Add at least one time block so Tempo can organize your tasks effectively.'}</p>
                         <button onclick="window.TempoEmergencyFlow.restoreAllAvailability()" 
-                                class="px-4 py-2 bg-amber-200 hover:bg-amber-300 font-bold rounded-xl text-amber-900 transition">
-                            Reset default availability
+                                class="px-4 py-2 bg-[#EDF4EF] hover:bg-[#DCE7DF] font-bold rounded-xl text-[#244634] border border-[#8EA28F]/40 transition cursor-pointer">
+                            ${isVi ? 'Khôi phục thời gian mặc định' : 'Reset default availability'}
                         </button>
                     </div>
                 ` : ''}
@@ -1510,33 +1780,34 @@ window.TempoEmergencyFlow = (function() {
                 <div class="space-y-4">
                     ${availabilityDays.map((day, dayIndex) => {
                         const isToday = day.date === todayStr;
+                        const dayLabel = formatDayLabel(day.date, isVi);
 
                         if (day.isUnavailable) {
                             return `
-                                <div class="bg-[#FAF8F5] border border-[#EAE4DF] border-dashed rounded-[22px] p-5 space-y-3 shadow-sm">
+                                <div class="bg-[#FAF8F5] border border-[#EAE4DF] border-dashed rounded-[22px] p-5 space-y-3 shadow-2xs">
                                     <div class="flex items-center justify-between pb-2 border-b border-gray-200">
                                         <div class="flex items-center space-x-2">
-                                            <span class="font-heading text-xs font-extrabold tracking-wider text-gray-500 uppercase">${day.label}</span>
-                                            <span class="px-2 py-0.5 bg-stone-200 text-stone-600 rounded-md text-[10px] font-bold">NOT AVAILABLE</span>
+                                            <span class="font-heading text-xs font-extrabold tracking-wider text-gray-500 uppercase">${dayLabel}</span>
+                                            <span class="px-2 py-0.5 bg-stone-200 text-stone-600 rounded-md text-[10px] font-bold">${isVi ? 'KHÔNG THỂ LÀM VIỆC' : 'NOT AVAILABLE'}</span>
                                         </div>
                                         <div class="flex items-center space-x-2">
-                                            <span class="text-xs font-bold text-gray-400">0h total</span>
+                                            <span class="text-xs font-bold text-gray-400">0h ${isVi ? 'tổng thời gian' : 'total'}</span>
                                             ${!isToday ? `
                                                 <button onclick="window.TempoEmergencyFlow.openRemoveDayModal(${dayIndex})"
-                                                        class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold transition ml-1"
-                                                        title="Remove this day from planning window">
-                                                    Remove day
+                                                        class="text-[11px] text-[#A34336] hover:text-[#802D22] font-semibold transition ml-1 cursor-pointer"
+                                                        title="${isVi ? 'Xóa ngày này khỏi khung thời gian lập kế hoạch' : 'Remove this day from planning window'}">
+                                                    ${isVi ? 'Xóa ngày' : 'Remove day'}
                                                 </button>
                                             ` : ''}
                                         </div>
                                     </div>
-                                    <p class="text-xs text-[#6F6B68]">
-                                        You marked this day as unavailable. No tasks will be scheduled here.
+                                    <p class="text-xs text-[#5C665F]">
+                                        ${isVi ? 'Bạn đã đánh dấu ngày này không thể làm việc. Tempo sẽ không sắp xếp task vào ngày này.' : 'You marked this day as unavailable. No tasks will be scheduled here.'}
                                     </p>
                                     <div class="flex items-center space-x-3">
                                         <button onclick="window.TempoEmergencyFlow.toggleDayUnavailable(${dayIndex})"
-                                                class="text-xs text-[#FF6B2C] hover:underline font-bold flex items-center space-x-1">
-                                            <span>+ Add availability for this day</span>
+                                                class="text-xs text-[#4A6B5D] hover:text-[#385549] hover:underline font-bold flex items-center space-x-1 cursor-pointer">
+                                            <span>${isVi ? '+ Thêm thời gian làm việc cho ngày này' : '+ Add availability for this day'}</span>
                                         </button>
                                     </div>
                                 </div>
@@ -1546,21 +1817,21 @@ window.TempoEmergencyFlow = (function() {
                         const dayMinutes = calculateDayMinutes(day);
 
                         return `
-                            <div class="bg-white border border-[#EAE4DF] rounded-[22px] p-5 space-y-3 shadow-sm">
+                            <div class="bg-white border border-[#E8E3DF] rounded-[22px] p-5 space-y-3 shadow-2xs">
                                 <div class="flex items-center justify-between pb-2 border-b border-gray-100">
-                                    <span class="font-heading text-xs font-extrabold tracking-wider text-[#FF6B2C] uppercase">${day.label}</span>
+                                    <span class="font-heading text-xs font-extrabold tracking-wider text-[#2B4B39] uppercase">${dayLabel}</span>
                                     <div class="flex items-center space-x-3">
-                                        <span class="text-xs font-bold text-gray-600">${formatDayTotalDisplay(dayMinutes)}</span>
+                                        <span class="text-xs font-bold text-gray-600">${formatDayTotalDisplay(dayMinutes, isVi)}</span>
                                         <button onclick="window.TempoEmergencyFlow.toggleDayUnavailable(${dayIndex})"
-                                                class="text-[11px] text-gray-400 hover:text-stone-700 font-semibold transition"
-                                                title="Mark day as unavailable">
-                                            Mark day as not available
+                                                class="text-[11px] text-[#5C665F] hover:text-[#202124] font-semibold transition cursor-pointer"
+                                                title="${isVi ? 'Đánh dấu ngày không thể làm việc' : 'Mark day as not available'}">
+                                            ${isVi ? 'Đánh dấu ngày không thể làm việc' : 'Mark day as not available'}
                                         </button>
                                         ${!isToday ? `
                                             <button onclick="window.TempoEmergencyFlow.openRemoveDayModal(${dayIndex})"
-                                                    class="text-[11px] text-rose-500 hover:text-rose-700 font-semibold transition"
-                                                    title="Remove this day from planning window">
-                                                Remove day
+                                                    class="text-[11px] text-[#A34336] hover:text-[#802D22] font-semibold transition cursor-pointer"
+                                                    title="${isVi ? 'Xóa ngày này khỏi khung thời gian lập kế hoạch' : 'Remove this day from planning window'}">
+                                                ${isVi ? 'Xóa ngày' : 'Remove day'}
                                             </button>
                                         ` : ''}
                                     </div>
@@ -1571,27 +1842,29 @@ window.TempoEmergencyFlow = (function() {
                                     ${day.blocks.map((block, bIdx) => {
                                         const hasOverlapWithPrev = bIdx > 0 && parseTimeToMinutes(block.start) < parseTimeToMinutes(day.blocks[bIdx - 1].end);
                                         return `
-                                            <div class="flex items-center justify-between p-2.5 bg-[#FFFDFB] border border-[#EAE4DF] rounded-xl gap-2 text-xs">
+                                            <div class="flex items-center justify-between p-2.5 bg-[#FCFBF9] border border-[#E8E3DF] rounded-xl gap-2 text-xs">
                                                 <div class="flex items-center space-x-2">
-                                                    <span>From</span>
+                                                    <span class="font-medium text-gray-700">${isVi ? 'Từ' : 'From'}</span>
                                                     <input type="time" value="${block.start}" 
                                                            onchange="window.TempoEmergencyFlow.updateBlockTime(${dayIndex}, '${block.id}', this.value, null)"
-                                                           class="px-2 py-1 border border-gray-200 rounded-lg bg-white font-semibold">
-                                                    <span>to</span>
+                                                           class="px-2 py-1 border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F]">
+                                                    <span class="font-medium text-gray-700">${isVi ? 'đến' : 'to'}</span>
                                                     <input type="time" value="${block.end}" 
                                                            onchange="window.TempoEmergencyFlow.updateBlockTime(${dayIndex}, '${block.id}', null, this.value)"
-                                                           class="px-2 py-1 border border-gray-200 rounded-lg bg-white font-semibold">
+                                                           class="px-2 py-1 border border-gray-200 rounded-lg bg-white font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F]">
                                                     ${hasOverlapWithPrev ? `
-                                                        <span class="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold" title="Overlapping minutes are deduplicated automatically">
-                                                            Overlaps
+                                                        <span class="text-[10px] text-[#783626] bg-[#FDF2EC] px-1.5 py-0.5 rounded border border-[#ECC9BA] font-semibold" 
+                                                              title="${isVi ? 'Thời gian trùng nhau sẽ được tự động gộp' : 'Overlapping minutes are deduplicated automatically'}">
+                                                            ${isVi ? 'Trùng giờ' : 'Overlaps'}
                                                         </span>
                                                     ` : ''}
                                                 </div>
                                                 <div class="flex items-center space-x-2">
-                                                    <span class="text-[11px] font-bold text-[#FF6B2C]">${formatDurationMinutes(block.minutes)}</span>
+                                                    <span class="text-[11px] font-bold text-[#446A7B]">${formatDurationMinutes(block.minutes, isVi)}</span>
                                                     ${day.blocks.length > 1 ? `
                                                         <button onclick="window.TempoEmergencyFlow.removeTimeBlock(${dayIndex}, '${block.id}')"
-                                                                class="text-gray-400 hover:text-rose-600 p-1 rounded-md text-sm">✕</button>
+                                                                class="text-gray-400 hover:text-[#A34336] p-1 rounded-md text-sm transition cursor-pointer"
+                                                                title="${isVi ? 'Xóa khung giờ này' : 'Remove this time block'}">✕</button>
                                                     ` : ''}
                                                 </div>
                                             </div>
@@ -1600,8 +1873,8 @@ window.TempoEmergencyFlow = (function() {
                                 </div>
 
                                 <button onclick="window.TempoEmergencyFlow.addTimeBlock(${dayIndex})" 
-                                        class="text-xs text-[#FF6B2C] hover:underline font-bold pt-1 flex items-center space-x-1">
-                                    <span>+ Add another time block</span>
+                                        class="text-xs text-[#4A6B5D] hover:text-[#385549] hover:underline font-bold pt-1 flex items-center space-x-1 cursor-pointer">
+                                    <span>${isVi ? '+ Thêm khung giờ khác' : '+ Add another time block'}</span>
                                 </button>
                             </div>
                         `;
@@ -1610,60 +1883,60 @@ window.TempoEmergencyFlow = (function() {
                     <!-- + Add another day Button / Control -->
                     <div class="pt-1">
                         ${isAddingDay ? `
-                            <div class="bg-white border-2 border-dashed border-[#FF6B2C]/40 rounded-[22px] p-5 space-y-3.5 shadow-sm animate-fade-in">
+                            <div class="bg-white border-2 border-dashed border-[#8EA28F]/50 rounded-[22px] p-5 space-y-3.5 shadow-2xs animate-fade-in">
                                 <div class="flex items-center justify-between pb-2 border-b border-gray-100">
                                     <h4 class="font-heading text-xs font-bold uppercase tracking-wider text-[#202124]">
-                                        Add availability for
+                                        ${isVi ? 'Thêm thời gian làm việc cho ngày' : 'Add availability for'}
                                     </h4>
                                     <button onclick="window.TempoEmergencyFlow.cancelAddDay()" 
-                                            class="text-xs font-semibold text-gray-400 hover:text-gray-600">✕ Cancel</button>
+                                            class="text-xs font-semibold text-gray-400 hover:text-gray-600 cursor-pointer">✕ ${isVi ? 'Hủy' : 'Cancel'}</button>
                                 </div>
                                 <div class="flex flex-col sm:flex-row sm:items-center gap-3">
                                     <div class="space-y-1 flex-1">
-                                        <label for="em-add-day-input" class="block text-[11px] font-medium text-[#6F6B68]">Select date:</label>
+                                        <label for="em-add-day-input" class="block text-[11px] font-medium text-[#5C665F]">${isVi ? 'Chọn ngày:' : 'Select date:'}</label>
                                         <input id="em-add-day-input" type="date" min="${todayStr}"
                                                value="${getSuggestedNextDayStr()}"
-                                               class="w-full sm:w-auto px-3 py-2 border border-gray-200 rounded-xl bg-white font-semibold text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#FF6B2C]">
+                                               class="w-full sm:w-auto px-3 py-2 border border-gray-200 rounded-xl bg-white font-semibold text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F]">
                                     </div>
                                     <div class="sm:pt-5">
                                         <button onclick="window.TempoEmergencyFlow.confirmAddDay()"
-                                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm flex items-center space-x-1.5 transition">
-                                            <span>Add day</span>
+                                                class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-xs flex items-center space-x-1.5 transition cursor-pointer">
+                                            <span>${isVi ? 'Thêm ngày' : 'Add day'}</span>
                                         </button>
                                     </div>
                                 </div>
                             </div>
                         ` : `
                             <button onclick="window.TempoEmergencyFlow.startAddDay()" 
-                                    class="w-full py-3.5 border-2 border-dashed border-[#EAE4DF] hover:border-[#FF6B2C] hover:bg-[#FFF4EC]/40 rounded-[22px] text-xs font-bold text-[#FF6B2C] flex items-center justify-center space-x-2 transition">
+                                    class="w-full py-3.5 border-2 border-dashed border-[#D5E2D9] hover:border-[#8EA28F] hover:bg-[#EDF4EF]/50 rounded-[22px] text-xs font-bold text-[#4A6B5D] flex items-center justify-center space-x-2 transition cursor-pointer">
                                 <span class="text-base leading-none">+</span>
-                                <span>Add another day</span>
+                                <span>${isVi ? 'Thêm ngày khác' : 'Add another day'}</span>
                             </button>
                         `}
                     </div>
                 </div>
 
                 <!-- Availability vs Workload Live Counter -->
-                <div class="p-4 bg-[#FFF8F2] border border-[#FFD2BA]/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                <div class="p-4 bg-[#FCFBF9] border border-[#E8E3DF] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-2xs">
                     <div>
-                        <span class="font-bold text-[#202124]">Total Available Time:</span>
-                        <span class="font-extrabold text-[#B83D08] ml-1">${formatDurationMinutes(totalAvailableMin)}</span>
+                        <span class="font-bold text-[#202124]">${isVi ? 'Tổng thời gian có thể làm việc:' : 'Total Available Time:'}</span>
+                        <span class="font-extrabold text-[#244634] ml-1">${formatDurationMinutes(totalAvailableMin, isVi)}</span>
                     </div>
                     <div>
-                        <span class="font-bold text-[#202124]">Estimated Tasks Workload:</span>
-                        <span class="font-extrabold text-[#FF6B2C] ml-1">${formatDurationMinutes(totalWorkloadMin)}</span>
-                        ${unknownCount > 0 ? `<span class="text-[11px] text-gray-500 font-medium ml-1">(+${unknownCount} not fixed)</span>` : ''}
+                        <span class="font-bold text-[#202124]">${isVi ? 'Ước lượng thời lượng task:' : 'Estimated Tasks Workload:'}</span>
+                        <span class="font-extrabold text-[#446A7B] ml-1">${formatDurationMinutes(totalWorkloadMin, isVi)}</span>
+                        ${unknownCount > 0 ? `<span class="text-[11px] text-[#5C665F] font-medium ml-1">(${isVi ? `+${unknownCount} chưa cố định` : `+${unknownCount} not fixed`})</span>` : ''}
                     </div>
                 </div>
 
                 <!-- Navigation Controls -->
                 <div class="pt-4 flex items-center justify-between border-t border-[#EAE4DF]">
-                    <button onclick="window.TempoEmergencyFlow.goToStage('priority-review')" class="text-xs font-semibold text-[#6F6B68] hover:text-[#202124]">
-                        ← Back to Priority Review
+                    <button onclick="window.TempoEmergencyFlow.goToStage('priority-review')" class="text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition cursor-pointer">
+                        ${isVi ? '← Quay lại phần phân loại ưu tiên' : '← Back to Priority Review'}
                     </button>
                     <button onclick="window.TempoEmergencyFlow.continueFromAvailableTime()" 
-                            class="btn-primary px-7 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm flex items-center space-x-1.5 transition">
-                        <span>Check Feasibility & Build Plan →</span>
+                            class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-7 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs flex items-center space-x-1.5 transition cursor-pointer">
+                        <span>${isVi ? 'Kiểm tra tính khả thi & Tạo kế hoạch →' : 'Check Feasibility & Build Plan →'}</span>
                     </button>
                 </div>
             </div>
@@ -1686,33 +1959,33 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function confirmAddDay() {
+        const isVi = isViLocale();
         const input = document.getElementById('em-add-day-input');
         if (!input || !input.value) {
-            if (window.TempoApp) window.TempoApp.showToast("Please choose a date.");
+            if (window.TempoApp) window.TempoApp.showToast(isVi ? "Vui lòng chọn ngày." : "Please choose a date.");
             return;
         }
 
         const selectedDateStr = input.value;
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = getTodayISO();
 
         // 1. Past date check
         if (selectedDateStr < todayStr) {
-            if (window.TempoApp) window.TempoApp.showToast("Cannot add a date in the past. Today is the earliest valid date.");
+            if (window.TempoApp) window.TempoApp.showToast(isVi ? "Không thể chọn ngày trong quá khứ. Hôm nay là ngày sớm nhất hợp lệ." : "Cannot add a date in the past. Today is the earliest valid date.");
             return;
         }
 
         // 2. Duplicate date check
         const exists = availabilityDays.some(d => d.date === selectedDateStr);
         if (exists) {
-            if (window.TempoApp) window.TempoApp.showToast("This date is already in your planning window.");
+            if (window.TempoApp) window.TempoApp.showToast(isVi ? "Ngày này đã có trong khoảng thời gian lập kế hoạch." : "This date is already in your planning window.");
             return;
         }
 
         // 3. Add day with simple initial availability state
         const newDay = {
             date: selectedDateStr,
-            label: formatDayLabel(selectedDateStr),
+            label: formatDayLabel(selectedDateStr, isVi),
             isUnavailable: false,
             preservedBlocks: [],
             blocks: [
@@ -1728,13 +2001,10 @@ window.TempoEmergencyFlow = (function() {
         renderAvailableTime();
     }
 
-    function formatRemoveDayModalDate(day) {
+    function formatRemoveDayModalDate(day, isVi = isViLocale()) {
         if (!day || !day.date) return day ? day.label : '';
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+        const todayStr = getTodayISO();
+        const tomorrowStr = getTomorrowISO();
 
         const parts = day.date.split('-');
         if (parts.length === 3) {
@@ -1742,27 +2012,46 @@ window.TempoEmergencyFlow = (function() {
             const m = parseInt(parts[1], 10);
             const d = parseInt(parts[2], 10);
             const targetDate = new Date(y, m - 1, d);
-            const monthDay = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
 
-            let relative = '';
-            if (day.date === todayStr) relative = 'Today';
-            else if (day.date === tomorrowStr) relative = 'Tomorrow';
-            else relative = weekday;
-
-            return `${monthDay} · ${relative}`;
+            if (isVi) {
+                const viWeekdays = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+                const weekday = viWeekdays[targetDate.getDay()] || '';
+                let relative = '';
+                if (day.date === todayStr) relative = 'Hôm nay';
+                else if (day.date === tomorrowStr) relative = 'Ngày mai';
+                else relative = weekday;
+                return `${d} thg ${m} · ${relative}`;
+            } else {
+                const monthDay = targetDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'short' });
+                let relative = '';
+                if (day.date === todayStr) relative = 'Today';
+                else if (day.date === tomorrowStr) relative = 'Tomorrow';
+                else relative = weekday;
+                return `${monthDay} · ${relative}`;
+            }
         }
         return day.label || day.date;
     }
 
-    function getRemoveDayModalCopy(day) {
+    function getRemoveDayModalCopy(day, isVi = isViLocale()) {
         const blockCount = (day.blocks ? day.blocks.length : 0);
-        if (blockCount === 0) {
-            return "This day will be removed from your planning window.";
-        } else if (blockCount === 1) {
-            return "Removing this day will also remove the 1 availability block you've added for it.";
+        if (isVi) {
+            if (blockCount === 0) {
+                return "Ngày này sẽ được xóa khỏi khoảng thời gian lập kế hoạch của bạn.";
+            } else if (blockCount === 1) {
+                return "Xóa ngày này cũng sẽ xóa 1 khung giờ làm việc bạn đã tạo cho ngày.";
+            } else {
+                return `Xóa ngày này cũng sẽ xóa ${blockCount} khung giờ làm việc bạn đã tạo cho ngày.`;
+            }
         } else {
-            return `Removing this day will also remove the ${blockCount} availability blocks you've added for it.`;
+            if (blockCount === 0) {
+                return "This day will be removed from your planning window.";
+            } else if (blockCount === 1) {
+                return "Removing this day will also remove the 1 availability block you've added for it.";
+            } else {
+                return `Removing this day will also remove the ${blockCount} availability blocks you've added for it.`;
+            }
         }
     }
 
@@ -1771,8 +2060,9 @@ window.TempoEmergencyFlow = (function() {
         const day = availabilityDays[removeDayModalState.dayIndex];
         if (!day) return '';
 
-        const dateDisplay = formatRemoveDayModalDate(day);
-        const blockCopy = getRemoveDayModalCopy(day);
+        const isVi = isViLocale();
+        const dateDisplay = formatRemoveDayModalDate(day, isVi);
+        const blockCopy = getRemoveDayModalCopy(day, isVi);
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
@@ -1781,18 +2071,18 @@ window.TempoEmergencyFlow = (function() {
                      role="dialog" aria-modal="true" aria-labelledby="em-remove-day-title">
                     <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                         <h3 id="em-remove-day-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            Remove this day?
+                            ${isVi ? 'Xóa ngày này?' : 'Remove this day?'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.closeRemoveDayModal()"
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition cursor-pointer"
                                 aria-label="Close dialog">✕</button>
                     </div>
 
                     <div class="space-y-3">
-                        <p class="font-heading text-sm sm:text-base font-bold text-[#FF6B2C]">
+                        <p class="font-heading text-sm sm:text-base font-bold text-[#2B4B39]">
                             ${escapeHTML(dateDisplay)}
                         </p>
-                        <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
+                        <p class="text-xs sm:text-sm text-[#5C665F] leading-relaxed">
                             ${escapeHTML(blockCopy)}
                         </p>
                     </div>
@@ -1800,13 +2090,13 @@ window.TempoEmergencyFlow = (function() {
                     <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
                         <button id="em-remove-day-cancel-btn"
                                 onclick="window.TempoEmergencyFlow.closeRemoveDayModal()"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button id="em-remove-day-confirm-btn"
                                 onclick="window.TempoEmergencyFlow.confirmRemoveDay()"
-                                class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm shadow-sm transition">
-                            Remove day
+                                class="px-5 py-2.5 rounded-xl bg-[#9E3E34] hover:bg-[#852E25] text-white font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Xóa ngày' : 'Remove day'}
                         </button>
                     </div>
                 </div>
@@ -1818,10 +2108,10 @@ window.TempoEmergencyFlow = (function() {
         const day = availabilityDays[dayIndex];
         if (!day) return;
 
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const isVi = isViLocale();
+        const todayStr = getTodayISO();
         if (day.date === todayStr) {
-            if (window.TempoApp) window.TempoApp.showToast("Today cannot be removed from your planning window.");
+            if (window.TempoApp) window.TempoApp.showToast(isVi ? "Không thể xóa ngày hôm nay khỏi khoảng thời gian lập kế hoạch." : "Today cannot be removed from your planning window.");
             return;
         }
 
@@ -1879,7 +2169,7 @@ window.TempoEmergencyFlow = (function() {
                 const rounded = Math.min(1425, Math.ceil(currentMin / 15) * 15);
                 block.start = formatMinutesToHHMM(rounded);
                 if (window.TempoApp) {
-                    window.TempoApp.showToast("Adjusted start time forward so it's not in the past.");
+                    window.TempoApp.showToast(isViLocale() ? "Đã tự động điều chỉnh giờ bắt đầu về phía trước để không ở trong quá khứ." : "Adjusted start time forward so it's not in the past.");
                 }
             }
         }
@@ -2055,9 +2345,10 @@ window.TempoEmergencyFlow = (function() {
         return merged.reduce((sum, intv) => sum + (intv.end - intv.start), 0);
     }
 
-    function formatDayTotalDisplay(mins) {
-        if (mins <= 0) return '0h total';
-        return `${formatDurationMinutes(mins)} total`;
+    function formatDayTotalDisplay(mins, isVi = isViLocale()) {
+        const totalWord = isVi ? 'tổng thời gian' : 'total';
+        if (mins <= 0) return `0h ${totalWord}`;
+        return `${formatDurationMinutes(mins, isVi)} ${totalWord}`;
     }
 
     function calculateTotalWorkloadMinutes() {
@@ -2469,9 +2760,17 @@ window.TempoEmergencyFlow = (function() {
             }
 
             let wIdx = 0;
+            const now = new Date();
+            const todayISO = (typeof getTodayISOString === 'function') ? getTodayISOString() : (now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'));
+            const isToday = day.date === todayISO;
+            const currentMinNow = isToday ? (now.getHours() * 60 + now.getMinutes()) : 0;
             let currentPos = mergedWindows[0].start;
 
             dayTasks.forEach(item => {
+                const isItemDone = item.task && (item.task.completed === true || item.task.isCompleted === true || item.task.status === 'completed');
+                if (isToday && !isItemDone && currentPos < currentMinNow) {
+                    currentPos = Math.min(currentMinNow, mergedWindows[wIdx] ? mergedWindows[wIdx].end : currentMinNow);
+                }
                 if (item.task.isUnknownDuration || item.task.isLongTerm || !item.task.durationMinutes) {
                     item.startTime = null;
                     item.endTime = null;
@@ -2492,15 +2791,48 @@ window.TempoEmergencyFlow = (function() {
                     if (currentPos < win.start) {
                         currentPos = win.start;
                     }
+                    if (isToday && !isItemDone && currentPos < currentMinNow) {
+                        currentPos = currentMinNow;
+                    }
                     if (currentPos + neededSpan <= win.end) {
                         item.startMin = currentPos;
                         item.endMin = currentPos + neededSpan;
                         item.startTime = formatMinutesToTimeString(item.startMin);
                         item.endTime = formatMinutesToTimeString(item.endMin);
                         item.isOverCapacity = false;
+                        if (item.task) {
+                            item.task.scheduledDate = item.dayDate;
+                            item.task.dayDate = item.dayDate;
+                            item.task._dayDate = item.dayDate;
+                            item.task.scheduledStartTime = item.startTime;
+                            item.task.scheduledEndTime = item.endTime;
+                            item.task.startTime = item.startTime;
+                            item.task.endTime = item.endTime;
+                            item.task._endTime = item.endTime;
+                        }
 
                         // Transition into ~30 min recovery between completed tasks
                         currentPos = item.endMin + 30;
+                        placed = true;
+                        break;
+                    } else if (currentPos + 15 <= win.end) {
+                        item.startMin = currentPos;
+                        item.endMin = Math.min(currentPos + Math.min(neededSpan, item.task.durationMinutes || 60), win.end);
+                        if (item.endMin <= item.startMin) item.endMin = win.end;
+                        item.startTime = formatMinutesToTimeString(item.startMin);
+                        item.endTime = formatMinutesToTimeString(item.endMin);
+                        item.isOverCapacity = false;
+                        if (item.task) {
+                            item.task.scheduledDate = item.dayDate;
+                            item.task.dayDate = item.dayDate;
+                            item.task._dayDate = item.dayDate;
+                            item.task.scheduledStartTime = item.startTime;
+                            item.task.scheduledEndTime = item.endTime;
+                            item.task.startTime = item.startTime;
+                            item.task.endTime = item.endTime;
+                            item.task._endTime = item.endTime;
+                        }
+                        currentPos = item.endMin + 15;
                         placed = true;
                         break;
                     } else {
@@ -2508,6 +2840,9 @@ window.TempoEmergencyFlow = (function() {
                         wIdx++;
                         if (wIdx < mergedWindows.length) {
                             currentPos = mergedWindows[wIdx].start;
+                            if (isToday && !isItemDone && currentPos < currentMinNow) {
+                                currentPos = currentMinNow;
+                            }
                         }
                     }
                 }
@@ -2518,6 +2853,11 @@ window.TempoEmergencyFlow = (function() {
                     item.startMin = null;
                     item.endMin = null;
                     item.isOverCapacity = true;
+                    if (item.task) {
+                        item.task.scheduledDate = item.dayDate;
+                        item.task.dayDate = item.dayDate;
+                        item.task._dayDate = item.dayDate;
+                    }
                 }
             });
         });
@@ -2809,16 +3149,16 @@ window.TempoEmergencyFlow = (function() {
             return;
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayISO();
         if (dateVal < todayStr) {
-            if (window.TempoApp) window.TempoApp.showToast("Cannot add availability in the past.");
+            if (window.TempoApp) window.TempoApp.showToast("Không thể thêm khung giờ trong quá khứ.");
             return;
         }
 
         const startMin = parseTimeToMinutes(startVal);
         const endMin = parseTimeToMinutes(endVal);
         if (endMin <= startMin) {
-            if (window.TempoApp) window.TempoApp.showToast("End time must be after start time.");
+            if (window.TempoApp) window.TempoApp.showToast("Thời gian kết thúc phải sau thời gian bắt đầu.");
             return;
         }
 
@@ -2925,6 +3265,7 @@ window.TempoEmergencyFlow = (function() {
         if (!scheduleModalState) return '';
         const { task, selectedWindowKey, isAddingTime, newTimeDate, newTimeStart, newTimeEnd } = scheduleModalState;
         if (!task) return '';
+        const isVi = isViLocale();
 
         const availableOptions = [];
         availabilityDays.forEach(day => {
@@ -2960,7 +3301,7 @@ window.TempoEmergencyFlow = (function() {
                 availableOptions.push({
                     key: winKey,
                     dayDate: day.date,
-                    dayLabel: day.label,
+                    dayLabel: formatDayLabel(day.date, isVi),
                     startMin: w.start,
                     endMin: w.end,
                     startStr: formatMinutesToTimeString(w.start),
@@ -2974,54 +3315,54 @@ window.TempoEmergencyFlow = (function() {
 
         let selectedOption = availableOptions.find(opt => opt.key === selectedWindowKey);
         const hasDeadlineRisk = selectedOption ? selectedOption.isAfterDeadline : false;
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayISO();
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
                  onclick="if (event.target === this) window.TempoEmergencyFlow.closeScheduleModal()">
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up"
+                <div class="bg-white border border-[#D5DED7] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up"
                      role="dialog" aria-modal="true" aria-labelledby="em-schedule-modal-title">
                     <!-- Header -->
                     <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                         <h3 id="em-schedule-modal-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            When would you like to do this?
+                            ${isVi ? 'Bạn muốn làm việc này khi nào?' : 'When would you like to do this?'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.closeScheduleModal()"
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition cursor-pointer"
                                 aria-label="Close dialog">✕</button>
                     </div>
 
                     <!-- Task Info -->
                     <div class="space-y-1">
                         <h4 class="font-heading text-base font-bold text-[#202124]">${escapeHTML(task.name)}</h4>
-                        <p class="text-xs text-[#6F6B68] flex items-center space-x-2 flex-wrap">
-                            <span>Due: <strong>${task.hasDeadline ? formatHumanDeadline(task.deadlineDate, task.deadlineTime) : 'No fixed deadline'}</strong></span>
+                        <p class="text-xs text-[#5C665F] flex items-center space-x-2 flex-wrap">
+                            <span>Deadline: <strong>${task.hasDeadline ? formatHumanDeadline(task.deadlineDate, task.deadlineTime, isVi) : (isVi ? 'Chưa có deadline' : 'No fixed deadline')}</strong></span>
                             <span>•</span>
-                            <span>Estimate: <strong>${task.durationLabel || 'Not sure'}</strong></span>
+                            <span>${isVi ? 'Thời lượng dự kiến:' : 'Estimate:'} <strong>${task.durationLabel || (isVi ? 'Chưa rõ' : 'Not sure')}</strong></span>
                         </p>
                     </div>
 
                     <!-- Availability Options List -->
                     <div class="space-y-2">
-                        <label class="block font-bold text-gray-700 uppercase tracking-wider text-[11px]">
-                            YOUR AVAILABLE TIME
+                        <label class="block font-bold text-[#4A6B5D] uppercase tracking-wider text-[11px]">
+                            ${isVi ? 'THỜI GIAN CÓ THỂ LÀM VIỆC CỦA BẠN' : 'YOUR AVAILABLE TIME'}
                         </label>
                         ${availableOptions.length === 0 ? `
-                            <p class="text-xs text-gray-500 italic py-1">No availability blocks added yet. Add available time below.</p>
+                            <p class="text-xs text-gray-500 italic py-1">${isVi ? 'Chưa có khung giờ làm việc nào. Hãy thêm thời gian bên dưới.' : 'No availability blocks added yet. Add available time below.'}</p>
                         ` : `
                             <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
                                 ${availableOptions.map(opt => {
                                     const isChecked = opt.key === selectedWindowKey;
                                     return `
-                                        <label class="flex items-start space-x-3 p-3 rounded-xl border ${isChecked ? 'border-[#FF6B2C] bg-orange-50/30' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition">
+                                        <label class="flex items-start space-x-3 p-3 rounded-xl border ${isChecked ? 'border-[#8EA28F] bg-[#EDF4EF]' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition">
                                             <input type="radio" name="em_schedule_window" value="${opt.key}"
                                                    ${isChecked ? 'checked' : ''}
                                                    onchange="window.TempoEmergencyFlow.selectScheduleWindow('${opt.key}')"
-                                                   class="mt-1 text-[#FF6B2C] focus:ring-[#FF6B2C]">
+                                                   class="mt-1 text-[#4A6B5D] focus:ring-[#8EA28F]">
                                             <div class="flex-1">
                                                 <div class="font-extrabold text-xs text-[#202124]">${opt.dayLabel}</div>
-                                                <div class="text-xs text-[#6F6B68] font-medium">${opt.startStr} – ${opt.endStr}</div>
-                                                <div class="text-[11px] text-gray-500 mt-0.5">${formatDurationMinutes(opt.remainingMin)} remaining</div>
+                                                <div class="text-xs text-[#5C665F] font-medium">${opt.startStr} – ${opt.endStr}</div>
+                                                <div class="text-[11px] text-gray-500 mt-0.5">${formatDurationMinutes(opt.remainingMin)} ${isVi ? 'còn trống' : 'remaining'}</div>
                                             </div>
                                         </label>
                                     `;
@@ -3033,47 +3374,47 @@ window.TempoEmergencyFlow = (function() {
                     <!-- Deadline Warning if selected window is after deadline -->
                     ${hasDeadlineRisk ? `
                         <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">
-                            ⚠️ This time is after the task's deadline.
+                            ⚠️ ${isVi ? 'Khung giờ này nằm sau Deadline của task.' : "This time is after the task's deadline."}
                         </div>
                     ` : ''}
 
                     <!-- Inline Add Available Time Editor -->
                     ${isAddingTime ? `
                         <div class="p-3.5 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
-                            <div class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">ADD AVAILABLE TIME</div>
+                            <div class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">${isVi ? 'THÊM THỜI GIAN LÀM VIỆC' : 'ADD AVAILABLE TIME'}</div>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div>
-                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">Date</label>
+                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">${isVi ? 'Ngày' : 'Date'}</label>
                                     <input type="date" id="em-modal-add-date" value="${newTimeDate}" min="${todayStr}"
                                            class="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">From</label>
+                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">${isVi ? 'Từ' : 'From'}</label>
                                     <input type="time" id="em-modal-add-start" value="${newTimeStart}"
                                            class="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">To</label>
+                                    <label class="block text-[10px] font-bold text-gray-600 uppercase">${isVi ? 'Đến' : 'To'}</label>
                                     <input type="time" id="em-modal-add-end" value="${newTimeEnd}"
                                            class="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs bg-white">
                                 </div>
                             </div>
                             <div class="flex items-center justify-end space-x-2 pt-1">
                                 <button type="button" onclick="window.TempoEmergencyFlow.cancelModalAddTime()"
-                                        class="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 font-semibold">
-                                    Cancel
+                                        class="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 font-semibold cursor-pointer">
+                                    ${isVi ? 'Hủy' : 'Cancel'}
                                 </button>
                                 <button type="button" onclick="window.TempoEmergencyFlow.saveModalAddedTime()"
-                                        class="px-3.5 py-1.5 bg-[#FF6B2C] hover:bg-[#E55A1F] text-white text-xs font-bold rounded-lg transition shadow-2xs">
-                                    Add time
+                                        class="px-3.5 py-1.5 bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white text-xs font-bold rounded-lg transition shadow-2xs cursor-pointer">
+                                    ${isVi ? 'Thêm giờ' : 'Add time'}
                                 </button>
                             </div>
                         </div>
                     ` : `
                         <div>
                             <button type="button" onclick="window.TempoEmergencyFlow.toggleModalAddTime()"
-                                    class="text-xs font-bold text-[#FF6B2C] hover:underline flex items-center space-x-1">
-                                <span>+ Add available time</span>
+                                    class="text-xs font-bold text-[#4A6B5D] hover:text-[#3D5A4E] hover:underline flex items-center space-x-1 cursor-pointer">
+                                <span>${isVi ? '+ Thêm thời gian làm việc' : '+ Add available time'}</span>
                             </button>
                         </div>
                     `}
@@ -3081,20 +3422,20 @@ window.TempoEmergencyFlow = (function() {
                     <!-- "I'll figure it out later" -->
                     <div class="pt-1">
                         <button type="button" onclick="window.TempoEmergencyFlow.scheduleTaskAsUnarranged()"
-                                class="text-xs font-semibold text-gray-600 hover:text-[#B83D08] underline transition">
-                            I'll figure it out later
+                                class="text-xs font-semibold text-[#5C665F] hover:text-[#244634] underline transition cursor-pointer">
+                            ${isVi ? 'Tôi sẽ tính sau' : "I'll figure it out later"}
                         </button>
                     </div>
 
                     <!-- Footer Actions -->
                     <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
                         <button type="button" onclick="window.TempoEmergencyFlow.closeScheduleModal()"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button type="button" onclick="window.TempoEmergencyFlow.executeScheduleTask()"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
-                            Schedule task
+                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Xếp lịch task' : 'Schedule task'}
                         </button>
                     </div>
                 </div>
@@ -3105,20 +3446,23 @@ window.TempoEmergencyFlow = (function() {
     function renderPlanReview() {
         const container = document.getElementById('emergency-stage-plan-review');
         if (!container || !confirmedPlan) return;
+        const isVi = isViLocale();
 
         // Group planned tasks by Day in order of availabilityDays
         const daysMap = {};
         availabilityDays.forEach(day => {
-            daysMap[day.label] = [];
+            daysMap[day.date] = { dayObj: day, tasks: [] };
         });
         confirmedPlan.plannedTasks.forEach((item, idx) => {
-            if (!daysMap[item.dayLabel]) {
-                daysMap[item.dayLabel] = [];
+            const targetDate = item.dayDate || (availabilityDays.find(d => d.label === item.dayLabel)?.date) || (availabilityDays[0] ? availabilityDays[0].date : '');
+            if (!daysMap[targetDate]) {
+                const dayObj = availabilityDays.find(d => d.date === targetDate) || { date: targetDate, label: formatDayLabel(targetDate, isVi) };
+                daysMap[targetDate] = { dayObj, tasks: [] };
             }
-            daysMap[item.dayLabel].push({ ...item, globalIndex: idx });
+            daysMap[targetDate].tasks.push({ ...item, globalIndex: idx });
         });
 
-        const activeDayLabels = Object.keys(daysMap).filter(label => daysMap[label].length > 0);
+        const activeDayDates = Object.keys(daysMap).filter(dateKey => daysMap[dateKey].tasks.length > 0);
         const hasSavedActive = !!(confirmedPlan && confirmedPlan.plannedTasks && confirmedPlan.plannedTasks.length > 0 && window.TempoPlanStore && window.TempoPlanStore.getActivePlan('emergency'));
         const returnToHandoff = viewingFromHandoff || hasSavedActive;
 
@@ -3127,80 +3471,102 @@ window.TempoEmergencyFlow = (function() {
                 <!-- Secondary Back Navigation -->
                 <div class="flex items-center justify-between">
                     <button onclick="${returnToHandoff ? "window.TempoEmergencyFlow.goToStage('handoff')" : "window.TempoEmergencyFlow.navigateBackFromPlan()"}" 
-                            class="inline-flex items-center text-xs font-semibold text-[#6F6B68] hover:text-[#202124] transition py-1 group">
+                            class="inline-flex items-center text-xs font-semibold text-[#5C665F] hover:text-[#202124] transition py-1 group cursor-pointer">
                         <span class="mr-1.5 group-hover:-translate-x-0.5 transition-transform">←</span>
-                        <span>${returnToHandoff ? "Back to plan overview" : "Back to availability"}</span>
+                        <span>${returnToHandoff 
+                            ? (isVi ? 'Quay lại tổng quan kế hoạch' : 'Back to plan overview') 
+                            : (isVi ? 'Quay lại phần thời gian có thể sắp xếp' : 'Back to availability')}</span>
                     </button>
                 </div>
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT PLAN</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#4A6B5D]">WORKING PLAN</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
-                        Your Urgent Plan
+                        ${isVi ? 'Working Plan của bạn' : 'Your Working Plan'}
                     </h2>
-                    <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto leading-relaxed">
-                        Here's a starting point based on what you told us. You can reorder, move between days, or adjust estimates anytime.
+                    <p class="text-xs sm:text-sm text-[#5C665F] max-w-md mx-auto leading-relaxed">
+                        ${isVi 
+                            ? 'Đây là kế hoạch gợi ý dựa trên thông tin bạn cung cấp. Bạn có thể sắp xếp lại thứ tự, chuyển task giữa các ngày hoặc điều chỉnh thời lượng bất cứ lúc nào.' 
+                            : "Here's a starting point based on what you told us. You can reorder, move between days, or adjust estimates anytime."}
                     </p>
                 </div>
 
                 <!-- Unallocated Tasks Notice (if any) -->
                 ${confirmedPlan.unallocatedTasks && confirmedPlan.unallocatedTasks.length > 0 ? `
-                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 text-xs text-amber-900">
+                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 text-xs text-amber-900 shadow-xs">
                         <div class="flex items-center space-x-2 font-bold">
                             <span>⚠️</span>
-                            <span>${confirmedPlan.unallocatedTasks.length} task${confirmedPlan.unallocatedTasks.length === 1 ? '' : 's'} need more available working blocks</span>
+                            <span>${confirmedPlan.unallocatedTasks.length} task${!isVi && confirmedPlan.unallocatedTasks.length > 1 ? 's' : ''} ${isVi ? 'cần thêm thời gian làm việc' : 'need more available working blocks'}</span>
                         </div>
                         <p class="text-amber-800">
-                            We scheduled what fits first. The following work still needs dedicated time: 
-                            <strong>${confirmedPlan.unallocatedTasks.map(t => t.name).join(', ')}</strong>.
+                            ${isVi ? 'Chúng tôi đã ưu tiên sắp xếp những việc vừa với khung giờ. Các việc sau vẫn cần thêm thời gian: ' : 'We scheduled what fits first. The following work still needs dedicated time: '}
+                            <strong>${confirmedPlan.unallocatedTasks.map(t => escapeHTML(t.name)).join(', ')}</strong>.
                         </p>
                         <button onclick="window.TempoEmergencyFlow.navigateBackFromPlan()" 
-                                class="text-xs font-bold text-[#B83D08] underline">
-                            + Add more availability to fit everything
+                                class="text-xs font-bold text-[#446A7B] hover:text-[#2F4D5B] underline cursor-pointer">
+                            ${isVi ? '+ Thêm thời gian làm việc để xếp hết các task' : '+ Add more availability to fit everything'}
                         </button>
                     </div>
                 ` : ''}
 
                 <!-- Lightweight Timeline -->
                 <div class="space-y-6">
-                    ${activeDayLabels.length === 0 ? `
-                        <div class="p-8 bg-white border border-[#EAE4DF] rounded-[22px] text-center text-xs text-gray-500">
-                            No tasks scheduled in plan. Return to Reality Check to add tasks.
+                    ${activeDayDates.length === 0 ? `
+                        <div class="p-8 bg-white border border-[#D5DED7] rounded-[22px] text-center text-xs text-[#5C665F]">
+                            ${isVi ? 'Không có task nào trong kế hoạch. Hãy quay lại phần Trút bỏ suy nghĩ để thêm task.' : 'No tasks scheduled in plan. Return to Reality Check to add tasks.'}
                         </div>
-                    ` : activeDayLabels.map(dayLabel => {
-                        const dayObj = availabilityDays.find(d => d.label === dayLabel);
-                        const dayDate = dayObj ? dayObj.date : '';
-                        const hasDayConflict = daysMap[dayLabel].some(item => item.isOverCapacity);
+                    ` : activeDayDates.map(dayDate => {
+                        const dayEntry = daysMap[dayDate];
+                        const dayObj = dayEntry ? dayEntry.dayObj : null;
+                        const dayTasks = dayEntry ? dayEntry.tasks : [];
+                        const dayLabelFormatted = formatDayLabel(dayDate, isVi);
+                        const hasDayConflict = dayTasks.some(item => item.isOverCapacity);
+                        const isToday = dayDate === getTodayISO();
+                        const isTomorrow = dayDate === getTomorrowISO();
+
+                        const conflictMsg = isToday
+                            ? (isVi ? 'Các task được lên lịch hôm nay vượt quá tổng thời gian bạn có thể dành ra.' : 'Tasks scheduled for TODAY exceed available capacity.')
+                            : (isTomorrow
+                                ? (isVi ? 'Các task được lên lịch ngày mai vượt quá tổng thời gian bạn có thể dành ra.' : 'Tasks scheduled for TOMORROW exceed available capacity.')
+                                : (isVi ? `Các task được lên lịch ${dayLabelFormatted} vượt quá tổng thời gian bạn có thể dành ra.` : `Tasks scheduled for ${dayLabelFormatted} exceed available capacity.`));
 
                         return `
                         <div class="space-y-3"
                              ondragover="window.TempoEmergencyFlow.handleDragOver(event)"
                              ondrop="window.TempoEmergencyFlow.handleDropOnDay(event, '${dayDate}')">
                             <div class="flex items-center justify-between px-1">
-                                <h4 class="font-heading text-xs font-extrabold tracking-wider text-[#FF6B2C] uppercase">
-                                    ${dayLabel}
+                                <h4 class="font-heading text-xs font-extrabold tracking-wider text-[#4A6B5D] uppercase">
+                                    ${dayLabelFormatted}
                                 </h4>
                             </div>
 
                             ${hasDayConflict ? `
                                 <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center space-x-2">
                                     <span>⚠️</span>
-                                    <span><strong>Availability conflict:</strong> Tasks scheduled for ${dayLabel} exceed available capacity.</span>
+                                    <span><strong>${isVi ? 'Xung đột thời gian:' : 'Availability conflict:'}</strong> ${conflictMsg}</span>
                                 </div>
                             ` : ''}
 
                             <div class="space-y-3">
-                                ${daysMap[dayLabel].map((item, dIdx) => {
-                                    const nextItem = daysMap[dayLabel][dIdx + 1];
+                                ${dayTasks.map((item, dIdx) => {
+                                    const nextItem = dayTasks[dIdx + 1];
                                     const badgeClass = item.executionBadge === 'UP NEXT'
-                                        ? 'badge-up-next'
-                                        : (item.executionBadge === 'THEN' ? 'badge-then' : 'badge-later');
+                                        ? 'bg-[#DCE7DF] text-[#244634] border border-[#8EA28F]/40'
+                                        : (item.executionBadge === 'THEN' 
+                                            ? 'bg-[#E3EDF2] text-[#244759] border border-[#93AFBC]/40' 
+                                            : 'bg-[#FAF2EE] text-[#7B4B3B] border border-[#ECC9BA]/50');
+
+                                    const badgeText = item.executionBadge === 'UP NEXT'
+                                        ? (isVi ? 'TIẾP THEO' : 'UP NEXT')
+                                        : (item.executionBadge === 'THEN'
+                                            ? (isVi ? 'SAU ĐÓ' : 'THEN')
+                                            : (isVi ? 'LÀM SAU' : 'LATER'));
 
                                     const isWarned = item.hasDeadlineConflict && !ignoredDeadlineWarnings.has(item.task.id);
 
                                     return `
-                                        <div class="em-timeline-card group p-4 sm:p-5 space-y-3 shadow-xs hover:shadow-md transition-all border border-[#EAE4DF] hover:border-stone-400 rounded-[22px] bg-white cursor-default"
+                                        <div class="em-timeline-card group p-4 sm:p-5 space-y-3 shadow-xs hover:shadow-md transition-all border border-[#D5DED7] hover:border-[#CAD5CD] rounded-[22px] bg-white cursor-default"
                                              data-global-index="${item.globalIndex}"
                                              data-task-id="${item.task.id}"
                                              draggable="true"
@@ -3214,15 +3580,15 @@ window.TempoEmergencyFlow = (function() {
                                             <div class="flex items-center justify-between">
                                                 <div class="flex items-center space-x-2">
                                                     <!-- Subtle Drag Handle -->
-                                                    <div class="em-drag-handle flex items-center justify-center text-stone-400 group-hover:text-stone-700 hover:text-[#B83D08] hover:bg-[#FFE9DC] px-1.5 py-1 rounded-md select-none transition-colors mr-0.5"
-                                                         title="Drag to change execution order"
-                                                         aria-label="Drag to change execution order"
+                                                    <div class="em-drag-handle flex items-center justify-center text-stone-400 group-hover:text-stone-700 hover:text-[#244634] hover:bg-[#EDF4EF] px-1.5 py-1 rounded-md select-none transition-colors mr-0.5 cursor-grab active:cursor-grabbing"
+                                                         title="${isVi ? 'Kéo để thay đổi thứ tự ưu tiên' : 'Drag to change execution order'}"
+                                                         aria-label="${isVi ? 'Kéo để thay đổi thứ tự ưu tiên' : 'Drag to change execution order'}"
                                                          tabindex="0"
                                                          data-drag-handle="true">
                                                         <span class="text-sm font-bold tracking-widest leading-none select-none pointer-events-none">⋮⋮</span>
                                                     </div>
-                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${badgeClass}">
-                                                        ${item.executionBadge}
+                                                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase border ${badgeClass}">
+                                                        ${badgeText}
                                                     </span>
                                                     ${item.startTime && item.endTime ? `
                                                         <span class="text-xs font-extrabold text-[#202124]">
@@ -3230,24 +3596,24 @@ window.TempoEmergencyFlow = (function() {
                                                         </span>
                                                     ` : (item.task.isUnknownDuration ? `
                                                         <span class="px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[11px] font-semibold">
-                                                            Flexible / Untimed
+                                                            ${isVi ? 'Linh hoạt / Chưa xếp giờ' : 'Flexible / Untimed'}
                                                         </span>
                                                     ` : (item.isOverCapacity ? `
                                                         <span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[11px] font-semibold">
-                                                            ⚠️ Scheduled (Beyond available blocks)
+                                                            ⚠️ ${isVi ? 'Đã lên lịch (Vượt quá khung giờ)' : 'Scheduled (Beyond available blocks)'}
                                                         </span>
                                                     ` : `
                                                         <span class="px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[11px] font-semibold">
-                                                            Flexible
+                                                            ${isVi ? 'Linh hoạt' : 'Flexible'}
                                                         </span>
                                                     `))}
                                                 </div>
                                                 <div class="flex items-center space-x-1.5">
                                                     <!-- "Do this task later" Action -->
                                                     <button type="button" onclick="window.TempoEmergencyFlow.openScheduleModal(${item.globalIndex})"
-                                                            class="px-3 py-1.5 text-xs font-bold border border-gray-200 hover:border-[#FF6B2C] hover:bg-[#FFF4EC] text-gray-700 hover:text-[#B83D08] rounded-xl transition flex items-center space-x-1 shadow-2xs"
-                                                            title="Do this task later">
-                                                        <span>Do this task later</span>
+                                                            class="px-3 py-1.5 text-xs font-bold border border-[#D5DED7] hover:border-[#8EA28F] hover:bg-[#EDF4EF] text-[#3D4842] hover:text-[#244634] rounded-xl transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                                                            title="${isVi ? 'Để task này làm sau' : 'Do this task later'}">
+                                                        <span>${isVi ? 'Để task này làm sau' : 'Do this task later'}</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -3255,23 +3621,23 @@ window.TempoEmergencyFlow = (function() {
                                             <!-- Task Details -->
                                             <div class="space-y-1">
                                                 <h4 class="font-heading text-base font-bold text-[#202124]">${escapeHTML(item.task.name)}</h4>
-                                                <p class="text-xs text-[#6F6B68] flex items-center space-x-1.5 flex-wrap">
-                                                    <span>Estimate: <strong>${item.task.durationLabel || 'Not sure'}</strong></span>
+                                                <p class="text-xs text-[#5C665F] flex items-center space-x-1.5 flex-wrap">
+                                                    <span>${isVi ? 'Thời lượng dự kiến:' : 'Estimate:'} <strong>${item.task.durationLabel || (isVi ? 'Chưa rõ' : 'Not sure')}</strong></span>
                                                     <button onclick="window.TempoEmergencyFlow.openEditEstimateModal(${item.globalIndex})" 
-                                                            class="text-[#FF6B2C] hover:underline font-semibold text-[11px]">
-                                                        Edit estimate
+                                                            class="text-[#446A7B] hover:text-[#2F4D5B] hover:underline font-semibold text-[11px] cursor-pointer">
+                                                        ${isVi ? 'Sửa thời lượng' : 'Edit estimate'}
                                                     </button>
                                                     <span>•</span>
-                                                    <span>Due: ${item.task.hasDeadline ? formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime) : 'No fixed deadline'}</span>
+                                                    <span>Deadline: ${item.task.hasDeadline ? formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, isVi) : (isVi ? 'Chưa có deadline' : 'No fixed deadline')}</span>
                                                     <button onclick="window.TempoEmergencyFlow.openDeadlineModal('${item.task.id}')" 
-                                                            class="text-[#FF6B2C] hover:underline font-semibold text-[11px]">
-                                                        Edit deadline
+                                                            class="text-[#446A7B] hover:text-[#2F4D5B] hover:underline font-semibold text-[11px] cursor-pointer">
+                                                        ${isVi ? 'Sửa Deadline' : 'Edit deadline'}
                                                     </button>
                                                 </p>
                                                 ${item.rhythm && item.rhythm.breaksCount > 0 ? `
-                                                    <div class="text-[11px] text-[#6F6B68] flex items-center space-x-1 font-medium bg-[#FFFDFB] px-2.5 py-1 rounded-lg border border-[#EAE4DF] w-fit mt-1">
-                                                        <span class="text-[#FF6B2C] font-bold">Cadence:</span>
-                                                        <span>${item.rhythm.chunks.map((c, i) => `${c}m focus${i < item.rhythm.chunks.length - 1 ? ' + 15m break' : ''}`).join(' • ')}</span>
+                                                    <div class="text-[11px] text-[#5C665F] flex items-center space-x-1 font-medium bg-[#FEFDFB] px-2.5 py-1 rounded-lg border border-[#D5DED7] w-fit mt-1">
+                                                        <span class="text-[#4A6B5D] font-bold">${isVi ? 'Nhịp làm việc:' : 'Cadence:'}</span>
+                                                        <span>${item.rhythm.chunks.map((c, i) => `${c}m ${isVi ? 'tập trung' : 'focus'}${i < item.rhythm.chunks.length - 1 ? (isVi ? ' + 15m nghỉ ngơi' : ' + 15m break') : ''}`).join(' • ')}</span>
                                                     </div>
                                                 ` : ''}
                                             </div>
@@ -3279,10 +3645,10 @@ window.TempoEmergencyFlow = (function() {
                                             <!-- Availability Conflict Banner if task exceeds day availability -->
                                             ${item.isOverCapacity ? `
                                                 <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                    <span>⚠️ <strong>Availability conflict:</strong> This order needs more time than your current availability on this day.</span>
+                                                    <span>⚠️ <strong>${isVi ? 'Xung đột thời gian:' : 'Availability conflict:'}</strong> ${isVi ? 'Thứ tự này cần nhiều thời gian hơn quỹ thời gian hiện có của bạn trong ngày này.' : 'This order needs more time than your current availability on this day.'}</span>
                                                     <button type="button" onclick="window.TempoEmergencyFlow.openScheduleModal(${item.globalIndex})"
-                                                            class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold rounded-lg text-[10px] shrink-0">
-                                                        Do this task later
+                                                            class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold rounded-lg text-[10px] shrink-0 cursor-pointer">
+                                                        ${isVi ? 'Để task này làm sau' : 'Do this task later'}
                                                     </button>
                                                 </div>
                                             ` : ''}
@@ -3290,10 +3656,12 @@ window.TempoEmergencyFlow = (function() {
                                             <!-- Deadline Warning Banner if reordered past deadline -->
                                             ${isWarned ? `
                                                 <div data-deadline-warning="true" class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                    <span>⚠️ <strong>Deadline risk:</strong> With this order, ${escapeHTML(item.task.name)} is due on ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime)} and may finish after its deadline.</span>
+                                                    <span>⚠️ <strong>${isVi ? 'Rủi ro Deadline:' : 'Deadline risk:'}</strong> ${isVi 
+                                                        ? `Với thứ tự này, ${escapeHTML(item.task.name)} có Deadline vào ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, true)} và có thể hoàn thành sau Deadline.` 
+                                                        : `With this order, ${escapeHTML(item.task.name)} is due on ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, false)} and may finish after its deadline.`}</span>
                                                     <button onclick="window.TempoEmergencyFlow.ignoreDeadlineWarning('${item.task.id}')"
-                                                            class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold rounded-lg text-[10px] shrink-0">
-                                                        Keep my order
+                                                            class="px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold rounded-lg text-[10px] shrink-0 cursor-pointer">
+                                                        ${isVi ? 'Giữ nguyên thứ tự của tôi' : 'Keep my order'}
                                                     </button>
                                                 </div>
                                             ` : ''}
@@ -3302,10 +3670,10 @@ window.TempoEmergencyFlow = (function() {
                                         <!-- 30m Recovery Indicator between adjacent completed tasks -->
                                         ${nextItem && item.endTime && nextItem.startTime ? `
                                             <div class="flex items-center justify-center py-0.5">
-                                                <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FBF9F6] text-[#6F6B68] text-[11px] font-medium border border-[#EAE4DF]">
+                                                <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#FAF2EE] text-[#7B4B3B] text-[11px] font-medium border border-[#ECC9BA]/60">
                                                     <span>🌱</span>
-                                                    <span class="font-bold text-stone-700">30m recovery</span>
-                                                    <span class="text-stone-300">•</span>
+                                                    <span class="font-bold">${isVi ? '30m hồi phục' : '30m recovery'}</span>
+                                                    <span class="text-[#ECC9BA]">•</span>
                                                     <span>${item.endTime} – ${nextItem.startTime}</span>
                                                 </span>
                                             </div>
@@ -3320,31 +3688,29 @@ window.TempoEmergencyFlow = (function() {
 
                 <!-- Dedicated UNARRANGED Section (if any) -->
                 ${confirmedPlan.unarrangedTasks && confirmedPlan.unarrangedTasks.length > 0 ? `
-                    <div class="pt-6 border-t border-[#EAE4DF] space-y-3.5" id="em-unarranged-section">
-                        <div class="space-y-1">
-                            <h4 class="font-heading text-xs font-extrabold tracking-wider text-gray-500 uppercase px-1">
-                                UNARRANGED
+                    <div class="space-y-3 pt-2">
+                        <div class="px-1">
+                            <h4 class="font-heading text-xs font-extrabold tracking-wider text-[#4A6B5D] uppercase">
+                                ${isVi ? `Tasks chưa xếp lịch (${confirmedPlan.unarrangedTasks.length})` : `Unarranged Tasks (${confirmedPlan.unarrangedTasks.length})`}
                             </h4>
-                            <p class="text-xs text-[#6F6B68] px-1">
-                                These tasks are still part of your plan, but you haven't decided when to do them yet.
+                            <p class="text-xs text-[#5C665F]">
+                                ${isVi ? 'Các task này chưa được ấn định khung giờ cụ thể. Bạn có thể xếp lịch cho chúng bất cứ lúc nào.' : "These tasks are not currently scheduled into a specific time window. You can schedule them whenever you're ready."}
                             </p>
                         </div>
-
-                        <div class="space-y-2.5">
-                            ${confirmedPlan.unarrangedTasks.map((uTask, uIdx) => `
-                                <div class="bg-white border border-[#EAE4DF] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:border-gray-300 transition"
-                                     data-unarranged-index="${uIdx}" data-task-id="${uTask.id}">
-                                    <div class="space-y-1">
-                                        <h5 class="font-heading text-sm font-bold text-[#202124]">${escapeHTML(uTask.name)}</h5>
-                                        <div class="text-xs text-[#6F6B68] flex items-center space-x-2 flex-wrap">
-                                            <span>Estimate: <strong>${uTask.durationLabel || 'Not sure'}</strong></span>
-                                            <span>•</span>
-                                            <span>Due: ${uTask.hasDeadline ? formatHumanDeadline(uTask.deadlineDate, uTask.deadlineTime) : 'No fixed deadline'}</span>
+                        <div class="space-y-2">
+                            ${confirmedPlan.unarrangedTasks.map((t, uIdx) => `
+                                <div class="p-4 bg-white border border-[#D5DED7] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                                    <div>
+                                        <div class="font-bold text-sm text-[#202124]">${escapeHTML(t.name)}</div>
+                                        <div class="text-xs text-[#5C665F] mt-0.5">
+                                            <span>${isVi ? 'Thời lượng dự kiến:' : 'Estimate:'} ~${t.durationLabel || (isVi ? 'Chưa rõ' : 'Not sure')}</span>
+                                            <span class="mx-1">•</span>
+                                            <span>Deadline: ${t.hasDeadline ? formatHumanDeadline(t.deadlineDate, t.deadlineTime, isVi) : (isVi ? 'Chưa có deadline' : 'No fixed deadline')}</span>
                                         </div>
                                     </div>
-                                    <button type="button" onclick="window.TempoEmergencyFlow.openScheduleModalForUnarranged(${uIdx})"
-                                            class="px-4 py-2 bg-[#FFF4EC] hover:bg-[#FFE9DC] text-[#FF6B2C] hover:text-[#B83D08] font-bold text-xs rounded-xl border border-[#FF6B2C]/30 transition shrink-0 self-start sm:self-auto flex items-center space-x-1 shadow-2xs">
-                                        <span>Schedule task</span>
+                                    <button onclick="window.TempoEmergencyFlow.openScheduleModalFromUnarranged(${uIdx})"
+                                            class="px-3.5 py-1.5 bg-[#EDF4EF] hover:bg-[#DCE7DF] text-[#2B4B39] font-bold text-xs rounded-xl border border-[#8EA28F]/40 transition shrink-0 self-start sm:self-auto flex items-center space-x-1 shadow-2xs cursor-pointer">
+                                        <span>${isVi ? 'Xếp lịch task' : 'Schedule task'}</span>
                                         <span>→</span>
                                     </button>
                                 </div>
@@ -3355,31 +3721,31 @@ window.TempoEmergencyFlow = (function() {
 
                 <!-- Confirmation Card -->
                 ${returnToHandoff ? `
-                    <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-4 text-center shadow-sm">
+                    <div class="p-5 bg-white border border-[#D5DED7] rounded-[22px] space-y-4 text-center shadow-xs">
                         <div class="space-y-1">
-                            <h4 class="font-heading text-base font-bold text-[#202124]">Plan is updated and saved</h4>
-                            <p class="text-xs text-[#6F6B68]">Any adjustments you make are automatically saved.</p>
+                            <h4 class="font-heading text-base font-bold text-[#202124]">${isVi ? 'Kế hoạch đã được cập nhật và lưu' : 'Plan is updated and saved'}</h4>
+                            <p class="text-xs text-[#5C665F]">${isVi ? 'Mọi thay đổi bạn thực hiện đều được tự động lưu lại.' : 'Any adjustments you make are automatically saved.'}</p>
                         </div>
                         <div class="pt-1 flex flex-col sm:flex-row items-center justify-center gap-3">
                             <button onclick="window.TempoEmergencyFlow.goToStage('handoff')" 
-                                     class="btn-primary w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
-                                Return to Plan Overview →
+                                     class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-xs sm:text-sm bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs transition cursor-pointer">
+                                ${isVi ? 'Quay lại Tổng quan Kế hoạch →' : 'Return to Plan Overview →'}
                             </button>
                             <button onclick="window.TempoEmergencyFlow.launchFocusZone()" 
-                                     class="w-full sm:w-auto px-5 py-3 rounded-xl border border-[#FF6B2C] text-[#FF6B2C] hover:bg-[#FFE9DC] text-xs font-bold transition">
-                                Start Focus Zone →
+                                     class="w-full sm:w-auto px-5 py-3 rounded-xl border border-[#4A6B5D] text-[#4A6B5D] hover:bg-[#EDF4EF] text-xs font-bold transition cursor-pointer">
+                                ${isVi ? 'Bắt đầu Focus Zone →' : 'Start Focus Zone →'}
                             </button>
                         </div>
                     </div>
                 ` : `
-                    <div class="p-5 bg-white border border-[#EAE4DF] rounded-[22px] space-y-4 text-center shadow-sm">
+                    <div class="p-5 bg-white border border-[#D5DED7] rounded-[22px] space-y-4 text-center shadow-xs">
                         <div class="space-y-1">
-                            <h4 class="font-heading text-base font-bold text-[#202124]">Does this plan feel workable?</h4>
-                            <p class="text-xs text-[#6F6B68]">You can change it again later as you make progress.</p>
+                            <h4 class="font-heading text-base font-bold text-[#202124]">${isVi ? 'Bạn thấy kế hoạch này đã ổn chưa?' : 'Does this plan feel workable?'}</h4>
+                            <p class="text-xs text-[#5C665F]">${isVi ? 'Bạn có thể điều chỉnh lại bất cứ lúc nào trong quá trình làm việc.' : 'You can change it again later as you make progress.'}</p>
                         </div>
                         <button id="btn-em-use-plan" onclick="window.TempoEmergencyFlow.savePlan()" 
-                                 class="btn-primary w-full py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition cursor-pointer">
-                            <span>Use this plan →</span>
+                                 class="w-full py-3.5 rounded-xl font-bold text-sm bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer">
+                            <span>${isVi ? 'Sử dụng kế hoạch này →' : 'Use this plan →'}</span>
                         </button>
                     </div>
                 `}
@@ -3404,31 +3770,32 @@ window.TempoEmergencyFlow = (function() {
 
     function renderPlanEditWarningModalHTML() {
         if (!showPlanEditWarningModal) return '';
+        const isVi = isViLocale();
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-4 shadow-2xl">
+                <div class="bg-white border border-[#D5DED7] rounded-[22px] max-w-md w-full p-6 space-y-4 shadow-2xl">
                     <div class="flex items-center justify-between pb-2 border-b border-gray-100">
                         <h3 class="font-heading text-sm sm:text-base font-extrabold text-[#202124]">
-                            Plan Modified
+                            ${isVi ? 'Kế hoạch đã được chỉnh sửa' : 'Plan Modified'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.cancelPlanEditWarning()" 
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1"
-                                title="Close">✕</button>
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 cursor-pointer"
+                                title="${isVi ? 'Đóng' : 'Close'}">✕</button>
                     </div>
 
-                    <p class="text-xs sm:text-sm text-[#6F6B68] leading-relaxed">
-                        You've made changes to this plan. Updating your availability may require Tempo to rebuild parts of it.
+                    <p class="text-xs sm:text-sm text-[#5C665F] leading-relaxed">
+                        ${isVi ? 'Bạn đã thực hiện các thay đổi trên kế hoạch này. Việc cập nhật lại thời gian có thể làm thay đổi các phần đã sắp xếp.' : "You've made changes to this plan. Updating your availability may require Tempo to rebuild parts of it."}
                     </p>
 
                     <div class="pt-3 flex flex-col-reverse sm:flex-row items-center justify-end gap-2 border-t border-gray-100">
                         <button onclick="window.TempoEmergencyFlow.cancelPlanEditWarning()"
-                                class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button onclick="window.TempoEmergencyFlow.confirmPlanEditWarningAndGoBack()"
-                                class="btn-primary w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition">
-                            Continue editing availability
+                                class="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Tiếp tục sửa thời gian' : 'Continue editing availability'}
                         </button>
                     </div>
                 </div>
@@ -3459,60 +3826,64 @@ window.TempoEmergencyFlow = (function() {
         if (!moveModalState || !confirmedPlan || !confirmedPlan.plannedTasks) return '';
         const item = confirmedPlan.plannedTasks[moveModalState.taskIndex];
         if (!item) return '';
+        const isVi = isViLocale();
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl">
+                <div class="bg-white border border-[#D5DED7] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl">
                     <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                         <h3 class="font-heading text-base font-extrabold text-[#202124]">
-                            Move Task
+                            ${isVi ? 'Di chuyển task' : 'Move Task'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.closeMoveTaskModal()" 
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1">✕</button>
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 cursor-pointer">✕</button>
                     </div>
 
                     <div class="space-y-4 text-xs">
                         <div>
-                            <span class="text-gray-500 font-medium">Task:</span>
+                            <span class="text-[#5C665F] font-medium">Task:</span>
                             <p class="text-sm font-bold text-[#202124] mt-0.5">${escapeHTML(item.task.name)}</p>
-                            <p class="text-gray-500 text-[11px]">Estimate: ~${item.task.durationLabel} • Due: ${item.task.hasDeadline ? formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime) : 'No fixed deadline'}</p>
+                            <p class="text-[#5C665F] text-[11px]">${isVi ? 'Thời lượng dự kiến:' : 'Estimate:'} ~${item.task.durationLabel || (isVi ? 'Chưa rõ' : 'Not sure')} • Deadline: ${item.task.hasDeadline ? formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, isVi) : (isVi ? 'Chưa có deadline' : 'No fixed deadline')}</p>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="block font-bold text-gray-700 uppercase tracking-wider text-[10px]">Select Target Day:</label>
+                            <label class="block font-bold text-gray-700 uppercase tracking-wider text-[10px]">${isVi ? 'Chọn ngày chuyển đến:' : 'Select Target Day:'}</label>
                             <select id="em-move-target-day" onchange="window.TempoEmergencyFlow.updateMoveModalPreview(this.value, null)"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-semibold text-xs focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none">
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-semibold text-xs focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none">
                                 ${availabilityDays.map(day => {
                                     const isSelected = day.date === moveModalState.targetDayDate;
-                                    const availText = day.isUnavailable ? '(Unavailable)' : `(${formatDurationMinutes(calculateDayMinutes(day))} available)`;
-                                    return `<option value="${day.date}" ${isSelected ? 'selected' : ''}>${day.label} ${availText}</option>`;
+                                    const dayNameFormatted = formatDayLabel(day.date, isVi);
+                                    const availText = day.isUnavailable 
+                                        ? (isVi ? '(Không thể làm việc)' : '(Unavailable)') 
+                                        : (isVi ? `(${formatDurationMinutes(calculateDayMinutes(day))} có thể làm việc)` : `(${formatDurationMinutes(calculateDayMinutes(day))} available)`);
+                                    return `<option value="${day.date}" ${isSelected ? 'selected' : ''}>${dayNameFormatted} ${availText}</option>`;
                                 }).join('')}
                             </select>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="block font-bold text-gray-700 uppercase tracking-wider text-[10px]">Position in day:</label>
+                            <label class="block font-bold text-gray-700 uppercase tracking-wider text-[10px]">${isVi ? 'Vị trí trong ngày:' : 'Position in day:'}</label>
                             <select id="em-move-target-pos" onchange="window.TempoEmergencyFlow.updateMoveModalPreview(null, this.value)"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-semibold text-xs focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none">
-                                <option value="first" ${moveModalState.targetPosition === 'first' ? 'selected' : ''}>Start of this day</option>
-                                <option value="last" ${moveModalState.targetPosition === 'last' ? 'selected' : ''}>End of this day</option>
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white font-semibold text-xs focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none">
+                                <option value="first" ${moveModalState.targetPosition === 'first' ? 'selected' : ''}>${isVi ? 'Đầu ngày' : 'Start of this day'}</option>
+                                <option value="last" ${moveModalState.targetPosition === 'last' ? 'selected' : ''}>${isVi ? 'Cuối ngày' : 'End of this day'}</option>
                             </select>
                         </div>
 
                         <!-- Conflict / Feasibility Preview Warnings -->
                         <div id="em-move-modal-warnings" class="space-y-2">
-                            ${renderMoveModalWarningsHTML(item, moveModalState.targetDayDate)}
+                            ${renderMoveModalWarningsHTML(item, moveModalState.targetDayDate, isVi)}
                         </div>
                     </div>
 
                     <div class="pt-2 flex items-center justify-end space-x-2 border-t border-gray-100">
                         <button onclick="window.TempoEmergencyFlow.closeMoveTaskModal()"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button onclick="window.TempoEmergencyFlow.executeMoveTask()"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition">
-                            Keep my choice & Move
+                                class="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Giữ lựa chọn & Di chuyển' : 'Keep my choice & Move'}
                         </button>
                     </div>
                 </div>
@@ -3520,7 +3891,7 @@ window.TempoEmergencyFlow = (function() {
         `;
     }
 
-    function renderMoveModalWarningsHTML(item, targetDate) {
+    function renderMoveModalWarningsHTML(item, targetDate, isVi = isViLocale()) {
         const targetDay = availabilityDays.find(d => d.date === targetDate);
         if (!targetDay) return '';
 
@@ -3530,7 +3901,7 @@ window.TempoEmergencyFlow = (function() {
         if (targetDay.isUnavailable) {
             warnings.push(`
                 <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">
-                    ⚠️ <strong>Day is unavailable:</strong> You marked this day as unavailable. This task will be scheduled as flexible/untimed unless availability is added.
+                    ⚠️ <strong>${isVi ? 'Ngày không thể làm việc:' : 'Day is unavailable:'}</strong> ${isVi ? 'Bạn đã đánh dấu ngày này không thể làm việc. Task sẽ được xếp ở trạng thái linh hoạt/chưa có giờ cố định trừ khi bạn thêm thời gian làm việc.' : 'You marked this day as unavailable. This task will be scheduled as flexible/untimed unless availability is added.'}
                 </div>
             `);
         } else {
@@ -3544,7 +3915,7 @@ window.TempoEmergencyFlow = (function() {
             if (!item.task.isUnknownDuration && !item.task.isLongTerm && taskMin > remainingMin) {
                 warnings.push(`
                     <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">
-                        ⚠️ <strong>Time limit note:</strong> This day has ~${formatDurationMinutes(Math.max(0, remainingMin))} remaining, but this task needs ~${item.task.durationLabel}.
+                        ⚠️ <strong>${isVi ? 'Lưu ý thời gian:' : 'Time limit note:'}</strong> ${isVi ? `Ngày này chỉ còn khoảng ${formatDurationMinutes(Math.max(0, remainingMin))} trống, nhưng task này cần khoảng ${item.task.durationLabel}.` : `This day has ~${formatDurationMinutes(Math.max(0, remainingMin))} remaining, but this task needs ~${item.task.durationLabel}.`}
                     </div>
                 `);
             }
@@ -3552,9 +3923,10 @@ window.TempoEmergencyFlow = (function() {
 
         // 2. Deadline check
         if (item.task.hasDeadline && item.task.deadlineDate && targetDate > item.task.deadlineDate) {
+            const targetDayLabel = formatDayLabel(targetDate, isVi);
             warnings.push(`
                 <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs">
-                    ⚠️ <strong>Deadline warning:</strong> This task is due on ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime)}. Moving it to ${targetDay.label} places it after its deadline.
+                    ⚠️ <strong>${isVi ? 'Cảnh báo Deadline:' : 'Deadline warning:'}</strong> ${isVi ? `Task này có Deadline vào ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, true)}. Di chuyển sang ${targetDayLabel} sẽ khiến task bị quá Deadline.` : `This task is due on ${formatHumanDeadline(item.task.deadlineDate, item.task.deadlineTime, false)}. Moving it to ${targetDay.label} places it after its deadline.`}
                 </div>
             `);
         }
@@ -3802,7 +4174,7 @@ window.TempoEmergencyFlow = (function() {
             const selectedUnit = unitSelect ? unitSelect.value : editEstimateModalState.unit;
 
             if (isNaN(rawVal) || rawVal <= 0) {
-                if (window.TempoApp) window.TempoApp.showToast("Please enter a valid estimate duration greater than 0.");
+                if (window.TempoApp) window.TempoApp.showToast("Vui lòng nhập thời lượng dự tính hợp lệ lớn hơn 0.");
                 return;
             }
 
@@ -3883,20 +4255,20 @@ window.TempoEmergencyFlow = (function() {
         const { taskIndex, isNotSure, value, unit } = editEstimateModalState;
         const item = confirmedPlan && confirmedPlan.plannedTasks ? confirmedPlan.plannedTasks[taskIndex] : null;
         if (!item || !item.task) return '';
-
+        const isVi = isViLocale();
         const task = item.task;
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
                  onclick="if (event.target === this) window.TempoEmergencyFlow.closeEditEstimateModal()">
-                <div class="bg-white border border-[#EAE4DF] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up"
+                <div class="bg-white border border-[#D5DED7] rounded-[22px] max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up"
                      role="dialog" aria-modal="true" aria-labelledby="em-edit-estimate-title">
                     <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                         <h3 id="em-edit-estimate-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            Edit time estimate
+                            ${isVi ? 'Sửa thời lượng dự kiến' : 'Edit time estimate'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.closeEditEstimateModal()"
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition cursor-pointer"
                                 aria-label="Close dialog">✕</button>
                     </div>
 
@@ -3908,22 +4280,22 @@ window.TempoEmergencyFlow = (function() {
 
                         <div class="space-y-2">
                             <label class="block text-xs font-semibold text-gray-700">
-                                How long do you think this task will take?
+                                ${isVi ? 'Bạn nghĩ task này sẽ mất bao lâu?' : 'How long do you think this task will take?'}
                             </label>
                             <div class="flex items-center space-x-2">
                                 <input id="em-edit-estimate-value" type="number" min="0.1" step="any"
                                        value="${isNotSure ? '' : (value !== '' && value !== null && value !== undefined ? value : '')}"
                                        ${isNotSure ? 'disabled' : ''}
-                                       placeholder="e.g. 1.5"
-                                       class="w-28 px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl text-center font-bold text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                       placeholder="${isVi ? 'VD: 1.5' : 'e.g. 1.5'}"
+                                       class="w-28 px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl text-center font-bold text-[#202124] focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
                                 <select id="em-edit-estimate-unit"
                                         ${isNotSure ? 'disabled' : ''}
-                                        class="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl bg-white font-semibold text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : ''}">
-                                    <option value="minutes" ${unit === 'minutes' ? 'selected' : ''}>minutes</option>
-                                    <option value="hours" ${unit === 'hours' ? 'selected' : ''}>hours</option>
-                                    <option value="days" ${unit === 'days' ? 'selected' : ''}>days</option>
-                                    <option value="weeks" ${unit === 'weeks' ? 'selected' : ''}>weeks</option>
-                                    <option value="months" ${unit === 'months' ? 'selected' : ''}>months</option>
+                                        class="px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl bg-white font-semibold text-[#202124] focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none transition ${isNotSure ? 'opacity-40 bg-stone-100 cursor-not-allowed' : ''}">
+                                    <option value="minutes" ${unit === 'minutes' ? 'selected' : ''}>${isVi ? 'phút' : 'minutes'}</option>
+                                    <option value="hours" ${unit === 'hours' ? 'selected' : ''}>${isVi ? 'giờ' : 'hours'}</option>
+                                    <option value="days" ${unit === 'days' ? 'selected' : ''}>${isVi ? 'ngày' : 'days'}</option>
+                                    <option value="weeks" ${unit === 'weeks' ? 'selected' : ''}>${isVi ? 'tuần' : 'weeks'}</option>
+                                    <option value="months" ${unit === 'months' ? 'selected' : ''}>${isVi ? 'tháng' : 'months'}</option>
                                 </select>
                             </div>
                         </div>
@@ -3933,8 +4305,8 @@ window.TempoEmergencyFlow = (function() {
                                 <input type="checkbox" id="em-edit-estimate-notsure"
                                        ${isNotSure ? 'checked' : ''}
                                        onchange="window.TempoEmergencyFlow.toggleEditEstimateNotSure(this.checked)"
-                                       class="w-4 h-4 rounded text-[#FF6B2C] focus:ring-[#FF6B2C] border-gray-300">
-                                <span class="text-xs sm:text-sm font-medium text-gray-700">I'm not sure yet</span>
+                                       class="w-4 h-4 rounded text-[#4A6B5D] focus:ring-[#8EA28F] border-gray-300">
+                                <span class="text-xs sm:text-sm font-medium text-gray-700">${isVi ? 'Tôi chưa chắc chắn' : "I'm not sure yet"}</span>
                             </label>
                         </div>
                     </div>
@@ -3942,13 +4314,13 @@ window.TempoEmergencyFlow = (function() {
                     <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
                         <button id="em-edit-estimate-cancel-btn"
                                 onclick="window.TempoEmergencyFlow.closeEditEstimateModal()"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button id="em-edit-estimate-save-btn"
                                 onclick="window.TempoEmergencyFlow.saveEditEstimate()"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
-                            Save estimate
+                                class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Lưu thời lượng' : 'Save estimate'}
                         </button>
                     </div>
                 </div>
@@ -3972,7 +4344,7 @@ window.TempoEmergencyFlow = (function() {
         if (!task.hasDeadline || !initialDate) {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            if (!initialDate) initialDate = tomorrow.toISOString().split('T')[0];
+            if (!initialDate) initialDate = getTomorrowISO();
             if (!initialTime) initialTime = '21:00';
         }
 
@@ -4021,7 +4393,7 @@ window.TempoEmergencyFlow = (function() {
             if (!isChecked && !dateInput.value) {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
-                dateInput.value = tomorrow.toISOString().split('T')[0];
+                dateInput.value = getTomorrowISO();
                 if (!timeInput.value) timeInput.value = '21:00';
             }
         }
@@ -4054,6 +4426,7 @@ window.TempoEmergencyFlow = (function() {
     function renderDeadlineModalHTML() {
         if (!deadlineModalState) return '';
         const { taskName, hasDeadline, deadlineDate, deadlineTime } = deadlineModalState;
+        const isVi = isViLocale();
 
         return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in"
@@ -4062,10 +4435,10 @@ window.TempoEmergencyFlow = (function() {
                      role="dialog" aria-modal="true" aria-labelledby="em-edit-deadline-title">
                     <div class="flex items-center justify-between pb-3 border-b border-gray-100">
                         <h3 id="em-edit-deadline-title" class="font-heading text-base sm:text-lg font-extrabold text-[#202124]">
-                            Edit deadline
+                            ${isVi ? 'Sửa Deadline' : 'Edit deadline'}
                         </h3>
                         <button onclick="window.TempoEmergencyFlow.closeDeadlineModal()"
-                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition"
+                                class="text-gray-400 hover:text-gray-600 text-lg p-1 transition cursor-pointer"
                                 aria-label="Close dialog">✕</button>
                     </div>
 
@@ -4077,15 +4450,15 @@ window.TempoEmergencyFlow = (function() {
 
                         <div class="space-y-2">
                             <label class="block text-xs font-semibold text-gray-700">
-                                Due date & time
+                                ${isVi ? 'Ngày & giờ Deadline' : 'Due date & time'}
                             </label>
                             <div class="flex flex-wrap items-center gap-2.5">
                                 <input id="em-modal-deadline-date" type="date" value="${deadlineDate || ''}"
                                        ${!hasDeadline ? 'disabled' : ''}
-                                       class="px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl font-medium text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${!hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                       class="px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl font-medium text-[#202124] focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none transition ${!hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
                                 <input id="em-modal-deadline-time" type="time" value="${deadlineTime || ''}"
                                        ${!hasDeadline ? 'disabled' : ''}
-                                       class="px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl font-medium text-[#202124] focus:ring-1 focus:ring-[#FF6B2C] focus:outline-none transition ${!hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
+                                       class="px-3.5 py-2 text-xs sm:text-sm border border-gray-300 rounded-xl font-medium text-[#202124] focus:ring-1 focus:ring-[#8EA28F] focus:border-[#8EA28F] focus:outline-none transition ${!hasDeadline ? 'opacity-40 bg-stone-100 cursor-not-allowed' : 'bg-white'}">
                             </div>
                         </div>
 
@@ -4094,8 +4467,8 @@ window.TempoEmergencyFlow = (function() {
                                 <input type="checkbox" id="em-modal-nodeadline"
                                        ${!hasDeadline ? 'checked' : ''}
                                        onchange="window.TempoEmergencyFlow.toggleDeadlineModalNoDeadline(this.checked)"
-                                       class="w-4 h-4 rounded text-[#FF6B2C] focus:ring-[#FF6B2C] border-gray-300">
-                                <span class="text-xs sm:text-sm font-medium text-gray-700">No fixed deadline</span>
+                                       class="w-4 h-4 rounded text-[#4A6B5D] focus:ring-[#8EA28F] border-gray-300">
+                                <span class="text-xs sm:text-sm font-medium text-gray-700">${isVi ? 'Chưa có deadline' : 'No fixed deadline'}</span>
                             </label>
                         </div>
                     </div>
@@ -4103,13 +4476,13 @@ window.TempoEmergencyFlow = (function() {
                     <div class="pt-3 flex items-center justify-end space-x-3 border-t border-gray-100">
                         <button id="em-edit-deadline-cancel-btn"
                                 onclick="window.TempoEmergencyFlow.closeDeadlineModal()"
-                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition">
-                            Cancel
+                                class="px-4 py-2.5 rounded-xl border border-gray-200 text-xs sm:text-sm font-semibold text-gray-700 hover:bg-stone-50 transition cursor-pointer">
+                            ${isVi ? 'Hủy' : 'Cancel'}
                         </button>
                         <button id="em-edit-deadline-save-btn"
                                 onclick="window.TempoEmergencyFlow.saveDeadlineModal()"
-                                class="btn-primary px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition">
-                            Save changes
+                                class="bg-[#4A6B5D] hover:bg-[#3D5A4E] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-xs transition cursor-pointer">
+                            ${isVi ? 'Lưu thay đổi' : 'Save changes'}
                         </button>
                     </div>
                 </div>
@@ -4841,7 +5214,7 @@ window.TempoEmergencyFlow = (function() {
 
         if (!targetTask) {
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("All tasks in this Urgent Plan are completed! Great job.");
+                window.TempoApp.showToast("Tất cả công việc trong Kế hoạch Khẩn cấp đã hoàn thành! Bạn làm rất tốt.");
             }
             return;
         }
@@ -4924,7 +5297,7 @@ window.TempoEmergencyFlow = (function() {
             }
 
             if (window.TempoApp && typeof window.TempoApp.showToast === 'function') {
-                window.TempoApp.showToast("Working Plan saved successfully.");
+                window.TempoApp.showToast("Đã lưu Kế hoạch Làm việc thành công.");
             }
 
             if (window.TempoUrmodeFlow && typeof window.TempoUrmodeFlow.showTaskForNowPopupAfterSave === 'function') {
@@ -4983,7 +5356,7 @@ window.TempoEmergencyFlow = (function() {
             <div class="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#FF6B2C]">URGENT PLAN READY</span>
+                    <span class="text-xs font-extrabold uppercase tracking-widest text-[#4A6B5D]">${isViLocale() ? 'WORKING PLAN ĐÃ SẴN SÀNG' : 'WORKING PLAN READY'}</span>
                     <h2 class="font-heading text-2xl sm:text-3xl font-extrabold text-[#202124] tracking-tight">
                         Your plan is saved.
                     </h2>
@@ -5009,7 +5382,7 @@ window.TempoEmergencyFlow = (function() {
                         <div class="space-y-1">
                             <h3 class="font-heading text-xl font-bold text-[#202124]">${escapeHTML(focusTask.name)}</h3>
                             <p class="text-xs text-[#6F6B68]">
-                                Estimated duration: ~${focusTask.durationLabel || 'Flexible'} • Due: ${focusTask.hasDeadline ? formatHumanDeadline(focusTask.deadlineDate, focusTask.deadlineTime) : 'No fixed deadline'}
+                                Estimated duration: ~${focusTask.durationLabel || 'Flexible'} • Deadline: ${focusTask.hasDeadline ? formatHumanDeadline(focusTask.deadlineDate, focusTask.deadlineTime, isViLocale()) : (isViLocale() ? 'Chưa có deadline' : 'No fixed deadline')}
                             </p>
                         </div>
 
@@ -5026,7 +5399,7 @@ window.TempoEmergencyFlow = (function() {
                         </div>
                         <h3 class="font-heading text-xl font-bold text-[#202124]">All planned tasks completed!</h3>
                         <p class="text-xs sm:text-sm text-[#6F6B68] max-w-md mx-auto">
-                            You've completed every task in this Urgent Plan. Take a moment to acknowledge your hard work.
+                            You've completed every task in this Working Plan. Take a moment to acknowledge your hard work.
                         </p>
                     </div>
                 `}
@@ -5079,7 +5452,7 @@ window.TempoEmergencyFlow = (function() {
                     `}
                     <button id="btn-em-view-edit-plan" onclick="window.TempoEmergencyFlow.viewPlan()" 
                             class="w-full sm:w-auto px-5 py-3.5 rounded-xl border border-gray-200 text-xs font-semibold text-[#202124] hover:bg-stone-50 transition order-2 sm:order-1">
-                        View / Edit Urgent Plan
+                        ${isVi ? 'Xem / Sửa Working Plan' : 'View / Edit Working Plan'}
                     </button>
                     <button id="btn-em-return-home" onclick="window.TempoEmergencyFlow.returnHome()" 
                             class="w-full sm:w-auto px-5 py-3.5 text-xs font-semibold text-[#6F6B68] hover:text-[#202124] hover:bg-stone-100/60 rounded-xl transition order-3">
@@ -5113,11 +5486,14 @@ window.TempoEmergencyFlow = (function() {
         return end >= start ? (end - start) : (1440 - start + end);
     }
 
-    function formatDurationMinutes(mins) {
-        if (!mins || mins <= 0) return '0m';
-        if (mins < 60) return `${mins}m`;
+    function formatDurationMinutes(mins, isVi = false) {
+        if (!mins || mins <= 0) return isVi ? '0 phút' : '0m';
+        if (mins < 60) return isVi ? `${mins} phút` : `${mins}m`;
         const h = Math.floor(mins / 60);
         const m = mins % 60;
+        if (isVi) {
+            return m > 0 ? `${h} giờ ${m} phút` : `${h} giờ`;
+        }
         return m > 0 ? `${h}h ${m}m` : `${h}h`;
     }
 
@@ -5141,12 +5517,14 @@ window.TempoEmergencyFlow = (function() {
         return `${h}:${m} ${ampm}`;
     }
 
-    function formatHumanDeadline(dateStr, timeStr) {
-        if (!dateStr) return 'No fixed deadline';
+    function formatHumanDeadline(dateStr, timeStr, isVi = isViLocale()) {
+        if (!dateStr) return isVi ? 'Chưa có deadline' : 'No fixed deadline';
         try {
             const [y, m, d] = dateStr.split('-').map(Number);
             const date = new Date(y, m - 1, d);
-            const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const monthDay = isVi
+                ? `${d} thg ${m}`
+                : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             if (timeStr) {
                 return `${monthDay} · ${formatTime12Hour(timeStr)}`;
             }
@@ -5156,22 +5534,32 @@ window.TempoEmergencyFlow = (function() {
         }
     }
 
-    function calculateRelativeDueText(dateStr, timeStr) {
-        if (!dateStr) return 'No fixed deadline';
+    function calculateRelativeDueText(dateStr, timeStr, isVi = isViLocale()) {
+        if (!dateStr) return isVi ? 'Chưa có deadline' : 'No fixed deadline';
         try {
             const target = new Date(`${dateStr}T${timeStr || '23:59'}`);
             const now = new Date();
             const diffMs = target - now;
             const diffHours = Math.round(diffMs / (1000 * 60 * 60));
 
-            if (diffHours < 0) return 'Deadline passed';
-            if (diffHours <= 12) return `Due in ${diffHours} hour${diffHours === 1 ? '' : 's'}`;
-            if (diffHours <= 24) return `Due tonight / tomorrow morning`;
+            if (diffHours < 0) return isVi ? 'Đã quá Deadline' : 'Deadline passed';
+            if (diffHours <= 12) {
+                return isVi
+                    ? `Deadline trong ${diffHours} giờ tới`
+                    : `Due in ${diffHours} hour${diffHours === 1 ? '' : 's'}`;
+            }
+            if (diffHours <= 24) {
+                return isVi
+                    ? `Deadline tối nay / sáng mai`
+                    : `Due tonight / tomorrow morning`;
+            }
             const diffDays = Math.ceil(diffHours / 24);
-            if (diffDays === 1) return `Due tomorrow`;
-            return `Due in ${diffDays} days`;
+            if (diffDays === 1) {
+                return isVi ? `Deadline ngày mai` : `Due tomorrow`;
+            }
+            return isVi ? `Deadline trong ${diffDays} ngày tới` : `Due in ${diffDays} days`;
         } catch (e) {
-            return `Due ${dateStr}`;
+            return isVi ? `Deadline ${dateStr}` : `Due ${dateStr}`;
         }
     }
 
@@ -5206,22 +5594,68 @@ window.TempoEmergencyFlow = (function() {
     }
 
     function getConfirmedPlan() {
+        if (confirmedPlan) {
+            const currentUid = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                ? window.TempoAuth.getCurrentUserId() : null;
+            if (currentUid) {
+                if (confirmedPlan.userId && confirmedPlan.userId !== currentUid) return null;
+                if (confirmedPlan.user_id && confirmedPlan.user_id !== currentUid) return null;
+                if (!confirmedPlan.userId && !confirmedPlan.user_id) return null;
+            }
+            if (!Array.isArray(confirmedPlan.availabilityDays) || confirmedPlan.availabilityDays.length === 0) {
+                confirmedPlan.availabilityDays = availabilityDays;
+            }
+        }
         return confirmedPlan;
     }
 
     function getAvailabilityDays() {
+        if (!Array.isArray(availabilityDays) || availabilityDays.length === 0) {
+            try {
+                const storedAvail = localStorage.getItem('tempo_availability_days');
+                if (storedAvail) {
+                    const parsed = JSON.parse(storedAvail);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        availabilityDays = parsed;
+                    }
+                }
+            } catch(e) {}
+        }
         return availabilityDays;
     }
 
+    function setAvailabilityDays(days) {
+        if (Array.isArray(days)) {
+            availabilityDays = days;
+            if (confirmedPlan) {
+                confirmedPlan.availabilityDays = days;
+            }
+            try {
+                localStorage.setItem('tempo_availability_days', JSON.stringify(days));
+            } catch(e) {}
+        }
+    }
+
     function setConfirmedPlan(plan) {
+        if (plan) {
+            const currentUid = (window.TempoAuth && typeof window.TempoAuth.getCurrentUserId === 'function') 
+                ? window.TempoAuth.getCurrentUserId() : null;
+            if (currentUid && !plan.userId) {
+                plan.userId = currentUid;
+                plan.user_id = currentUid;
+            }
+        }
         confirmedPlan = plan;
         if (plan && Array.isArray(plan.plannedTasks)) {
             tasks = plan.plannedTasks.map(pt => pt.task).filter(Boolean);
         } else if (plan && Array.isArray(plan.tasks)) {
             tasks = [...plan.tasks];
         }
-        if (plan && Array.isArray(plan.availabilityDays) && plan.availabilityDays.length > 0) {
+        if (plan && Array.isArray(plan.availabilityDays)) {
             availabilityDays = plan.availabilityDays;
+            try {
+                localStorage.setItem('tempo_availability_days', JSON.stringify(availabilityDays));
+            } catch(e) {}
         }
     }
 
@@ -5365,6 +5799,7 @@ window.TempoEmergencyFlow = (function() {
         getTasks,
         getConfirmedPlan,
         setConfirmedPlan,
+        setAvailabilityDays,
         getAvailabilityDays,
         toggleTaskCompleted,
         setTaskCompleted,
@@ -5414,6 +5849,7 @@ window.TempoEmergencyFlow = (function() {
         removeDay,
         continueFromAvailableTime,
         // Plan Review Drag & Drop & Scheduling
+        buildDeterministicPlan,
         getNormalizedWindowsForDay,
         calculateTaskWorkRhythm,
         recalculateTimelineSlotsPreservingOrder,
@@ -5431,6 +5867,7 @@ window.TempoEmergencyFlow = (function() {
         moveTaskToDay,
         openScheduleModal,
         openScheduleModalForUnarranged,
+        openScheduleModalFromUnarranged: openScheduleModalForUnarranged,
         closeScheduleModal,
         selectScheduleWindow,
         toggleModalAddTime,
@@ -5500,6 +5937,7 @@ window.TempoEmergencyFlow = (function() {
         saveSubtaskDuration,
         clearSubtaskDuration,
         restorePlanState,
-        resetFlowState
+        resetFlowState,
+        onLanguageChange
     };
 })();
