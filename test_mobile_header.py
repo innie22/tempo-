@@ -1,0 +1,148 @@
+# -*- coding: utf-8 -*-
+import subprocess, time, json, urllib.request, websocket, tempfile, sys
+
+sys.stdout.reconfigure(encoding='utf-8')
+CDP_PORT = 9559
+user_data_dir = tempfile.mkdtemp(prefix='edge_mob_test_')
+
+proc = subprocess.Popen([
+    r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+    '--headless=new',
+    f'--remote-debugging-port={CDP_PORT}',
+    '--remote-allow-origins=*',
+    f'--user-data-dir={user_data_dir}',
+    '--window-size=375,812',
+    'http://127.0.0.1:8000/'
+], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+try:
+    time.sleep(2.0)
+    with urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json') as resp:
+        tabs = json.loads(resp.read().decode())
+    pages = [t for t in tabs if t.get('type') == 'page' and '127.0.0.1' in t.get('url', '')]
+    ws_url = (pages[0] if pages else tabs[0])['webSocketDebuggerUrl']
+    ws = websocket.create_connection(ws_url)
+
+    msg_id = [1]
+    def send(method, params=None):
+        mid = msg_id[0]
+        msg_id[0] += 1
+        ws.send(json.dumps({'id': mid, 'method': method, 'params': params or {}}))
+        while True:
+            resp = json.loads(ws.recv())
+            if resp.get('id') == mid:
+                return resp.get('result', {})
+
+    send('Page.enable')
+    send('DOM.enable')
+
+    def eval_js(expr):
+        res = send('Runtime.evaluate', {'expression': expr, 'returnByValue': True, 'awaitPromise': True})
+        if 'exceptionDetails' in res.get('result', {}):
+            raise Exception('JS Exception: ' + str(res['result']['exceptionDetails']))
+        return res.get('result', {}).get('value')
+
+    for _ in range(30):
+        val = eval_js("typeof window.TempoApp !== 'undefined' && typeof window.TempoMode !== 'undefined'")
+        if val:
+            break
+        time.sleep(0.5)
+
+    eval_js("""
+        (async function() {
+            const email = 'alex.chen@university.edu';
+            const mock = {
+                id: 'mock-user-alex',
+                email: email,
+                password: 'password123',
+                profile: { id: 'mock-user-alex', full_name: 'Innietest', display_name: 'Innietest', role: 'student' }
+            };
+            localStorage.setItem('tempo_mock_account_' + email, JSON.stringify(mock));
+            if (window.TempoAuth) {
+                await window.TempoAuth.signIn(email, 'password123');
+            }
+            
+            localStorage.setItem('tempo_active_mode', 'recovery');
+            localStorage.setItem('tempo_originating_mode', 'recovery');
+            
+            if (window.TempoMode) {
+                window.TempoMode.transitionContext('recovery', { skipSetupCheck: true });
+                window.TempoMode.renderRmodeHome();
+            }
+        })()
+    """)
+    time.sleep(1.0)
+
+    # Prototype update on mobile
+    eval_js("""
+        (function() {
+            const header = document.querySelector('.recovery-mode-header');
+            const greeting = document.querySelector('.recovery-greeting');
+            
+            header.className = 'relative recovery-mode-header pb-0';
+            header.innerHTML = `
+                <div class="flex items-center gap-[10px] flex-wrap sm:flex-nowrap" data-tempo-ui="recovery-header-row">
+                    <!-- Anchored Mode Selector Dropdown -->
+                    <div id="home-mode-selector-wrapper" class="relative inline-block text-left shrink-0">
+                        <button id="btn-home-mode-selector" 
+                                type="button" 
+                                data-tempo-ui="mode-selector-btn"
+                                onclick="window.TempoMode.toggleModeDropdown(event)" 
+                                class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#EDF7F1] text-[#166545] hover:bg-[#DDF0E5] border border-[#CDE9DA] transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                title="Switch Tempo Mode">
+                            <span>🌱</span>
+                            <span class="font-extrabold">${window.t ? window.t('modes.recovery.name', {}, 'Recovery Mode') : 'Recovery Mode'}</span>
+                            <span class="text-[10px] ml-0.5 opacity-80">▾</span>
+                        </button>
+                        <div id="home-mode-selector-dropdown" class="hidden absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-[#EAE4DF] z-50 overflow-hidden" role="menu"></div>
+                    </div>
+
+                    <!-- Greeting (Terracotta #D48366) -->
+                    <div class="recovery-greeting pb-0 pt-0" style="margin-top: 0 !important; margin-bottom: 0 !important;">
+                        <h2 class="text-[29px] sm:text-[33px] font-extrabold text-[#D48366] tracking-tight flex items-center space-x-2.5 whitespace-normal sm:whitespace-nowrap leading-tight" style="line-height: 1.2;">
+                            <span class="text-3xl select-none">👋</span>
+                            <span>Hi Innietest, how are you today?</span>
+                        </h2>
+                    </div>
+                </div>
+            `;
+            if (greeting) {
+                greeting.remove();
+            }
+        })()
+    """)
+    time.sleep(0.5)
+
+    metrics = eval_js("""
+        (function() {
+            const btn = document.getElementById('btn-home-mode-selector');
+            const h2 = document.querySelector('.recovery-greeting h2');
+            const bR = btn.getBoundingClientRect();
+            const hR = h2.getBoundingClientRect();
+            const csH2 = window.getComputedStyle(h2);
+
+            return {
+                btn: { left: bR.left, right: bR.right, top: bR.top, bottom: bR.bottom },
+                greeting: { left: hR.left, right: hR.right, top: hR.top, bottom: hR.bottom, fontSize: csH2.fontSize },
+                hasHorizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+                innerWidth: window.innerWidth
+            };
+        })()
+    """)
+    print("MOBILE METRICS (375px):", json.dumps(metrics, indent=2))
+
+    shot = send('Page.captureScreenshot', {'format': 'png'})
+    import base64
+    with open(r'C:\Users\YEN NHI\.gemini\antigravity\brain\6baf9c9e-16aa-475f-b2c0-d941b08ac2c6\scratch\mobile_header_375.png', 'wb') as f:
+        f.write(base64.b64decode(shot['data']))
+    print('Saved mobile_header_375.png')
+
+finally:
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except:
+        pass
