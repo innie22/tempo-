@@ -1,0 +1,254 @@
+const LEARN_TOPICS = [
+        {
+            id: 'what_is_stress',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '⚡',
+            title: 'What is stress?',
+            shortDescription: 'A normal response to pressure, change, or demands requiring adaptation.',
+            contentParagraphs: [
+                'Stress is not a disease, personal weakness, or character flaw. It is an evolutionary physiological mechanism evolved to prepare your mind and body to meet challenges and adapt to demands.',
+                'When you encounter a challenging deadline, an unexpected exam question, or interpersonal friction, your brain activates the sympathetic nervous system and the HPA axis, releasing hormones like adrenaline and cortisol. Your heart beats faster, breathing rate increases, and attention narrows onto the immediate task.',
+                'At a moderate, manageable level, acute stress is helpful: it mobilizes energy, sharpens focus, and enhances readiness. The concern is when stress becomes excessive, continuous, or lacks adequate opportunity for recovery.'
+            ],
+            tipId: 'interruptTheLoop',
+            relatedSolveIds: ['cant_focus'],
+            relatedTool: { id: 'quick_relief', label: 'Open Quick Relief', action: 'quick_relief' }
+        },
+        {
+            id: 'stress_problem',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '📉',
+            title: 'When does stress become a problem?',
+            shortDescription: 'The difference between healthy stress cycles and chronic unremitting overload.',
+            contentParagraphs: [
+                'In healthy circumstances, stress follows a natural cycle: Pressure → Stress → Completion → Rest → Recovery. Once the pressure point is resolved, the nervous system down-regulates and returns to its resting baseline.',
+                'In university life, stress often becomes an unrelenting loop: Deadline → Stress → Another Deadline → Stress → Group Project → Stress → Exam... Without pauses for recovery, the nervous system remains on continuous high alert.',
+                'Crucially, duration and lack of recovery matter just as much as acute intensity. When stress continues without relief, it gradually erodes five everyday areas:'
+            ],
+            descriptiveList: [
+                { title: 'Sleep', detail: 'Difficulty falling asleep, frequent waking, or waking up feeling unrefreshed.' },
+                { title: 'Concentration', detail: 'Working memory degrades, making reading and problem-solving feel twice as hard.' },
+                { title: 'Emotions', detail: 'Heightened irritability, sudden tearfulness, or emotional numbness.' },
+                { title: 'Energy', detail: 'Deep physical and mental fatigue that persistent coffee consumption cannot fix.' },
+                { title: 'Everyday routines', detail: 'Regular meals, personal hygiene, and tidy living spaces begin to slip.' }
+            ],
+            tipId: 'selfCheckSigns',
+            relatedSolveIds: ['deadline_pileup'],
+            relatedTool: { id: 'quick_relief', label: 'Open Quick Relief', action: 'quick_relief' },
+            relatedMode: { mode: 'recovery', label: 'Go to Recovery Mode' }
+        },
+        {
+            id: 'stress_signs',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🔍',
+            title: 'How stress can show up',
+            shortDescription: 'The 4 groups of stress signs: Thoughts, Emotions, Body, and Behavior.',
+            contentParagraphs: [
+                'Stress is not merely an intellectual experience. It distributes itself across four interconnected domains of your daily life:',
+                'Repeated signs can become your personal early detection signals. If you notice yourself skipping breakfast or clenching your jaw, treating those signs early helps you adjust before reaching exhaustion.'
+            ],
+            fourGroups: [
+                {
+                    name: '🧠 Thoughts',
+                    items: ['Difficulty concentrating', 'Thoughts racing continuously', 'Difficulty making decisions', 'Frequent mind-blanking']
+                },
+                {
+                    name: '💭 Emotions',
+                    items: ['Persistent worry', 'Irritability / snapping at friends', 'Feelings of sadness or dread', 'Feeling overwhelmed by minor tasks']
+                },
+                {
+                    name: '💤 Body',
+                    items: ['Chronic tiredness', 'Difficulty falling asleep', 'Tension headaches', 'Muscle tightness in neck/shoulders']
+                },
+                {
+                    name: '🔄 Behavior & daily life',
+                    items: ['Procrastinating on simple actions', 'Withdrawing from social circles', 'Irregular eating / appetite loss', 'Letting daily routines slide']
+                }
+            ],
+            tipId: 'selfCheckSigns',
+            relatedSolveIds: ['disrupted_routine'],
+            relatedTool: { id: 'self_check', label: 'Open Self-check', action: 'self_check' }
+        },
+        {
+            id: 'stress_loop',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🔁',
+            title: 'The stress loop',
+            shortDescription: 'How stress feeds on itself, and how interrupting one link breaks the chain.',
+            contentParagraphs: [
+                'Stress frequently traps students in self-reinforcing behavioral loops. A heavy workload causes worry, leading to late-night cramming. Lack of sleep causes fatigue, which impairs cognitive focus the next day, slowing down work output and generating even more stress.'
+            ],
+            hasVisualLoop: true,
+            loopNodes: [
+                { label: 'Deadline pile-up', icon: '⏰' },
+                { label: 'Stress / Panic', icon: '⚡' },
+                { label: 'Stay up late to work', icon: '🌙' },
+                { label: 'Tired & hard to focus', icon: '😴' },
+                { label: 'Work slows down', icon: '⏳' },
+                { label: 'More stress', icon: '💥' }
+            ],
+            keyTakeaway: 'You do not need to change everything all at once. Recognizing the loop and interrupting it at just ONE point (e.g. going to sleep on time or taking one 10-minute walk) breaks the compounding momentum.',
+            tipId: 'interruptTheLoop',
+            relatedSolveIds: ['deadline_pileup'],
+            relatedTool: { id: 'quick_relief', label: 'Open Quick Relief', action: 'quick_relief' },
+            relatedMode: { mode: 'recovery', label: 'Go to Recovery Mode' }
+        },
+        {
+            id: 'recovery',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🌱',
+            title: 'Recovery is part of stress management',
+            shortDescription: 'Why stress does not end the moment a deadline passes, and why recovery is essential.',
+            contentParagraphs: [
+                'Have you ever submitted a major assignment or finished your last final exam, only to feel drained, irritable, or catch a cold immediately after?',
+                'Finishing the stressful event does not mean your body’s stress response turns off like a light switch. Elevated cortisol and adrenaline take time to metabolize, and your autonomic nervous system requires deliberate rest to re-establish homeostatic balance.',
+                'Recovery is not wasted time, laziness, or procrastination. It is an active biological and psychological process where neural connections solidify, emotional resilience restores, and cognitive clarity returns.',
+                'Recovery Mode in Tempo is designed specifically for this phase: giving you space to slow things down, check in with yourself, and notice what truly helps.'
+            ],
+            tipId: 'stabilizeOneThing',
+            relatedSolveIds: ['grades'],
+            relatedTool: { id: 'breathing', label: 'Start Breathing', action: 'breathing' },
+            relatedMode: { mode: 'recovery', label: 'Go to Recovery Mode' }
+        },
+        {
+            id: 'academic_burnout',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🪫',
+            title: 'Academic burnout',
+            shortDescription: 'Understanding prolonged exhaustion, cynicism, and reduced efficacy.',
+            contentParagraphs: [
+                'Academic burnout is not ordinary tiredness after a late night. It is a state of chronic physical and emotional depletion brought on by prolonged academic pressure without adequate recovery opportunity.',
+                'Research generally describes academic burnout through three distinct dimensions:'
+            ],
+            burnoutDimensions: [
+                {
+                    icon: '🪫',
+                    name: 'Exhaustion',
+                    detail: 'A chronic state of physical, cognitive, and emotional fatigue where normal sleep no longer restores your energy.'
+                },
+                {
+                    icon: '📚',
+                    name: 'Disengagement & Cynicism',
+                    detail: 'Developing a detached, cynical, or resentful attitude toward coursework, professors, and academic goals that used to matter to you.'
+                },
+                {
+                    icon: '📉',
+                    name: 'Reduced Sense of Efficacy',
+                    detail: 'A persistent feeling that your efforts are pointless, you are ineffective, and nothing you accomplish truly counts.'
+                }
+            ],
+            nonDiagnosticNote: 'You do not need to determine whether you are "just stressed" or "already burned out" before paying attention to your wellbeing. Recognizing these signs is an invitation to pause, adjust your workload, and seek support.',
+            tipId: 'goodEnoughBeforePerfect',
+            relatedSolveIds: ['too_many_responsibilities'],
+            relatedMode: { mode: 'recovery', label: 'Go to Recovery Mode' }
+        },
+        {
+            id: 'stress_eating',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🥣',
+            title: 'Stress eating',
+            shortDescription: 'A compassionate, non-shaming approach to eating when stressed.',
+            contentParagraphs: [
+                'Reaching for food when stressed is a completely understandable physiological and emotional reflex. Under chronic stress, cortisol stimulates cravings for energy-dense carbohydrates, while eating triggers a temporary dopamine release that temporarily soothes emotional distress.',
+                'Here is a compassionate, non-shaming way to handle stress eating:'
+            ],
+            steps: [
+                {
+                    heading: 'Check if you are hungry, stressed, or both',
+                    detail: 'If you are physically hungry, your body needs nourishment. Eat a proper meal without self-criticism.'
+                },
+                {
+                    heading: 'Create a brief 60-second pause',
+                    detail: 'Drink a glass of water, take five deep breaths, or step away from your desk for one minute. A short pause creates space to notice what you are really feeling.'
+                },
+                {
+                    heading: 'No moral judgment or failure mindset',
+                    detail: 'If you still choose to eat, treat yourself with kindness. Food restriction and guilt only create more stress, fueling the exact loop you are trying to break.'
+                },
+                {
+                    heading: 'Return to the stressor when settled',
+                    detail: 'Once you feel slightly more grounded, return to your work with a smaller first step.'
+                }
+            ],
+            tipId: 'pauseBeforeSnack',
+            relatedSolveIds: ['disrupted_routine'],
+            relatedTool: { id: 'quick_relief', label: 'Open Quick Relief', action: 'quick_relief' }
+        },
+        {
+            id: 'what_do_i_need',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🧭',
+            title: 'What do I need when I’m stressed?',
+            shortDescription: 'Matching your current stress experience to the right Tempo space.',
+            contentParagraphs: [
+                'Stress manifests in different ways, and what you need depends on where you find yourself right now:'
+            ],
+            routingOptions: [
+                {
+                    condition: 'Too overwhelmed or panicking to think clearly?',
+                    actionText: 'Settle your nervous system first with Quick Stress Relief or 2-minute Box Breathing.',
+                    btnLabel: 'Open Quick Relief',
+                    actionKey: 'quick_relief'
+                },
+                {
+                    condition: 'Know exactly what situation is causing stress?',
+                    actionText: 'Browse Solve a Situation for tactical, realistic step-by-step action plans.',
+                    btnLabel: 'Explore Situations',
+                    actionKey: 'switch_to_solve'
+                },
+                {
+                    condition: 'Problem has passed but you still don’t feel okay?',
+                    actionText: 'Enter Recovery Mode to decompress, track your daily baseline, and rest.',
+                    btnLabel: 'Go to Recovery Mode',
+                    actionKey: 'mode_recovery'
+                },
+                {
+                    condition: 'Something feels off but you don’t clearly know why?',
+                    actionText: 'Use Unclear Mode for a calm, guided reflection check-in to narrow it down.',
+                    btnLabel: 'Go to Unclear Mode',
+                    actionKey: 'mode_unclear'
+                },
+                {
+                    condition: 'There is a pressing problem that needs concrete handling now?',
+                    actionText: 'Enter Urgent Mode to triage urgent tasks and build a workable timeline.',
+                    btnLabel: 'Go to Urgent Mode',
+                    actionKey: 'mode_emergency'
+                }
+            ],
+            tipId: 'startSmall',
+            relatedTool: { id: 'quick_relief', label: 'Open Quick Relief', action: 'quick_relief' },
+            relatedMode: { mode: 'emergency', label: 'Go to Urgent Mode' }
+        },
+        {
+            id: 'support_seeking',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🤝',
+            title: 'When should I seek more support?',
+            shortDescription: 'Descriptive indicators that additional appropriate support is worth considering.',
+            contentParagraphs: [
+                'Self-management tools and personal strategies are valuable, but university challenges are not meant to be navigated in total isolation.',
+                'Descriptive signs that additional support may be worth considering:'
+            ],
+            descriptiveList: [
+                { title: 'Stress continues unrelieved', detail: 'Stress persists across multiple weeks and normal restful weekends do not relieve it.' },
+                { title: 'Physical health impacts', detail: 'Eating, sleep quality, or daily energy levels are consistently and clearly disrupted.' },
+                { title: 'Declining daily functioning', detail: 'Studying, attending lectures, or everyday tasks feel increasingly difficult to sustain.' },
+                { title: 'Usual approaches stop working', detail: 'Techniques and habits that previously helped you cope no longer seem effective.' }
+            ],
+            supportConclusion: 'Reaching out to campus wellbeing coordinators, academic advisors, or peer counselors is a proactive sign of self-advocacy. (Note: For immediate safety emergencies, Tempo’s global SOS remains accessible at all times).',
+            tipId: 'containTheWorry',
+            relatedSolveIds: ['loneliness'],
+            relatedTool: { id: 'support_page', label: 'Explore Support Options', action: 'support_page' }
+        }
+    ];
+
+    

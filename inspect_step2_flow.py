@@ -1,0 +1,9 @@
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
+with open('urmodeFlow.js', 'r', encoding='utf-8') as f:
+    text = f.read()
+
+idx1 = text.find('function renderAdjustmentStep2Tasks')
+idx2 = text.find('function updateRetainedDueDate')
+print(text[idx1:idx2+400])
