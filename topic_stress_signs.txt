@@ -1,0 +1,31 @@
+          id: 'stress_signs',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🔍',
+            title: 'How stress can show up',
+            shortDescription: 'The 4 groups of stress signs: Thoughts, Emotions, Body, and Behavior.',
+            contentParagraphs: [
+                'Stress is not merely an intellectual experience. It distributes itself across four interconnected domains of your daily life:',
+                'Repeated signs can become your personal early detection signals. If you notice yourself skipping breakfast or clenching your jaw, treating those signs early helps you adjust before reaching exhaustion.'
+            ],
+            fourGroups: [
+                {
+                    name: '🧠 Thoughts',
+                    items: ['Difficulty concentrating', 'Thoughts racing continuously', 'Difficulty making decisions', 'Frequent mind-blanking']
+                },
+                {
+                    name: '💭 Emotions',
+                    items: ['Persistent worry', 'Irritability / snapping at friends', 'Feelings of sadness or dread', 'Feeling overwhelmed by minor tasks']
+                },
+                {
+                    name: '💤 Body',
+                    items: ['Chronic tiredness', 'Difficulty falling asleep', 'Tension headaches', 'Muscle tightness in neck/shoulders']
+                },
+                {
+                    name: '🔄 Behavior & daily life',
+                    items: ['Procrastinating on simple actions', 'Withdrawing from social circles', 'Irregular eating / appetite loss', 'Letting daily routines slide']
+                }
+            ],
+            tipId: 'selfCheckSigns',
+            relatedSolveIds: ['disrupted_routine'],
+            relatedTool: { 

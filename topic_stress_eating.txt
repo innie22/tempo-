@@ -1,0 +1,31 @@
+          id: 'stress_eating',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🥣',
+            title: 'Stress eating',
+            shortDescription: 'A compassionate, non-shaming approach to eating when stressed.',
+            contentParagraphs: [
+                'Reaching for food when stressed is a completely understandable physiological and emotional reflex. Under chronic stress, cortisol stimulates cravings for energy-dense carbohydrates, while eating triggers a temporary dopamine release that temporarily soothes emotional distress.',
+                'Here is a compassionate, non-shaming way to handle stress eating:'
+            ],
+            steps: [
+                {
+                    heading: 'Check if you are hungry, stressed, or both',
+                    detail: 'If you are physically hungry, your body needs nourishment. Eat a proper meal without self-criticism.'
+                },
+                {
+                    heading: 'Create a brief 60-second pause',
+                    detail: 'Drink a glass of water, take five deep breaths, or step away from your desk for one minute. A short pause creates space to notice what you are really feeling.'
+                },
+                {
+                    heading: 'No moral judgment or failure mindset',
+                    detail: 'If you still choose to eat, treat yourself with kindness. Food restriction and guilt only create more stress, fueling the exact loop you are trying to break.'
+                },
+                {
+                    heading: 'Return to the stressor when settled',
+                    detail: 'Once you feel slightly more grounded, return to your work with a smaller first step.'
+                }
+            ],
+            tipId: 'pauseBeforeSnack',
+            relatedSolveIds: ['disrupted_routine'],
+            relatedTool: { 

@@ -1,0 +1,20 @@
+          id: 'support_seeking',
+            type: 'learn',
+            badge: '🧠 Stress Education · Topic',
+            icon: '🤝',
+            title: 'When should I seek more support?',
+            shortDescription: 'Descriptive indicators that additional appropriate support is worth considering.',
+            contentParagraphs: [
+                'Self-management tools and personal strategies are valuable, but university challenges are not meant to be navigated in total isolation.',
+                'Descriptive signs that additional support may be worth considering:'
+            ],
+            descriptiveList: [
+                { title: 'Stress continues unrelieved', detail: 'Stress persists across multiple weeks and normal restful weekends do not relieve it.' },
+                { title: 'Physical health impacts', detail: 'Eating, sleep quality, or daily energy levels are consistently and clearly disrupted.' },
+                { title: 'Declining daily functioning', detail: 'Studying, attending lectures, or everyday tasks feel increasingly difficult to sustain.' },
+                { title: 'Usual approaches stop working', detail: 'Techniques and habits that previously helped you cope no longer seem effective.' }
+            ],
+            supportConclusion: 'Reaching out to campus wellbeing coordinators, academic advisors, or peer counselors is a proactive sign of self-advocacy. (Note: For immediate safety emergencies, Tempo’s global SOS remains accessible at all times).',
+            tipId: 'containTheWorry',
+            relatedSolveIds: ['loneliness'],
+            relatedTool: { 
