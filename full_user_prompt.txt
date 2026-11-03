@@ -1,0 +1,91 @@
+<USER_REQUEST>
+## Task: Restore Tempo Community to the Exact Previous UI Reference
+
+Use the attached screenshot as the **source of truth** for restoring the Tempo Community page to its previous working design.
+
+### 1. Primary Objective
+
+Restore the **standalone Tempo Community page** to match the attached screenshot as closely as possible in layout, colors, typography, spacing, card dimensions, borders, and visual hierarchy.
+
+This is a restoration task, NOT a redesign task.
+
+Before making changes:
+- Inspect the current Community implementation and its Git diff/history.
+- Identify the previous working Community components, styles, and layout.
+- Restore the previous implementation where available instead of recreating it from memory.
+- Use the attached screenshot to verify the final result.
+
+### 2. Reference Design Requirements
+
+**Overall layout**
+- Warm, light cream background.
+- Centered desktop content with a two-column layout.
+- Main content/feed on the left and a narrower supporting panel on the right, matching the screenshot's proportions.
+- Rounded cards, subtle borders, restrained shadows, and generous but controlled spacing.
+
+**Header/navigation**
+- Restore the original Tempo navbar, logo size, alignment, navigation spacing, and button styling.
+- Do not enlarge or redesign the Tempo logo.
+- Preserve existing navigation behavior and routes.
+
+**Main welcome section**
+- White/warm-cream rounded card.
+- Peach-colored “Welcome to Tempo” heading.
+- Large dark-gray “What do you need right now?” headline.
+- Peach CTA button: “Help me figure out where to start →”.
+- Preserve the screenshot's proportions and typography hierarchy.
+
+**Quick Relief and Focus Now cards**
+- Quick Relief: muted sage background, existing illustration, title, and supporting description.
+- Focus Now: muted terracotta background, existing target illustration, title, and supporting description.
+- Restore their original card dimensions and illustration scale.
+- Keep the cards side by side on desktop, as shown in the reference.
+
+**From the Tempo Community panel**
+- Restore the original right-side panel with its heading, icon, divider, and “See all →” action.
+- Restore the original post-preview card styling: light neutral background, thin dark border, rounded corners, author/avatar row, category tags, timestamps, post text, and engagement actions.
+- Preserve the original post preview proportions and spacing.
+- The second post must support the image-thumbnail row shown in the screenshot.
+- Preserve the original bookmark, like, comment, report, and navigation interactions wherever they already exist.
+
+**Lower content cards**
+- Preserve the existing lower-row cards and their original visual treatment. Do not invent new content or change their functionality.
+
+### 3. Strict Scope Restrictions
+
+- Modify only the files necessary to restore the intended Community/EntryHome presentation.
+- Do NOT redesign the standalone Community page into a different style.
+- Do NOT change global design tokens, shared CSS, global typography, or shared components merely to force this page to match.
+- Do NOT change the navbar across unrelated pages.
+- Do NOT modify routes, database schemas, Supabase data, authentication, post logic, or other backend behavior.
+- Do NOT replace real data with mock data or hardcode screenshot content into the live feed.
+- Do NOT delete real user content.
+- Do NOT perform a broad Git revert or overwrite unrelated work.
+- If the original implementation cannot be recovered without changing shared components or affecting unrelated pages, stop and explain which files and dependencies are involved before proceeding.
+
+### 4. Validation
+
+After implementation:
+1. Compare the restored page against the attached screenshot.
+2. Check desktop layout, spacing, card dimensions, colors, typography, and navbar alignment.
+3. Verify responsive behavior on tablet and mobile without breaking the desktop reference.
+4. Confirm existing navigation and Community interactions still work.
+5. Inspect the final Git diff and ensure no unrelated files or functionality were changed.
+6. Report the exact files changed and any differences that could not be restored.
+
+### Expected Output
+
+- A restored Tempo Community/EntryHome interface closely matching the attached screenshot.
+- Original visual styling recovered wherever possible, rather than approximated with a new design.
+- All existing real data and functionality preserved.
+- A concise summary of files changed, restoration decisions, and validation results.
+- No unrelated redesigns or global style changes.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-25T20:37:09+07:00.
+
+The user has uploaded 2 image(s):
+- C:/Users/YEN NHI/.gemini/antigravity/brain/6baf9c9e-16aa-475f-b2c0-d941b08ac2c6/.user_uploaded/media_1792935418362_1094ad43.png
+- C:/Users/YEN NHI/.gemini/antigravity/brain/6baf9c9e-16aa-475f-b2c0-d941b08ac2c6/.user_uploaded/media_1792935428708_27233148.png
+You can embed these images in an artifact if you need the USER to review them.
+</ADDITIONAL_METADATA>
