@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>Cropped Cards Closeup</title></head>
+<body style="margin: 0; padding: 20px; background: #eef2ef;">
+    <canvas id="c" width="720" height="480" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);"></canvas>
+    <script>
+        const img = new Image();
+        img.src = '/scratch/urmode_mascot_120px_overview.png';
+        img.onload = () => {
+            const ctx = document.getElementById('c').getContext('2d');
+            // Crop around x=90, y=400, w=720, h=480
+            ctx.drawImage(img, 90, 400, 720, 480, 0, 0, 720, 480);
+        };
+    </script>
+</body>
+</html>
