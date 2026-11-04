@@ -1,0 +1,40 @@
+# ============================================================================
+# Tempo Wellbeing – Safe Git Ignore Configuration
+# ============================================================================
+
+# 1. Python bytecode & generated caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. Local environment files & secrets
+.env
+.env.*
+!.env.example
+
+# 3. Operating System & Editor Metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 4. Test Screenshots & Visual Diff Artifacts (Root Only)
+test_*.png
+ref_*.png
+ref2_*.png
+ref4_*.png
+urmode_*.png
+uploaded_mascot.png
+
+# 5. Prompt & Scratch Dump Logs (Root Only)
+full_user_prompt.txt
+last_user_prompt.txt
+prompt_focused_fix*.txt
+scratch_prompt*.txt
+user_prompt_*.txt
+learn_topics_dump.txt
+topic_*.txt
