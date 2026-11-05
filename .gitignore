@@ -38,3 +38,8 @@ scratch_prompt*.txt
 user_prompt_*.txt
 learn_topics_dump.txt
 topic_*.txt
+*.log
+
+# 6. Local Scratchpad & Temporary Outputs
+scratch/
+
